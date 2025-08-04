@@ -1,22 +1,19 @@
-// server/routes/formRoutes.js
 import { Router } from 'express';
 import {
   guardarDatos,
   getAuditById,
-  getAuditHistory
+  getAuditHistory,
+  sendReport
 } from '../controllers/formController.js';
 
 const router = Router();
 
-// 1. POST /api/audit
-router.post('/', guardarDatos);
+router.post('/',        guardarDatos);
+router.get('/history',  getAuditHistory);
+router.get('/:id',      getAuditById);
 
-// 2. GET  /api/audit/history?url=…
-router.get('/history', getAuditHistory);
-
-// 3. GET  /api/audit/:id
-router.get('/:id', getAuditById);
+// ← nueva ruta
+router.post('/send-report', sendReport);
 
 export default router;
-
 

@@ -1,3 +1,4 @@
+// src/components/HistoricoView.jsx
 import React, { useState, useEffect } from 'react';
 import { useLocation, Link, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -15,6 +16,8 @@ export default function HistoricoView() {
   const url        = query.get('url') || '';
   const [history, setHistory] = useState(null);
   const [err, setErr]         = useState('');
+  const [sending, setSending] = useState(false);
+  const [sentMsg, setSentMsg] = useState('');
 
   if (!url) {
     return <Navigate to="/" replace />;
@@ -113,12 +116,9 @@ export default function HistoricoView() {
                       max={key === 'performance' ? 100 : undefined}
                       color={perfColor(val)}
                     />
-
-                    {/* Ocultamos el valor bajo gauge solo en 'performance' */}
                     {key !== 'performance' && (
                       <div className="item-value">{bottomLabel}</div>
                     )}
-
                     <div className="date">
                       {displayDate}<br/>{displayTime}
                     </div>
@@ -126,14 +126,53 @@ export default function HistoricoView() {
                 );
               })}
             </div>
+            {/* Barra deslizable */}
+            <div className="historico-slider-bar" />
           </motion.div>
         ))}
       </div>
 
       <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
-        <button className="btn-primary" disabled>
-          Enviar informe por correo ✉️
+        <button
+          className="btn-primary"
+          disabled={sending}
+          onClick={async () => {
+            setSending(true);
+            setSentMsg('');
+            const last = history[history.length - 1];
+            const email = last?.email;
+            if (!email) {
+              setSentMsg('❌ Falta parámetro url o email');
+              setSending(false);
+              return;
+            }
+            try {
+              const res = await fetch('/api/audit/send-report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, email })
+              });
+              const payload = await res.json();
+              if (!res.ok) throw new Error(payload.error || 'Error inesperado');
+              setSentMsg(`✅ Informe enviado a ${email}`);
+            } catch (e) {
+              setSentMsg(`❌ ${e.message}`);
+            } finally {
+              setSending(false);
+            }
+          }}
+        >
+          {sending ? 'Enviando…' : 'Enviar informe por correo ✉️'}
         </button>
+        {sentMsg && (
+          <p style={{
+            marginTop: '0.5rem',
+            fontSize: '0.9rem',
+            color: sentMsg.startsWith('❌') ? '#dc2626' : '#047857'
+          }}>
+            {sentMsg}
+          </p>
+        )}
       </div>
     </div>
   );
