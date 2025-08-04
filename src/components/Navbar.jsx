@@ -23,7 +23,7 @@ export default function Navbar() {
           </div>
         </NavLink>
 
-        <nav className={`navbar__menu ${open ? 'open' : ''}`}>
+        {/* <nav className={`navbar__menu ${open ? 'open' : ''}`}>
           <NavLink
             to="/"
             className={({ isActive }) =>
@@ -44,7 +44,7 @@ export default function Navbar() {
             <BarChart3 size={18} />
             Histórico
           </NavLink>
-        </nav>
+        </nav> */}
       </div>
     </header>
   );

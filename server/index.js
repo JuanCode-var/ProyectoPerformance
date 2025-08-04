@@ -27,7 +27,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // 4) Rutas de la API
-app.use('/api', formRoutes);
+app.use('/api/audit', formRoutes);
 
 // 5) Ruta de salud
 app.get('/', (_req, res) => res.send('Backend en línea'));
@@ -37,6 +37,14 @@ app.use(
   '/static',
   express.static(path.join(__dirname, '../client/public')),
 );
+
+// server/index.js (al final, antes de app.listen)
+app.use((err, req, res, next) => {
+  console.error('🚨 Unhandled error:', err);
+  res
+    .status(err.status || 500)
+    .json({ error: err.message || 'Error interno del servidor' });
+});
 
 // 7) Levantar servidor
 app.listen(PORT, () => {

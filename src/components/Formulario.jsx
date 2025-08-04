@@ -51,21 +51,21 @@ export default function Formulario() {
   const navigate = useNavigate();
 
   // --- Handlers ---
-  const handleInputChange = (e) => {
+  const handleInputChange = e => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: '' }));
+      setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
-  const handleTestChange = (e) => {
+  const handleTestChange = e => {
     const { name, checked } = e.target;
-    setTests((prev) => ({ ...prev, [name]: checked }));
+    setTests(prev => ({ ...prev, [name]: checked }));
   };
 
-  const toggleInfo = (api) => {
-    setInfoOpen((prev) => ({ ...prev, [api]: !prev[api] }));
+  const toggleInfo = api => {
+    setInfoOpen(prev => ({ ...prev, [api]: !prev[api] }));
   };
 
   const validateForm = () => {
@@ -77,7 +77,7 @@ export default function Formulario() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async e => {
     e.preventDefault();
     if (!validateForm()) return;
 
@@ -85,24 +85,32 @@ export default function Formulario() {
     setErrors({});
 
     try {
-      // Filtra solo los tests activos y válidos
-      const tipos = Object.keys(tests).filter((key) => tests[key]);
-      // Debug: Mostrar lo que se envía al backend
-      // console.log({ url: formData.url, type: tipos, name: formData.name, email: formData.email });
+      const tipos = Object.keys(tests).filter(key => tests[key]);
 
-      const res = await fetch('/api/audit', {
+      const response = await fetch('/api/audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: formData.url,
-          type: tipos, // ['pagespeed', 'unlighthouse']
-          name: formData.name,
+          url:   formData.url,
+          type:  tipos,
+          name:  formData.name,
           email: formData.email,
         }),
       });
 
-      const payload = await res.json();
-      if (!res.ok) throw new Error(payload.error || `Error ${res.status}`);
+      // Leer cuerpo como texto y parsear con control de errores
+      const text = await response.text();
+      let payload;
+      try {
+        payload = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error('Respuesta no válida del servidor');
+      }
+
+      if (!response.ok) {
+        throw new Error(payload.error || `Error ${response.status}`);
+      }
+
       navigate(`/diagnostico/${payload._id}`);
     } catch (err) {
       setErrors({ submit: err.message });
@@ -184,8 +192,7 @@ export default function Formulario() {
                 value={formData.email}
                 onChange={handleInputChange}
                 onFocus={() => setFocusedField('email')}
-                onBlur={() => setFocusedField('')}
-                placeholder="tu@correo.com"
+                onBlur={() => setFocusedField('')}                placeholder="tu@correo.com"
                 className={`form-input ${focusedField === 'email' ? 'focused' : ''}`}
                 whileFocus={{ borderColor: '#1d4ed8', boxShadow: '0 0 0 3px rgba(59,130,246,0.2)' }}
               />
@@ -224,7 +231,7 @@ export default function Formulario() {
                       className="checkbox-check"
                       animate={{
                         scale: tests[key] ? 1.1 : 1,
-                        backgroundColor: tests[key] ? '#1d4ed8' : 'rgba(0, 0, 0, 0)',
+                        backgroundColor: tests[key] ? '#1d4ed8' : 'rgba(0,0,0,0)',
                       }}
                     >
                       {tests[key] && <CheckCircle size={16} color="white" />}
@@ -257,6 +264,7 @@ export default function Formulario() {
               ))}
             </motion.div>
           </motion.div>
+
           {/* Botón submit */}
           <motion.button
             type="submit"
@@ -281,6 +289,7 @@ export default function Formulario() {
             )}
           </motion.button>
         </motion.form>
+
         {/* Mensaje de error */}
         {errors.submit && (
           <motion.div className="error-alert" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -291,4 +300,3 @@ export default function Formulario() {
     </motion.div>
   );
 }
-

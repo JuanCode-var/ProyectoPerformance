@@ -2,25 +2,9 @@
 import axios from 'axios';
 import Audit from '../database/esquemaBD.js';
 
-/* ───────────── ENDPOINTS ───────────── */
-function withAudit(path) {
-  return path.endsWith('/audit')
-    ? path
-    : `${path.replace(/\/$/, '')}/audit`;
-}
-
-const MICROSERVICES = {
-  pagespeed:    { endpoint: withAudit(process.env.MS_PAGESPEED_URL     || 'http://localhost:3001') },
-  unlighthouse: { endpoint: withAudit(process.env.MS_UNLIGHTHOUSE_URL || 'http://localhost:3002') },
-};
-
-/* ───────────── CACHE ───────────── */
-const CACHE_TTL = 1000 * 60 * 60; // 1 h
-
 /* ───────────── POST /api/audit ───────────── */
 export async function guardarDatos(req, res) {
   try {
-    // ← Aquí incluimos name y email
     const {
       url,
       type     = 'pagespeed',
@@ -32,6 +16,11 @@ export async function guardarDatos(req, res) {
     if (!url || !type) {
       return res.status(400).json({ error: 'Faltan parámetros url o type' });
     }
+
+    const MICROSERVICES = {
+      pagespeed:    { endpoint: withAudit(process.env.MS_PAGESPEED_URL     || 'http://localhost:3001') },
+      unlighthouse: { endpoint: withAudit(process.env.MS_UNLIGHTHOUSE_URL || 'http://localhost:3002') },
+    };
 
     const tipos = Array.isArray(type)
       ? type
@@ -55,7 +44,6 @@ export async function guardarDatos(req, res) {
     });
     if (cached) return res.json(cached);
 
-    /* llamadas paralelas */
     const peticiones = tipos.map(t => {
       const payload = t === 'unlighthouse'
         ? { url }
@@ -65,10 +53,7 @@ export async function guardarDatos(req, res) {
         .post(MICROSERVICES[t].endpoint, payload)
         .then(r => ({ [t]: r.data }))
         .catch(err => ({
-          [t]: {
-            error:  err.message,
-            detail: err.response?.data
-          }
+          [t]: { error: err.message, detail: err.response?.data }
         }));
     });
 
@@ -79,23 +64,18 @@ export async function guardarDatos(req, res) {
 
     const doc = await Audit.create({
       url,
-      type:        tipos[0],                  // required por tu schema
+      type:        tipos[0],
       tipos,
-      name,                                    // ← ahora existe
-      email,                                   // ← ahora existe
+      name,
+      email,
       strategy,
       audit,
-      performance: onlyPagespeed
-        ? audit.pagespeed.performance
-        : undefined,
-      metrics:     onlyPagespeed
-        ? audit.pagespeed.metrics
-        : undefined,
+      performance: onlyPagespeed ? audit.pagespeed.performance : undefined,
+      metrics:     onlyPagespeed ? audit.pagespeed.metrics     : undefined,
       fecha:       new Date(),
     });
 
     return res.status(201).json(doc);
-
   } catch (e) {
     console.error('❌ Error en guardarDatos:', e);
     return res.status(500).json({ error: 'Error al procesar la auditoría' });
@@ -107,10 +87,35 @@ export async function getAuditById(req, res) {
   try {
     const doc = await Audit.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'No encontrado' });
-    res.json(doc);
+    return res.json(doc);
   } catch (e) {
-    console.error('getAuditById error', e);
-    res.status(500).json({ error: 'Error interno' });
+    console.error('❌ Error en getAuditById:', e);
+    return res.status(500).json({ error: 'Error interno' });
   }
 }
+
+/* ───────────── GET /api/audit/history?url=<url> ───────────── */
+export async function getAuditHistory(req, res) {
+  try {
+    const { url } = req.query;
+    if (!url) {
+      return res.status(400).json({ error: 'Falta el parámetro url' });
+    }
+    const docs = await Audit.find({ url }).sort({ fecha: 1 });
+    return res.json(docs);
+  } catch (e) {
+    console.error('❌ Error en getAuditHistory:', e);
+    return res.status(500).json({ error: 'Error interno al obtener histórico' });
+  }
+}
+
+// Utilitarios
+function withAudit(path) {
+  return path.endsWith('/audit')
+    ? path
+    : `${path.replace(/\/$/, '')}/audit`;
+}
+
+const CACHE_TTL = 1000 * 60 * 60; // 1h
+
 

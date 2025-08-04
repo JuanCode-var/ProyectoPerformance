@@ -4,7 +4,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Formulario from './components/Formulario'
 import DiagnosticoView from './components/DiagnosticoView'
-import DashboardHistorico from './components/DashboardHistorico'
+import DashboardHistorico from './components/HistoricoView'
 
 export default function App() {
   return (

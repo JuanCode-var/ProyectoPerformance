@@ -13,11 +13,10 @@ const API_LABELS = {
 export default function DiagnosticoView() {
   const { id } = useParams();
   const [auditData, setAuditData] = useState(null);
-  const [err, setErr] = useState('');
+  const [err, setErr]         = useState('');
   const [activeApi, setActiveApi] = useState('');
 
   useEffect(() => {
-    // Limpiar estado al cambiar de diagnóstico
     setAuditData(null);
     setErr('');
     setActiveApi('');
@@ -29,15 +28,13 @@ export default function DiagnosticoView() {
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || `Error ${res.status}`);
 
-        // Filtrar las APIs que efectivamente tienen métricas
         const available = Object.keys(payload.audit || {}).filter(key => {
           const apiData = payload.audit[key] || {};
           const metrics = apiData.metrics || apiData;
           return metrics && Object.keys(metrics).length > 0;
         });
 
-        // Forzar orden: primero pagespeed, luego unlighthouse
-        const ORDER = ['pagespeed', 'unlighthouse'];
+        const ORDER = ['pagespeed','unlighthouse'];
         const apis   = ORDER.filter(k => available.includes(k));
 
         if (mounted) {
@@ -71,8 +68,6 @@ export default function DiagnosticoView() {
   }
 
   const { url, fecha, audit = {} } = auditData;
-
-  // Determinar qué APIs mostrar en las pestañas
   const apisDisponibles = Object.keys(audit).filter(api => {
     const apiData = audit[api] || {};
     const metrics = apiData.metrics || apiData;
@@ -82,11 +77,17 @@ export default function DiagnosticoView() {
   const apiData = audit[activeApi] || {};
   const metrics = apiData.metrics || apiData;
 
-  // Si no hay métricas para la API seleccionada, mostramos mensaje
   if (!activeApi || Object.keys(metrics).length === 0) {
     return (
       <div className="card">
         <Link to="/" className="back-link">← Nuevo diagnóstico</Link>
+        <Link
+          to={`/historico?url=${encodeURIComponent(url)}`}
+          className="back-link"
+          style={{ marginLeft: '1rem' }}
+        >
+          Ver histórico de esta URL
+        </Link>
         <h2 className="diagnostico-title">
           Diagnóstico de <span className="url">{url}</span>
         </h2>
@@ -97,7 +98,7 @@ export default function DiagnosticoView() {
     );
   }
 
-  // Cálculo del score global
+  // Calcular score global
   let performance = 0;
   if (typeof apiData.performance === 'number') {
     performance = Math.round(apiData.performance);
@@ -105,7 +106,6 @@ export default function DiagnosticoView() {
     performance = Math.round(metrics.performance);
   }
 
-  // Armar el array de métricas
   const items = [
     {
       id:    'performance',
@@ -113,17 +113,54 @@ export default function DiagnosticoView() {
       value: performance,
       desc:  `Porcentaje de rendimiento según ${API_LABELS[activeApi]}.`
     },
-    { id: 'fcp',  label: 'FCP',  value: Math.round(metrics.fcp  || 0), desc: 'Tiempo hasta la primera pintura de contenido'},
-    { id: 'lcp',  label: 'LCP',  value: Math.round(metrics.lcp  || 0), desc: 'Tiempo hasta la pintura de contenido más grande'},
-    { id: 'cls',  label: 'CLS',  value: Math.round((metrics.cls||0)*1000), desc: 'Desplazamiento acumulativo de diseño'},
-    { id: 'tbt',  label: 'TBT',  value: Math.round(metrics.tbt  || 0), desc: 'Tiempo total de bloqueo'},
-    { id: 'si',   label: 'SI',   value: Math.round(metrics.si   || 0), desc: 'Índice de velocidad'},
-    { id: 'ttfb', label: 'TTFB', value: Math.round(metrics.ttfb || 0), desc: 'Tiempo hasta el primer byte' },
+    {
+      id:    'fcp',
+      label: 'FCP',
+      value: Math.round(metrics.fcp  || 0),
+      desc:  'Tiempo hasta la primera pintura de contenido'
+    },
+    {
+      id:    'lcp',
+      label: 'LCP',
+      value: Math.round(metrics.lcp  || 0),
+      desc:  'Tiempo hasta la pintura de contenido más grande'
+    },
+    {
+      id:    'cls',
+      label: 'CLS',
+      value: Math.round((metrics.cls||0) * 1000),
+      desc:  'Desplazamiento acumulativo de diseño'
+    },
+    {
+      id:    'tbt',
+      label: 'TBT',
+      value: Math.round(metrics.tbt  || 0),
+      desc:  'Tiempo total de bloqueo'
+    },
+    {
+      id:    'si',
+      label: 'SI',
+      value: Math.round(metrics.si   || 0),
+      desc:  'Índice de velocidad'
+    },
+    {
+      id:    'ttfb',
+      label: 'TTFB',
+      value: Math.round(metrics.ttfb || 0),
+      desc:  'Tiempo hasta el primer byte'
+    },
   ];
 
   return (
     <div className="card">
       <Link to="/" className="back-link">← Nuevo diagnóstico</Link>
+      <Link
+        to={`/historico?url=${encodeURIComponent(url)}`}
+        className="back-link"
+        style={{ marginLeft: '1rem' }}
+      >
+        Ver histórico de esta URL
+      </Link>
 
       <h2 className="diagnostico-title">
         Diagnóstico de <span className="url">{url}</span>

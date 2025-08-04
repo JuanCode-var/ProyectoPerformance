@@ -1,12 +1,22 @@
-// server/routes/formRoutes.js  (ESM)
+// server/routes/formRoutes.js
 import { Router } from 'express';
-import { guardarDatos, getAuditById } from '../controllers/formController.js';
-import { getAudits } from '../controllers/auditHistory.controller.js';
+import {
+  guardarDatos,
+  getAuditById,
+  getAuditHistory
+} from '../controllers/formController.js';
 
 const router = Router();
 
-router.post('/audit', guardarDatos);
-router.get ('/audit/:id', getAuditById);
-router.get ('/audits',     getAudits);
+// 1. POST /api/audit
+router.post('/', guardarDatos);
+
+// 2. GET  /api/audit/history?url=…
+router.get('/history', getAuditHistory);
+
+// 3. GET  /api/audit/:id
+router.get('/:id', getAuditById);
 
 export default router;
+
+
