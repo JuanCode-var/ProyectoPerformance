@@ -250,7 +250,7 @@
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 0.375rem;
-  cursor: not-allowed;
+  cursor: pointer;
 }
 
 /* src/styles/historico.css */
@@ -261,9 +261,10 @@
 /* Tarjeta de cada métrica histórica */
 .gauge-card {
   padding: 1rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   border-radius: 0.5rem;
-  border-bottom: 15px solid #c6d5f4;
+  border-bottom: 40px solid #c6d5f4;
+  cursor: pointer;
 }
 
 /* Contenedor horizontal de cada ejecución */
@@ -271,7 +272,7 @@
   display: flex;
   gap: 2.0rem;
   overflow-x: auto;
-  padding-top: 0.5rem;
+  padding-top: 1.5rem;
 }
 
 /* Cada gauge dentro de la fila */
@@ -299,7 +300,7 @@ Valor bajo el gauge
 
 /* Scroll horizontal más suave */
 .historico-row::-webkit-scrollbar {
-  height: 7px;
+  height: 10px;
   color: #000000;
 }
 .historico-row::-webkit-scrollbar-thumb {
@@ -332,4 +333,77 @@ Valor bajo el gauge
   right: 0;
   width: 1px;
   background: #e5e7eb;
+}
+
+/* src/styles/historico.css */
+
+/* Carousel container */
+.historico-carousel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Arrow buttons */
+.carousel-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  color: #374151;
+}
+.carousel-btn:disabled {
+  color: #cbd5e1;
+  cursor: default;
+}
+
+/* Center area for gauge */
+.carousel-gauge {
+  text-align: center;
+  min-width: 160px;
+}
+
+/* Pagination indicator */
+.carousel-indicator {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: #555;
+  text-align: center;
+}
+
+/* Previously existing styles */
+
+.gauges-grid .gauge-card:nth-child(odd)  { background: #fafafa; }
+.gauges-grid .gauge-card:nth-child(even) { background: #fff; }
+
+.gauge-card {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.historico-row {
+  display: none; /* no longer used */
+}
+
+.historic-gauge {
+  /* no longer used */
+}
+
+/* Reuse item-value, date, etc. */
+.historic-gauge .item-value,
+.carousel-gauge .item-value {
+  margin-top: 0.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111;
+}
+.historic-gauge .date,
+.carousel-gauge .date {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: #555;
+  line-height: 1.2;
 }

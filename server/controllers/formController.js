@@ -129,74 +129,79 @@ export async function sendReport(req, res) {
       return res.status(400).json({ error: 'Falta parámetro url o email' });
     }
 
-    // Recupera todo el historial de esa URL
+    // 1) Recupera todas las auditorías para esa URL
     const docs = await Audit.find({ url }).sort({ fecha: 1 });
     if (docs.length === 0) {
       return res.status(404).json({ error: 'No hay datos previos para esa URL' });
     }
 
-    // Monta una tabla HTML con tus métricas más relevantes
-    let rows = docs.map(doc => {
-      const d = new Date(doc.fecha).toLocaleString();
-      const p = doc.performance ?? '-';
-      const m = doc.metrics || {};
+    // 2) Construye filas de la tabla con zebra stripe
+    const rowsHtml = docs.map((doc, i) => {
+      const fecha = new Date(doc.fecha).toLocaleString();
+      const perf  = doc.performance ?? 'N/A';
+      const m      = doc.audit.pagespeed?.metrics || doc.audit.unlighthouse?.metrics || {};
+      const bg    = i % 2 === 0 ? '#f9fafb' : '#ffffff';
+
       return `
-        <tr>
-          <td style="padding:4px;border:1px solid #ccc">${d}</td>
-          <td style="padding:4px;border:1px solid #ccc">${p}</td>
-          <td style="padding:4px;border:1px solid #ccc">${m.lcp  ?? '-'}</td>
-          <td style="padding:4px;border:1px solid #ccc">${m.fcp  ?? '-'}</td>
-          <td style="padding:4px;border:1px solid #ccc">${m.cls  ?? '-'}</td>
-          <td style="padding:4px;border:1px solid #ccc">${m.tbt  ?? '-'}</td>
-          <td style="padding:4px;border:1px solid #ccc">${m.si   ?? '-'}</td>
-          <td style="padding:4px;border:1px solid #ccc">${m.ttfb ?? '-'}</td>
+        <tr style="background: ${bg};">
+          <td style="padding: 8px; border: 1px solid #ddd;">${fecha}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${perf}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${m.lcp  ?? 'N/A'}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${m.fcp  ?? 'N/A'}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${m.cls  ?? 'N/A'}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${m.tbt  ?? 'N/A'}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${m.si   ?? 'N/A'}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${m.ttfb ?? 'N/A'}</td>
         </tr>`;
     }).join('');
 
+    // 3) Monta el HTML completo
     const html = `
-      <h1>Informe Histórico de ${url}</h1>
-      <table style="border-collapse:collapse">
-        <thead>
-          <tr>
-            <th style="padding:4px;border:1px solid #ccc">Fecha hora</th>
-            <th style="padding:4px;border:1px solid #ccc">Perf.</th>
-            <th style="padding:4px;border:1px solid #ccc">LCP</th>
-            <th style="padding:4px;border:1px solid #ccc">FCP</th>
-            <th style="padding:4px;border:1px solid #ccc">CLS</th>
-            <th style="padding:4px;border:1px solid #ccc">TBT</th>
-            <th style="padding:4px;border:1px solid #ccc">SI</th>
-            <th style="padding:4px;border:1px solid #ccc">TTFB</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
+      <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.4;">
+        <h2 style="text-align: center; color: #2563EB;">Informe Histórico de ${url}</h2>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+          <thead>
+            <tr style="background: #2563EB; color: #fff;">
+              <th style="padding: 12px; border: 1px solid #ddd;">Fecha / Hora</th>
+              <th style="padding: 12px; border: 1px solid #ddd;">Performance</th>
+              <th style="padding: 12px; border: 1px solid #ddd;">LCP</th>
+              <th style="padding: 12px; border: 1px solid #ddd;">FCP</th>
+              <th style="padding: 12px; border: 1px solid #ddd;">CLS</th>
+              <th style="padding: 12px; border: 1px solid #ddd;">TBT</th>
+              <th style="padding: 12px; border: 1px solid #ddd;">SI</th>
+              <th style="padding: 12px; border: 1px solid #ddd;">TTFB</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+        <p style="text-align: right; margin-top: 24px; font-size: 0.85em; color: #666;">
+          Generado el ${new Date().toLocaleString()}
+        </p>
+      </div>
     `;
 
-    // Configura tu transporte SMTP
+    // 4) Crea el transporter usando Gmail (app password)
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: +process.env.SMTP_PORT,
-      secure: process.env.SMTP_SECURE === 'true',
+      service: 'gmail',
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
     });
 
+    // 5) Envía el correo con HTML enriquecido
     await transporter.sendMail({
-      from: process.env.SMTP_FROM,
-      to: email,
-      subject: `Informe histórico de ${url}`,
-      html,
+      from: process.env.EMAIL_USER,
+      to:   email,
+      subject: `Informe Histórico de ${url}`,
+      html
     });
 
     return res.json({ message: 'Informe enviado correctamente' });
-  } catch (e) {
-    console.error('❌ Error en sendReport:', e);
+  } catch (err) {
+    console.error('❌ Error al enviar el informe:', err);
     return res.status(500).json({ error: 'Error al enviar el informe' });
   }
 }
-
-
