@@ -1,409 +1,532 @@
-/* Grid específico para histórico */
-/* src/styless/diagnostico.css */
+/* src/styles/historico.css - Estilo Moderno para Comparativas */
 
-/* Card general */
+:root {
+  --primary-color: #0f172a;
+  --primary-light: #1e293b;
+  --accent-color: #3b82f6;
+  --accent-hover: #2563eb;
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --error-color: #ef4444;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-quaternary: #e2e8f0;
+  --border-color: #e2e8f0;
+  --border-light: #f1f5f9;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-accent: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  --gradient-card-1: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  --gradient-card-2: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+}
+
+/* Reset y configuración base */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+/* Card principal */
 .card {
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  padding: 24px;
-  margin: 24px auto;
-  max-width: 960px;
+  background: var(--bg-primary);
+  border-radius: 16px;
+  box-shadow: var(--shadow-xl);
+  padding: 32px;
+  margin: 32px auto;
+  max-width: 1400px;
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-accent);
+  border-radius: 16px 16px 0 0;
 }
 
 /* Enlace de vuelta */
 .back-link {
-  display: inline-block;
-  margin-bottom: 16px;
-  color: #2563eb;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  color: var(--accent-color);
   text-decoration: none;
   font-weight: 500;
+  font-size: 14px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
 }
+
 .back-link:hover {
-  text-decoration: underline;
+  background: var(--accent-color);
+  color: rgb(17, 0, 255);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
-/* Título principal */
-.title {
-  margin: 0;
-  font-size: 1.75rem;
-  font-weight: 600;
-  color: #111;
+.back-link::before {
+  content: '←';
+  font-size: 16px;
 }
+
+/* Títulos */
+.title, .diagnostico-title {
+  margin: 0 0 8px 0;
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.2;
+}
+
 .title .url {
-  color: #2563eb;
+  color: var(--accent-color);
   word-break: break-all;
-}
-
-
-.diagnostico-title {
-  margin: 0;
-  font-size: 1.75rem;
   font-weight: 600;
-  color: #111;
 }
-
 
 /* Fecha */
 .date {
-  font-size: 0.875rem;
-  color: #555;
-  margin-bottom: 12px;
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  font-weight: 500;
 }
 
 /* Mensaje de éxito */
 .success-msg {
-  font-size: 1rem;
-  color: #047857;
-  background: #d1fae5;
-  padding: 8px 12px;
-  border-radius: 4px;
-  display: inline-block;
-  margin-bottom: 16px;
-}
-
-/* Grid de tarjetas */
-.diagnostico-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px,1fr));
-  gap: 16px;
-}
-
-/* Cada tarjeta individual */
-.item {
-  background: #f9fafb;
-  border-radius: 6px;
-  padding: 16px;
-  text-align: center;
-  transition: transform .2s, box-shadow .2s;
-}
-.item:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-}
-
-/* Label encima del gauge */
-.item-label {
-  margin: 0 0 8px;
-  font-size: 1rem;
+  font-size: 14px;
+  color: var(--success-color);
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  padding: 12px 20px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  border: 1px solid #a7f3d0;
   font-weight: 500;
-  color: #333;
 }
 
-/* Valor numérico grande */
-.item-value {
-  margin-top: 8px;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #111;
+.success-msg::before {
+  content: '✓';
+  font-size: 16px;
+  font-weight: bold;
 }
 
-/* Descripción debajo */
-.item-desc {
-  margin-top: 6px;
-  font-size: 0.875rem;
-  color: #555;
-  line-height: 1.4;
-}
-
-/* Spinner (para estado loading) */
+/* Estados de loading */
 .loading {
   text-align: center;
-  padding: 32px;
+  padding: 64px 32px;
 }
-.spinner {
-  margin: 16px auto;
-  width: 48px;
-  height: 48px;
-  border: 5px solid #e5e7eb;
-  border-top-color: #2563eb;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Listado de métricas (Core Web Vitals) */
-.metrics-title {
-  margin-top: 24px;
-  font-size: 1.25rem;
-  font-weight: 500;
-  color: #111;
-}
-.metrics-list {
-  list-style: none;
-  padding: 0;
-  margin-top: 12px;
-}
-.metrics-list li {
-  margin-bottom: 8px;
-  font-size: 0.95rem;
-  color: #333;
-}
-
-/* Errores */
-.error {
-  color: #dc2626;
-  font-weight: 500;
-}
-
-/* Ajustes responsivos */
-@media (max-width: 600px) {
-  .card {
-    padding: 16px;
-    margin: 16px;
-  }
-  .diagnostico-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 
 .loading-placeholder {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 4rem;
-  color: #374151;
+  margin-top: 64px;
+  color: var(--text-secondary);
 }
+
 .spinner {
-  width: 48px;
-  height: 48px;
-  border: 4px solid #e5e7eb;
-  border-top-color: #1d4ed8;
+  margin: 24px auto;
+  width: 56px;
+  height: 56px;
+  border: 4px solid var(--border-color);
+  border-top-color: var(--accent-color);
   border-radius: 50%;
-  margin-bottom: 1rem;
+  animation: spin 1s linear infinite;
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Grid principal de gauges */
 .gauges-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 32px;
+  margin-top: 32px;
 }
+
+/* Tarjeta de cada métrica */
 .gauge-card {
-  background: #ffffff;
-  border-radius: 0.5rem;
-  padding: 1rem;
-}
-.tabs {
-  display: flex;
-  gap: 1rem;
+  background: var(--bg-primary);
+  border-radius: 20px;
+  padding: 28px;
+  margin-bottom: 0;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
+  transition: all 0.3s ease;
   position: relative;
-  margin-bottom: 1rem;
+  overflow: hidden;
 }
-.tab-button {
-  background: none;
-  border: none;
-  font-size: 1rem;
-  padding: 0.5rem;
-  cursor: pointer;
-  position: relative;
-  color: #374151;
-}
-.tab-button.active {
-  color: #1d4ed8;
-}
-.underline {
+
+.gauge-card::before {
+  content: '';
   position: absolute;
-  bottom: 0;
+  top: 0;
   left: 0;
-  height: 3px;
-  width: 100%;
-  background-color: #1d4ed8;
-  border-radius: 2px;
-}
-
-
-
-.gauges-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px,1fr));
-  gap: 1rem;
-}
-.gauge-card {
-  background: #fff;
-  border-radius: 0.5rem;
-  padding: 1rem;
-}
-.historico-row {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-end;
-  overflow-x: auto;
-  padding-bottom: 0.5rem;
-}
-.historic-gauge {
-  text-align: center;
-}
-.historic-gauge .item-value {
-  margin-top: 0.25rem;
-  font-weight: 600;
-}
-.historic-gauge .date {
-  font-size: 0.75rem;
-  color: #555;
-  margin-top: 0.25rem;
-}
-.btn-primary {
-  background: #6894f4;
-  color: #fff;
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 0.375rem;
-  cursor: pointer;
-}
-
-/* src/styles/historico.css */
-
-.gauges-grid .gauge-card:nth-child(odd)  { background: #fafafa; }
-.gauges-grid .gauge-card:nth-child(even) { background: #fff; }
-
-/* Tarjeta de cada métrica histórica */
-.gauge-card {
-  padding: 1rem;
-  margin-bottom: 1rem;
-  border-radius: 0.5rem;
-  border-bottom: 40px solid #c6d5f4;
-  cursor: pointer;
-}
-
-/* Contenedor horizontal de cada ejecución */
-.historico-row {
-  display: flex;
-  gap: 2.0rem;
-  overflow-x: auto;
-  padding-top: 1.5rem;
-}
-
-/* Cada gauge dentro de la fila */
-.historic-gauge {
-  text-align: center;
-  min-width: 210px;
-  color: #000000;
-}
-
-Valor bajo el gauge
-.historic-gauge .item-value {
-  margin-top: 0.25rem;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #111;
-}
-
-/* Fecha y hora */
-.historic-gauge .date {
-  margin-top: 0.25rem;
-  font-size: 0.75rem;
-  color: #272424;
-  line-height: 1.2;
-}
-
-/* Scroll horizontal más suave */
-.historico-row::-webkit-scrollbar {
-  height: 10px;
-  color: #000000;
-}
-.historico-row::-webkit-scrollbar-thumb {
-  background: #000000;
-  border-radius: 6px;
-}
-
-
-/* Separador vertical entre cada historic-gauge */
-.historico-row {
-  display: flex;
-  gap: 0.5rem;
-  overflow-x: auto;
-  padding-top: 0.5rem;
-  position: relative;
-  color: #000000;
-}
-
-.historic-gauge {
-  position: relative;
-  padding-right: 1.0rem;   /* espacio para la línea */
-}
-
-/* No poner separador en el último */
-.historic-gauge:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  top: 10%;
-  bottom: 10%;
   right: 0;
-  width: 1px;
-  background: #e5e7eb;
+  height: 4px;
+  background: var(--gradient-accent);
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
 }
 
-/* src/styles/historico.css */
+.gauge-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-xl);
+  border-color: var(--accent-color);
+}
 
-/* Carousel container */
+.gauge-card:hover::before {
+  transform: scaleX(1);
+}
+
+/* Alternancia de fondos para las tarjetas */
+.gauges-grid .gauge-card:nth-child(odd) {
+  background: var(--gradient-card-1);
+}
+
+.gauges-grid .gauge-card:nth-child(even) {
+  background: var(--gradient-card-2);
+}
+
+/* Carousel para histórico */
 .historico-carousel {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 20px;
+  padding: 20px 0;
 }
 
-/* Arrow buttons */
+/* Botones del carousel */
 .carousel-btn {
-  background: none;
-  border: none;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
   cursor: pointer;
-  padding: 0.25rem;
-  color: #374151;
-}
-.carousel-btn:disabled {
-  color: #cbd5e1;
-  cursor: default;
+  padding: 12px;
+  color: var(--text-primary);
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
-/* Center area for gauge */
+.carousel-btn:hover:not(:disabled) {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+  transform: scale(1.05);
+  box-shadow: var(--shadow-md);
+}
+
+.carousel-btn:disabled {
+  background: var(--bg-quaternary);
+  color: var(--text-muted);
+  border-color: var(--border-light);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Área central del gauge */
 .carousel-gauge {
   text-align: center;
-  min-width: 160px;
+  min-width: 200px;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border-radius: 16px;
+  border: 2px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
 }
 
-/* Pagination indicator */
+.carousel-gauge:hover {
+  border-color: var(--accent-color);
+  box-shadow: var(--shadow-md);
+}
+
+/* Indicador de página */
 .carousel-indicator {
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-  color: #555;
+  margin-top: 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-align: center;
+  font-weight: 500;
+  padding: 8px 16px;
+  background: var(--bg-tertiary);
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+}
+
+/* Estilos para valores */
+.historic-gauge .item-value,
+.carousel-gauge .item-value {
+  margin-top: 12px;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.historic-gauge .date,
+.carousel-gauge .date {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.3;
+  font-weight: 500;
+  padding: 4px 8px;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 8px;
+  display: inline-block;
+}
+
+/* Label de métricas */
+.item-label {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 14px;
   text-align: center;
 }
 
-/* Previously existing styles */
-
-.gauges-grid .gauge-card:nth-child(odd)  { background: #fafafa; }
-.gauges-grid .gauge-card:nth-child(even) { background: #fff; }
-
-.gauge-card {
-  padding: 1rem;
-  margin-bottom: 1rem;
-  border-radius: 0.5rem;
-  border-bottom: 1px solid #e5e7eb;
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 8px;
+  position: relative;
+  margin-bottom: 24px;
+  background: var(--bg-secondary);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
 }
 
-.historico-row {
-  display: none; /* no longer used */
+.tab-button {
+  background: none;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 20px;
+  cursor: pointer;
+  position: relative;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  flex: 1;
 }
 
-.historic-gauge {
-  /* no longer used */
+.tab-button.active {
+  color: white;
+  background: var(--gradient-accent);
+  box-shadow: var(--shadow-sm);
 }
 
-/* Reuse item-value, date, etc. */
-.historic-gauge .item-value,
-.carousel-gauge .item-value {
-  margin-top: 0.25rem;
-  font-size: 1rem;
+.tab-button:hover:not(.active) {
+  color: var(--text-primary);
+  background: var(--bg-primary);
+}
+
+/* Botón primary */
+.btn-primary {
+  background: var(--gradient-accent);
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
   font-weight: 600;
-  color: #111;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
-.historic-gauge .date,
-.carousel-gauge .date {
-  margin-top: 0.25rem;
-  font-size: 0.75rem;
-  color: #555;
-  line-height: 1.2;
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Métricas */
+.metrics-title {
+  margin-top: 32px;
+  margin-bottom: 16px;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.metrics-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.metrics-list li {
+  background: var(--bg-secondary);
+  padding: 16px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.metrics-list li::before {
+  content: '▶';
+  color: var(--accent-color);
+  font-size: 12px;
+}
+
+/* Errores */
+.error {
+  color: var(--error-color);
+  font-weight: 600;
+  background: #fef2f2;
+  padding: 16px 20px;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.error::before {
+  content: '⚠';
+  font-size: 18px;
+}
+
+/* Scroll personalizado */
+.historico-row::-webkit-scrollbar {
+  height: 8px;
+}
+
+.historico-row::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+.historico-row::-webkit-scrollbar-thumb {
+  background: var(--accent-color);
+  border-radius: 4px;
+}
+
+.historico-row::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-hover);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .gauges-grid {
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 24px;
+  }
+}
+
+@media (max-width: 768px) {
+  .card {
+    padding: 24px 20px;
+    margin: 20px 16px;
+    border-radius: 12px;
+  }
+  
+  .gauges-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  
+  .title,
+  .diagnostico-title {
+    font-size: 1.75rem;
+  }
+  
+  .tabs {
+    flex-direction: column;
+  }
+  
+  .historico-carousel {
+    gap: 12px;
+  }
+  
+  .carousel-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+  
+  .carousel-gauge {
+    min-width: 160px;
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 20px 16px;
+    margin: 16px 12px;
+  }
+  
+  .gauge-card {
+    padding: 20px;
+    border-radius: 16px;
+  }
+  
+  .carousel-gauge .item-value {
+    font-size: 1.5rem;
+  }
+  
+  .historico-carousel {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .carousel-indicator {
+    margin-top: 8px;
+  }
 }

@@ -13,15 +13,15 @@ const API_LABELS = {
 export default function DiagnosticoView() {
   const { id } = useParams();
   const [auditData, setAuditData] = useState(null);
-  const [err, setErr]         = useState('');
+  const [err, setErr]             = useState('');
   const [activeApi, setActiveApi] = useState('');
 
   useEffect(() => {
+    let mounted = true;
     setAuditData(null);
     setErr('');
     setActiveApi('');
 
-    let mounted = true;
     (async () => {
       try {
         const res     = await fetch(`/api/audit/${id}`);
@@ -151,6 +151,9 @@ export default function DiagnosticoView() {
     },
   ];
 
+  // Lista de métricas donde no mostrar el número bajo el gauge
+  const hideBottomFor = ['performance','fcp','lcp','cls','tbt','si','ttfb'];
+  
   return (
     <div className="card">
       <Link to="/" className="back-link">← Nuevo diagnóstico</Link>
@@ -180,19 +183,25 @@ export default function DiagnosticoView() {
       </div>
 
       <div className="diagnostico-grid">
-        {items.map(item => (
-          <div key={item.id} className="item">
-            <h3 className="item-label">{item.label}</h3>
-            <CircularGauge
-              value={item.value}
-              max={item.id === 'performance' ? 100 : undefined}
-              color={perfColor(item.value)}
-            />
-            <div className="item-value">{item.value}</div>
-            <p className="item-desc">{item.desc}</p>
-          </div>
-        ))}
+        {items.map(item => {
+          const showValueUnder = !hideBottomFor.includes(item.id);
+          return (
+            <div key={item.id} className="item">
+              <h3 className="item-label">{item.label}</h3>
+              <CircularGauge
+                value={item.value}
+                max={item.id === 'performance' ? 100 : undefined}
+                color={perfColor(item.value)}
+              />
+              {showValueUnder && (
+                <div className="item-value">{item.value}</div>
+              )}
+              <p className="item-desc">{item.desc}</p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
+

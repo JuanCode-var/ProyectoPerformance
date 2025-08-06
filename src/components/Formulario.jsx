@@ -28,11 +28,6 @@ const testInfos = {
     description: 'Lighthouse audita rendimiento, accesibilidad, SEO y mejores prácticas.',
     icon: '🚀',
   },
-  unlighthouse: {
-    title: 'Unlighthouse',
-    description: 'Unlighthouse ofrece métricas avanzadas y personalizables de rendimiento.',
-    icon: '⚡',
-  },
   security: {
     title: 'Security',
     description: 'La API de seguridad detecta vulnerabilidades y analiza cabeceras seguras.',

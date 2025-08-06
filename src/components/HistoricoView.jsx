@@ -1,8 +1,8 @@
 // src/components/HistoricoView.jsx
 import React, { useState, useEffect } from 'react';
-import { useLocation, Link, Navigate } from 'react-router-dom';
+import { useLocation, Link, Navigate, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronLeft } from 'lucide-react';
 import CircularGauge from './CircularGauge';
 import { perfColor } from '../utils/lighthouseColors';
 import '../styles/diagnostico.css';
@@ -15,6 +15,7 @@ function useQuery() {
 export default function HistoricoView() {
   const query      = useQuery();
   const url        = query.get('url') || '';
+  const navigate   = useNavigate();
   const [history, setHistory] = useState(null);
   const [err, setErr]         = useState('');
   const [sending, setSending] = useState(false);
@@ -30,7 +31,21 @@ export default function HistoricoView() {
         const res  = await fetch(`/api/audit/history?url=${encodeURIComponent(url)}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
-        setHistory(data);
+
+        // Filtrar valores duplicados consecutivos por métrica
+        const dedupHistory = data.filter((doc, i, arr) => {
+          if (i === 0) return true;
+          // extrae métricas previas y actuales
+          const prevMetrics = arr[i - 1].audit.pagespeed?.metrics
+                            || arr[i - 1].audit.unlighthouse?.metrics
+                            || {};
+          const curMetrics  = doc.audit.pagespeed?.metrics
+                            || doc.audit.unlighthouse?.metrics
+                            || {};
+          return JSON.stringify(prevMetrics) !== JSON.stringify(curMetrics);
+        });
+
+        setHistory(dedupHistory);
         setCurrentIndex(Array(metricKeys.length).fill(0));
       } catch (e) {
         setErr(e.message);
@@ -81,6 +96,9 @@ export default function HistoricoView() {
               className="back-link" style={{ marginLeft: '1rem' }}>
           Ver histórico de esta URL
         </Link>
+        <button onClick={() => navigate(-1)} className="back-link">
+          <ChevronLeft size={16}/> Volver al diagnóstico
+        </button>
       </div>
 
       <h2 className="diagnostico-title">Histórico de <span className="url">{url}</span></h2>
@@ -96,7 +114,10 @@ export default function HistoricoView() {
           const apiData   = item.audit.pagespeed || item.audit.unlighthouse || {};
           const m         = apiData.metrics || apiData;
           const val       = Math.round(m[key] || 0);
-          const bottomLabel = (['cls','tbt'].includes(key) && val === 0) ? 'N/A' : val;
+          
+          // ocultar valor duplicado
+          const showValueUnder = false;
+
 
           return (
             <motion.div key={key}
@@ -107,9 +128,11 @@ export default function HistoricoView() {
               <h3 className="item-label">{key.toUpperCase()}</h3>
 
               <div className="historico-carousel">
-                <button className="carousel-btn"
-                        onClick={() => handlePrev(row)}
-                        disabled={idx === 0}>
+                <button
+                  className="carousel-btn"
+                  onClick={() => handlePrev(row)}
+                  disabled={idx === 0}
+                >
                   <ArrowLeft size={20}/>
                 </button>
 
@@ -119,15 +142,17 @@ export default function HistoricoView() {
                     max={key === 'performance' ? 100 : undefined}
                     color={perfColor(val)}
                   />
-                  {key !== 'performance' && (
-                    <div className="item-value">{bottomLabel}</div>
+                  {showValueUnder && (
+                    <div className="item-value">{val}</div>
                   )}
                   <div className="date">{displayDate}<br/>{displayTime}</div>
                 </div>
 
-                <button className="carousel-btn"
-                        onClick={() => handleNext(row)}
-                        disabled={idx === history.length - 1}>
+                <button
+                  className="carousel-btn"
+                  onClick={() => handleNext(row)}
+                  disabled={idx === history.length - 1}
+                >
                   <ArrowRight size={20}/>
                 </button>
               </div>
@@ -147,27 +172,17 @@ export default function HistoricoView() {
           onClick={async () => {
             setSending(true);
             setSentMsg('');
-
             try {
               const resp = await fetch('/api/audit/send-report', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url, email: history[history.length - 1]?.email })
               });
-
-              // siempre lee como texto para evitar JSON inválido
               const text = await resp.text();
               let payload;
-              try {
-                payload = JSON.parse(text);
-              } catch {
-                payload = { error: text || `Error ${resp.status}` };
-              }
-
-              if (!resp.ok) {
-                throw new Error(payload.error || payload.message || `Error ${resp.status}`);
-              }
-
+              try { payload = JSON.parse(text); }
+              catch { payload = { error: text || `Error ${resp.status}` }; }
+              if (!resp.ok) throw new Error(payload.error || payload.message || `Error ${resp.status}`);
               setSentMsg(`✅ ${payload.message}`);
             } catch (e) {
               setSentMsg(`❌ ${e.message}`);
@@ -191,3 +206,5 @@ export default function HistoricoView() {
     </div>
   );
 }
+
+
