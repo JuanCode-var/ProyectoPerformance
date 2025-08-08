@@ -136,74 +136,68 @@ export async function sendReport(req, res) {
     }
 
     // 2) Construye filas zebra con lecturas múltiples
-    const rowsHtml = docs.map((doc, i) => {
-      const fecha = new Date(doc.fecha).toLocaleString();
+   // 2) Construye filas de la tabla sin CLS
+const rowsHtml = docs.map((doc, i) => {
+  const fecha = new Date(doc.fecha).toLocaleString();
+  const perf  = doc.performance ?? 'N/A';
 
-      // Performance: intenta root luego cada servicio
-      const perf =
-        doc.performance ??
-        doc.audit.pagespeed?.performance ??
-        doc.audit.unlighthouse?.performance ??
-        'N/A';
+  // Función que busca key en todos los orígenes posibles
+  const read = key => {
+    let v;
+    if (doc.metrics?.[key] != null) v = doc.metrics[key];
+    else if (doc.audit.pagespeed?.metrics?.[key] != null)
+      v = doc.audit.pagespeed.metrics[key];
+    else if (doc.audit.unlighthouse?.metrics?.[key] != null)
+      v = doc.audit.unlighthouse.metrics[key];
+    else if (doc.audit.pagespeed?.[key] != null)
+      v = doc.audit.pagespeed[key];
+    else if (doc.audit.unlighthouse?.[key] != null)
+      v = doc.audit.unlighthouse[key];
+    else
+      return 'N/A';
 
-      // Función que busca key en todos los orígenes posibles
-      const read = key => {
-        let v;
-        if (doc.metrics?.[key] != null) v = doc.metrics[key];
-        else if (doc.audit.pagespeed?.metrics?.[key] != null)
-          v = doc.audit.pagespeed.metrics[key];
-        else if (doc.audit.unlighthouse?.metrics?.[key] != null)
-          v = doc.audit.unlighthouse.metrics[key];
-        else if (doc.audit.pagespeed?.[key] != null)
-          v = doc.audit.pagespeed[key];
-        else if (doc.audit.unlighthouse?.[key] != null)
-          v = doc.audit.unlighthouse[key];
-        else
-          return 'N/A';
+    // Solo TBT lo mostramos como N/A si es 0
+    if (key === 'tbt' && v === 0) return 'N/A';
+    return typeof v === 'number' ? Math.round(v) : v;
+  };
 
-        if ((key === 'cls' || key === 'tbt') && v === 0) return 'N/A';
-        return typeof v === 'number' ? Math.round(v) : v;
-      };
+  const bg = i % 2 === 0 ? '#f9fafb' : '#ffffff';
+  return `
+    <tr style="background:${bg}">
+      <td style="padding:8px;border:1px solid #ddd">${fecha}</td>
+      <td style="padding:8px;border:1px solid #ddd;text-align:center">${perf}</td>
+      <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('lcp')}</td>
+      <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('fcp')}</td>
+      <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('tbt')}</td>
+      <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('si')}</td>
+      <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('ttfb')}</td>
+    </tr>`;
+}).join('');
 
-      const bg = i % 2 === 0 ? '#f9fafb' : '#ffffff';
-      return `
-        <tr style="background:${bg}">
-          <td style="padding:8px;border:1px solid #ddd">${fecha}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${perf}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('lcp')}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('fcp')}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('cls')}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('tbt')}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('si')}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('ttfb')}</td>
-        </tr>`;
-    }).join('');
-
-    // 3) Ensambla el HTML completo
-    const html = `
-      <div style="font-family:Arial,sans-serif;color:#333">
-        <h2 style="text-align:center;color:#2563EB">Informe Histórico de ${url}</h2>
-        <table style="width:100%;border-collapse:collapse;margin-top:16px">
-          <thead>
-            <tr style="background:#2563EB;color:#fff">
-              <th style="padding:12px;border:1px solid #ddd">Fecha / Hora</th>
-              <th style="padding:12px;border:1px solid #ddd">Perf.</th>
-              <th style="padding:12px;border:1px solid #ddd">LCP</th>
-              <th style="padding:12px;border:1px solid #ddd">FCP</th>
-              <th style="padding:12px;border:1px solid #ddd">CLS</th>
-              <th style="padding:12px;border:1px solid #ddd">TBT</th>
-              <th style="padding:12px;border:1px solid #ddd">SI</th>
-              <th style="padding:12px;border:1px solid #ddd">TTFB</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-        <p style="text-align:right;font-size:0.85em;margin-top:24px;color:#666">
-          Generado el ${new Date().toLocaleString()}
-        </p>
-      </div>
+// 3) Ensambla el HTML completo sin la columna CLS
+const html = `
+  <div style="font-family:Arial,sans-serif;color:#333">
+    <h2 style="text-align:center;color:#2563EB">Informe Histórico de ${url}</h2>
+    <table style="width:100%;border-collapse:collapse;margin-top:16px">
+      <thead>
+        <tr style="background:#2563EB;color:#fff">
+          <th style="padding:12px;border:1px solid #ddd">Fecha / Hora</th>
+          <th style="padding:12px;border:1px solid #ddd">Perf.</th>
+          <th style="padding:12px;border:1px solid #ddd">LCP</th>
+          <th style="padding:12px;border:1px solid #ddd">FCP</th>
+          <th style="padding:12px;border:1px solid #ddd">TBT</th>
+          <th style="padding:12px;border:1px solid #ddd">SI</th>
+          <th style="padding:12px;border:1px solid #ddd">TTFB</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+    <p style="text-align:right;font-size:0.85em;margin-top:24px;color:#666">
+      Generado el ${new Date().toLocaleString()}
+    </p>
+  </div>
     `;
 
     // 4) Configura nodemailer (Gmail + App Password)

@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 const MetricSchema = new mongoose.Schema({
   fcp:   Number,
   lcp:   Number,
-  cls:   Number,
+  // cls:   Number,
   tbt:   Number,
   si:    Number,
   ttfb:  Number,
