@@ -22,29 +22,6 @@ export default function Navbar() {
             </span>
           </div>
         </NavLink>
-
-        {/* <nav className={`navbar__menu ${open ? 'open' : ''}`}>
-          <NavLink
-            to="/"
-            className={({ isActive }) =>
-              `navbar__link${isActive ? ' active' : ''}`
-            }
-            onClick={() => setOpen(false)}
-          >
-            <Activity size={18} />
-            Diagnóstico
-          </NavLink>
-          <NavLink
-            to="/historico"
-            className={({ isActive }) =>
-              `navbar__link${isActive ? ' active' : ''}`
-            }
-            onClick={() => setOpen(false)}
-          >
-            <BarChart3 size={18} />
-            Histórico
-          </NavLink>
-        </nav> */}
       </div>
     </header>
   );

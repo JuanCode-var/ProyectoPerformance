@@ -12,7 +12,10 @@
     "dotenv": "^17.2.0",
     "express": "^5.1.0",
     "mongoose": "^8.16.4",
-    "nodemailer": "^7.0.5"
+    "nodemailer": "^7.0.5",
+    "worker:dev": "cross-env DOTENV_CONFIG_PATH=server/.env nodemon -r dotenv/config src/pagespeed.worker.js",
+    "worker": "cross-env DOTENV_CONFIG_PATH=server/.env node -r dotenv/config src/pagespeed.worker.js"
+
   },
   "devDependencies": {
     "nodemon": "^3.1.0"

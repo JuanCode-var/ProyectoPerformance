@@ -1,24 +1,31 @@
-// src/queue.js
-import Queue from 'bull';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import Queue from 'bull';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Carga variables del server/.env
+dotenv.config({ path: path.join(__dirname, '../server/.env') });
 
 if (!process.env.REDIS_URL) {
-  throw new Error('⚠️  REDIS_URL not defined in .env');
+  throw new Error('⚠️ Falta REDIS_URL en .env');
 }
 
-// Creamos la cola de auditorías
-export const auditQueue = new Queue('auditQueue', {
-  redis: {
-    url: process.env.REDIS_URL
-  }
+export const auditQueue = new Queue('auditQueue', process.env.REDIS_URL, {
+  defaultJobOptions: {
+    removeOnComplete: true,
+    removeOnFail: true,
+    attempts: 1,
+    timeout: 300000 // 5 minutos
+  },
+  limiter: { max: 2, duration: 1000 },
+  settings: { stalledInterval: 30000 }
 });
 
-// Opciones de la cola: podrías configurar aquí retry, backoff, etc.
-// Ejemplo:
-// auditQueue.on('failed', (job, err) => {
-//   console.error(`Job failed ${job.id}`, err);
-// });
+// Helper opcional para encolar con nombre 'run'
+export function enqueueRun(data, opts = {}) {
+  return auditQueue.add('run', data, opts);
+}
 
-console.log('[queue] Conectada la cola de auditorías a Redis');

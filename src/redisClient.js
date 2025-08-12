@@ -1,22 +1,22 @@
-// Crea y conecta un cliente Redis (usa top-level await porque tu package.json es "type": "module").
-//Exporta redisClient para que lo reutilicemos en la cola y en el worker.
-
-import { createClient } from 'redis';
+// server/redisClient.js (ESM)
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createClient } from 'redis';
 
-const redisUrl = process.env.REDIS_URL;
-if (!redisUrl) {
-  throw new Error('⚠️  Debes definir Redis URL en .env como REDIS_URL');
-}
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const redisClient = createClient({ url: redisUrl });
+// Cargar variables desde server/.env
+dotenv.config({ path: path.join(__dirname, '.env') });
 
-redisClient.on('error', (err) => {
-  console.error('[redisClient] Error de conexión:', err);
-});
+const url = process.env.REDIS_URL || 'redis://localhost:6379';
+const redisClient = createClient({ url });
 
+redisClient.on('error', (err) => console.error('[redis] Error:', err));
 await redisClient.connect();
-console.log('[redisClient] Conectado a Redis');
+console.log('[redis] Conectado a', url);
 
 export default redisClient;
+
+

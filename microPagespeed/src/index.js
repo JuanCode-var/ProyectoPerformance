@@ -24,7 +24,10 @@ app.post(['/audit', '/audit/'], async (req, res) => {
     res.json(data);
   } catch (e) {
     logger.error(e);
-    res.status(500).json({ error: 'Internal error', detail: e.message });
+    const status = e.response?.status || 500;
+    const detail = e.response?.data?.error?.message || e.message;
+    const retryAfter = e.response?.headers?.['retry-after'];
+    res.status(status).json({ error: 'PSI error', detail, retryAfter });
   }
 });
 

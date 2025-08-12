@@ -1,11 +1,28 @@
 import React from 'react';
 
-export default function CircularGauge({ value = 0, max = 100, color = '#4ade80', size = 120, strokeWidth = 12 }) {
+export default function CircularGauge({
+  value = 0,
+  max = 100,
+  color = '#4ade80',
+  size = 120,
+  strokeWidth = 12,
+  // nuevos props:
+  decimals = 0,     // cuántos decimales mostrar
+  suffix = ''       // texto a la derecha del número (p. ej. "s" o "%")
+}) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  // porcentaje de “relleno”
-  const pct = Math.min(Math.max(value / max, 0), 1);
+
+  // protege división por 0/NaN:
+  const safeMax = typeof max === 'number' && max > 0 ? max : 100;
+  const pct = Math.min(Math.max(value / safeMax, 0), 1);
   const dash = pct * circumference;
+
+  // render del valor
+  const display =
+    typeof value === 'number' && !Number.isNaN(value)
+      ? (decimals > 0 ? value.toFixed(decimals) : Math.round(value).toString())
+      : '0';
 
   return (
     <svg width={size} height={size}>
@@ -37,9 +54,8 @@ export default function CircularGauge({ value = 0, max = 100, color = '#4ade80',
         fontWeight="700"
         fill="#111"
       >
-        {Math.round(value)}
+        {display}{suffix}
       </text>
     </svg>
   );
 }
-

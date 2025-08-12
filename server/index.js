@@ -50,3 +50,4 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Gateway escuchando en http://localhost:${PORT}`);
 });
+

@@ -1,35 +1,36 @@
 // src/pagespeed.worker.js
 import 'dotenv/config';
-import { auditQueue }  from './queue.js';
-import redisClient     from './redisClient.js';
-import { runPageSpeed } from './pagespeed.service.js';
+import { auditQueue } from './queue.js';
+import redisClient from './redisClient.js';
+// src/pagespeed.worker.js
+import { runPageSpeed } from '../microPagespeed/src/pagespeed.service.js';
 import { makeCacheKey } from './cacheKey.js';
 
-auditQueue.process(async (job) => {
+auditQueue.process('run', 1, async (job) => {
   const { url, strategy, categories } = job.data;
-
-  // Clave de caché unificada
   const cacheKey = makeCacheKey({ url, strategy, categories });
+  console.log(`[worker] Job ${job.id} ('run') ejecutando -> ${url}`);
 
-  console.log(`[pagespeed.worker] Job ${job.id} – ejecutando PageSpeed para ${url}`);
+  try {
+    const result = await runPageSpeed({ url, strategy, categories });
 
-  // 1 sola corrida de PageSpeed
-  const result = await runPageSpeed({ url, strategy, categories });
+    await redisClient.set(cacheKey, JSON.stringify(result));
+    await redisClient.expire(cacheKey, 3600); // 1h
 
-  // Guardar en Redis (TTL 1 h)
-  await redisClient.set(cacheKey, JSON.stringify(result));
-  await redisClient.expire(cacheKey, 3600);
+    // Limpia la marca "en vuelo"
+    await redisClient.del(`inflight:${cacheKey}`);
 
-  console.log(`[pagespeed.worker] Job ${job.id} completado ➜ cacheKey ${cacheKey}`);
-  return result; // Bull almacenará esto como job.returnvalue
+    console.log(`[worker] Job ${job.id} completado -> ${cacheKey}`);
+    return result;
+  } catch (err) {
+    console.error(`[worker] Job ${job.id} falló:`, err);
+    // También limpia inflight para permitir reintentos
+    await redisClient.del(`inflight:${cacheKey}`);
+    throw err;
+  }
 });
 
-// Eventos de Bull
-auditQueue.on('completed', (job) => {
-  console.log(`[pagespeed.worker] Job ${job.id} marcado como completed`);
-});
-auditQueue.on('failed', (job, err) => {
-  console.error(`[pagespeed.worker] Job ${job.id} falló:`, err);
-});
 
-console.log('[pagespeed.worker] Worker iniciado y escuchando jobs');
+
+ 
+
