@@ -1,121 +1,110 @@
-// server/controllers/formController.js
 import axios from 'axios';
-import Audit from '../database/esquemaBD.js';
 import nodemailer from 'nodemailer';
+import Audit from '../database/esquemaBD.js';
 
-// TTL de caché (1 hora)
-const CACHE_TTL = 1000 * 60 * 60;
+// Asegura que el endpoint termine en /audit
+function withAudit(base) {
+  if (!base) return '/audit';
+  const trimmed = String(base).replace(/\/+$/, '');
+  return trimmed.endsWith('/audit') ? trimmed : `${trimmed}/audit`;
+}
 
-/* ───────────── POST /api/audit ───────────── */
+// POST /api/audit
 export async function guardarDatos(req, res) {
   try {
     const {
       url,
-      type     = 'pagespeed',
+      type = 'pagespeed',
       strategy = 'mobile',
       name,
       email,
-      nocache
+      nocache,
     } = req.body || {};
 
-    if (!url || !type) {
-      return res.status(400).json({ error: 'Faltan parámetros url o type' });
-    }
+    if (!url) return res.status(400).json({ error: 'Falta parámetro url' });
 
-    // Endpoints de microservicios, asegurando que terminen en /audit sin duplicar
+    const MS_PAGESPEED_URL     = process.env.MS_PAGESPEED_URL     || 'http://localhost:3001';
+    const MS_UNLIGHTHOUSE_URL  = process.env.MS_UNLIGHTHOUSE_URL  || 'http://localhost:3002';
+
     const MICROSERVICES = {
-      pagespeed:    { endpoint: withAudit(process.env.MS_PAGESPEED_URL     || 'http://localhost:3001') },
-      unlighthouse: { endpoint: withAudit(process.env.MS_UNLIGHTHOUSE_URL || 'http://localhost:3002') },
+      pagespeed:    { endpoint: withAudit(MS_PAGESPEED_URL) },
+      unlighthouse: { endpoint: withAudit(MS_UNLIGHTHOUSE_URL) },
     };
 
-    // tipos a ejecutar
     const tipos = Array.isArray(type)
       ? type
       : (type === 'all' ? Object.keys(MICROSERVICES) : [type]);
 
-    // valida tipos
-    const invalidos = tipos.filter(t => !MICROSERVICES[t]);
-    if (invalidos.length) {
-      return res.status(400).json({ error: `Tipo(s) inválido(s): ${invalidos.join(', ')}` });
+    const invalid = tipos.filter(t => !MICROSERVICES[t]);
+    if (invalid.length) {
+      return res.status(400).json({ error: `Tipo(s) inválido(s): ${invalid.join(', ')}` });
     }
 
-    // Cache 1h por URL+estrategia+tipos (permitimos forzar no usar cache con nocache=true)
+    // Cache 1h
+    const CACHE_TTL = 1000 * 60 * 60;
     const cutoff = new Date(Date.now() - CACHE_TTL);
-    const cached = await Audit.findOne({
-      url,
-      tipos,
-      strategy,
-      fecha: { $gte: cutoff }
-    });
+    const cached = await Audit.findOne({ url, tipos, strategy, fecha: { $gte: cutoff } });
     if (!nocache && cached) {
-      const respCached = cached.toObject();
-      respCached.isLocal = respCached?.audit?.pagespeed?.meta?.source === 'local';
-      return res.json(respCached);
+      const resp = cached.toObject();
+      resp.isLocal = resp?.audit?.pagespeed?.meta?.source === 'local';
+      return res.json(resp);
     }
 
-    // Ejecuta microservicios (payload definido dentro del map)
-    const peticiones = tipos.map(t => {
-      const payload = t === 'unlighthouse' ? { url } : { url, strategy };
-
+    const calls = tipos.map(t => {
+      const endpoint = MICROSERVICES[t].endpoint;
+      const payload  = (t === 'unlighthouse') ? { url } : { url, strategy };
       return axios
-        .post(MICROSERVICES[t].endpoint, payload, { timeout: 300000 })
-        .then(r => ({ [t]: r.data })) // NO r.data.data
+        .post(endpoint, payload, { timeout: 300000 })
+        .then(r => ({ [t]: r.data }))
         .catch(err => {
+          const msg = err?.response?.data?.detail || err?.response?.data?.error || err.message || 'error';
           const status = err?.response?.status ?? null;
-          const detail =
-            err?.response?.data?.detail ||
-            err?.response?.data?.error ||
-            err?.message ||
-            'Error llamando al micro';
-          return { [t]: { error: detail, status } };
+          return { [t]: { error: msg, status } };
         });
     });
 
-    const audit = (await Promise.all(peticiones))
+    const audit = (await Promise.all(calls))
       .reduce((acc, cur) => ({ ...acc, ...cur }), {});
 
-    // Resolver performance para guardarlo en plano si es solo pagespeed
+    const onlyPagespeedOk = (tipos.length === 1) && audit.pagespeed && !audit.pagespeed.error;
+
     const perfResolved =
-      (typeof audit.pagespeed?.performance === 'number' && !Number.isNaN(audit.pagespeed.performance))
+      (onlyPagespeedOk && typeof audit.pagespeed?.performance === 'number' && !Number.isNaN(audit.pagespeed.performance))
         ? Math.round(audit.pagespeed.performance)
-        : (audit.pagespeed?.raw?.lighthouseResult?.categories?.performance?.score != null
+        : (onlyPagespeedOk && audit.pagespeed?.raw?.lighthouseResult?.categories?.performance?.score != null
             ? Math.round(audit.pagespeed.raw.lighthouseResult.categories.performance.score * 100)
             : undefined);
 
-    const onlyPagespeed = tipos.length === 1 && !audit.pagespeed?.error;
-
     const doc = await Audit.create({
       url,
-      type:        tipos[0],
+      type: tipos[0],
       tipos,
       name,
       email,
       strategy,
       audit,
-      performance: onlyPagespeed ? perfResolved : undefined,
-      metrics:     onlyPagespeed ? audit.pagespeed?.metrics : undefined,
+      performance: onlyPagespeedOk ? perfResolved : undefined,
+      metrics:     onlyPagespeedOk ? audit.pagespeed?.metrics : undefined,
       fecha:       new Date(),
     });
 
-    // 👉 Añadimos flag solo para la respuesta (no se persiste)
-    const resp = doc.toObject();
-    resp.isLocal = resp?.audit?.pagespeed?.meta?.source === 'local';
-
-    return res.status(201).json(resp);
+    const out = doc.toObject();
+    out.isLocal = out?.audit?.pagespeed?.meta?.source === 'local';
+    return res.status(201).json(out);
   } catch (e) {
     console.error('❌ Error en guardarDatos:', e);
     return res.status(500).json({ error: 'Error al procesar la auditoría', detail: e.message });
   }
 }
 
-/* ───────────── GET /api/audit/:id ───────────── */
+// GET /api/audit/:id
 export async function getAuditById(req, res) {
   try {
-    const doc = await Audit.findById(req.params.id);
+    const id = req.params?.id;
+    const doc = await Audit.findById(id);
     if (!doc) return res.status(404).json({ error: 'No encontrado' });
-
     const out = doc.toObject();
-    out.isLocal = out?.audit?.pagespeed?.meta?.source === 'local'; // 👉 flag para el front
+    out.isLocal = out?.audit?.pagespeed?.meta?.source === 'local';
     return res.json(out);
   } catch (e) {
     console.error('❌ Error en getAuditById:', e);
@@ -123,18 +112,36 @@ export async function getAuditById(req, res) {
   }
 }
 
-/* ───────────── GET /api/audit/history?url=<url> ───────────── */
+// GET /api/audit/history?url=<url>
 export async function getAuditHistory(req, res) {
   try {
-    const { url } = req.query;
-    if (!url) {
-      return res.status(400).json({ error: 'Falta el parámetro url' });
-    }
-    const docs = await Audit.find({ url }).sort({ fecha: 1 });
+    const rawParam = (req.query?.url ?? '').toString().trim();
+    if (!rawParam) return res.status(400).json({ error: 'Falta el parámetro url' });
 
-    // Recalcular performance en la respuesta si faltara (para que el histórico no muestre 0)
-    const out = docs.map(d => {
-      const o = d.toObject();
+    let decoded = rawParam;
+    try { decoded = decodeURIComponent(rawParam); } catch (_) {}
+
+    const stripHash  = (u) => u.split('#')[0];
+    const stripQuery = (u) => u.split('?')[0];
+    const stripSlash = (u) => (u.endsWith('/') ? u.slice(0, -1) : u);
+    const base = stripSlash(stripQuery(stripHash(decoded)));
+
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rxBase = new RegExp('^' + esc(base) + '/?$', 'i');
+
+    const filter = {
+      $or: [
+        { url: decoded },
+        { url: base },
+        { url: base + '/' },
+        { url: { $regex: rxBase } },
+      ],
+    };
+
+    const docs = await Audit.find(filter).sort({ fecha: 1 }).lean();
+
+    const out = (docs || []).map((d) => {
+      const o = d || {};
 
       let perf = (typeof o.performance === 'number' && !Number.isNaN(o.performance))
         ? Math.round(o.performance)
@@ -143,31 +150,50 @@ export async function getAuditHistory(req, res) {
       if (perf == null && typeof o.audit?.pagespeed?.performance === 'number') {
         perf = Math.round(o.audit.pagespeed.performance);
       }
-
       if (perf == null) {
         const score = o.audit?.pagespeed?.raw?.lighthouseResult?.categories?.performance?.score;
         if (typeof score === 'number') perf = Math.round(score * 100);
       }
 
-      if (perf != null) o.performance = perf;
-      return o;
+      const pick = (key) => {
+        const v =
+          o.metrics?.[key] ??
+          o.audit?.pagespeed?.metrics?.[key] ??
+          o.audit?.unlighthouse?.metrics?.[key] ??
+          o.audit?.pagespeed?.[key] ??
+          o.audit?.unlighthouse?.[key] ??
+          null;
+        return (typeof v === 'number' && !Number.isNaN(v)) ? v : null;
+      };
+
+      return {
+        _id: o._id,
+        url: o.url,
+        fecha: o.fecha,
+        performance: perf,
+        metrics: {
+          lcp:  pick('lcp'),
+          fcp:  pick('fcp'),
+          tbt:  pick('tbt'),
+          si:   pick('si'),
+          ttfb: pick('ttfb'),
+        },
+        audit:    o.audit,
+        email:    o.email,
+        strategy: o.strategy,
+        type:     o.type,
+        tipos:    o.tipos,
+      };
     });
 
     return res.json(out);
   } catch (e) {
-    console.error('❌ Error en getAuditHistory:', e);
-    return res.status(500).json({ error: 'Error interno al obtener histórico' });
+    console.error('❌ getAuditHistory error:', e);
+    return res.status(200).json([]); // degradar a vacío para no romper el front
   }
 }
 
-// Utilitarios
-function withAudit(path) {
-  return path.endsWith('/audit')
-    ? path
-    : `${path.replace(/\/$/, '')}/audit`;
-}
-
-/* ───────────── POST /api/audit/send-report ───────────── */
+// POST /api/audit/send-report (comparativa/histórico)
 export async function sendReport(req, res) {
   try {
     const { url, email } = req.body || {};
@@ -197,7 +223,6 @@ export async function sendReport(req, res) {
           v = doc.audit.unlighthouse[key];
         else
           return 'N/A';
-
         if (key === 'tbt' && v === 0) return 'N/A';
         return typeof v === 'number' ? Math.round(v) : v;
       };

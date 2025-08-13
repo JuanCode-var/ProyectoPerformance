@@ -8,6 +8,7 @@ import redisClient from './redisClient.js';
 import { auditQueue } from './queue.js';
 import { makeCacheKey } from './cacheKey.js';
 
+
 const app    = express();
 const logger = pino({ transport: { target: 'pino-pretty' } });
 

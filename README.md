@@ -1,6 +1,4 @@
-
 #Project Estructure
-
 
 ├── .git/
 │   ├── COMMIT_EDITMSG
@@ -115,4 +113,3 @@
 │       └── lighthouseColors.ts
 ├── tailwind.config.js
 └── vite.config.js
-

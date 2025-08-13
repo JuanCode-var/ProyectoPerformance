@@ -5,6 +5,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import diagnosticRoutes from "./routes/diagnostic.routes.js";
 import { connectDB } from './database/mongo.js';
 import formRoutes from './routes/formRoutes.js';
 
@@ -25,9 +26,12 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' })); // que no falte el body parser
+app.use('/api', formRoutes);               // ⬅️ monta todas las rutas bajo /api
 
 // 4) Rutas de la API
 app.use('/api/audit', formRoutes);
+app.use("/api/diagnostics", diagnosticRoutes);
 
 // 5) Ruta de salud
 app.get('/', (_req, res) => res.send('Backend en línea'));

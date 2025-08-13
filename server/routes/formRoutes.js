@@ -8,15 +8,10 @@ import {
 
 const router = Router();
 
-router.post('/',         guardarDatos);
-router.get('/history',   getAuditHistory);
-router.get('/:id',       getAuditById);
-router.post('/send-report', sendReport);
+// Rutas (¡ojo con el orden!)
+router.post('/audit', guardarDatos);
+router.get('/audit/history', getAuditHistory); // antes de /audit/:id
+router.get('/audit/:id', getAuditById);
+router.post('/audit/send-report', sendReport); // comparativa histórico (la que ya usabas)
 
 export default router;
-
-
-
-
-
-

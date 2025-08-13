@@ -24,7 +24,7 @@ const infoVariants = {
 // --- API Info ---
 const testInfos = {
   pagespeed: {
-    title: 'Lighthouse',
+    title: 'Performance',
     description: 'Lighthouse audita rendimiento, accesibilidad, SEO y mejores prácticas.',
     icon: '🚀',
   },

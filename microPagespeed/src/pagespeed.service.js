@@ -19,7 +19,7 @@ export async function runPageSpeed({
   url,
   strategy = 'mobile',
   categories = ['performance'],
-  key = process.env.PSI_API_KEY
+  key // <- sin default: no leer desde aquí variables de entorno
 }) {
   const cacheKey = `${url}::${strategy}`;
   const hit = cache.get(cacheKey);
@@ -28,10 +28,20 @@ export async function runPageSpeed({
     return hit.data;
   }
 
+  // Lee de env con ambos nombres admitidos
+  const envKey = (process.env.PSI_API_KEY || process.env.PAGESPEED_API_KEY || '').trim();
+  const effectiveKey = (key || envKey || '').trim();
+
+  if (effectiveKey) {
+    console.log(`[micro] PSI key in use: ****${effectiveKey.slice(-6)}`);
+  } else {
+    console.log('[micro] PSI key: none (anonymous quota)');
+  }
+
   const u = encodeURIComponent(url);
   const cats = categories.map(c => `category=${c}`).join('&');
-  const keyPart = key ? `&key=${key}` : '';
-  const full = `${endpoint}?url=${u}&strategy=${strategy}&${cats}${keyPart}`;
+  const keyQuery = effectiveKey ? `&key=${effectiveKey}` : '';
+  const full = `${endpoint}?url=${u}&strategy=${strategy}&${cats}${keyQuery}`;
 
   // ——— 1) PSI primero con hasta 3 reintentos (respeta Retry-After en 429) ———
   for (let attempt = 0; attempt <= 3; attempt++) {
@@ -55,14 +65,13 @@ export async function runPageSpeed({
       const detail = e?.response?.data?.error?.message || e.message;
       console.error('[micro] PSI fail (attempt %d): %s %s', attempt, status ?? '-', detail);
 
-      // Reintenta en 429 o 5xx
       if ((status === 429 || (status >= 500 && status <= 599)) && attempt < 3) {
         const ra = e.response?.headers?.['retry-after'];
-        const waitMs = ra ? Number(ra) * 1000 : 1000 * Math.pow(2, attempt + 1); // 1s,2s,4s
+        const waitMs = ra ? Number(ra) * 1000 : 1000 * Math.pow(2, attempt + 1);
         await sleep(waitMs);
         continue;
       }
-      break; // no reintentar más → caer a local
+      break; // caer a local
     }
   }
 
