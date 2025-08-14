@@ -2,19 +2,6 @@ import React, { useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
-/**
- * Barra para enviar el informe por correo SOLO con PDF adjunto.
- *
- * Props:
- *  - captureRef: ref al contenedor que se convertirá a PDF (gráficas + errores + mejoras + plan)
- *  - url: URL auditada
- *  - subject: asunto (p.ej. "Diagnóstico de <url>")
- *  - endpoint: endpoint backend (default: "/api/audit/send-diagnostic")
- *  - includePdf: boolean (default true)
- *  - email: (opcional) si hideEmailInput=false, se usa este email; si true, el backend usará el email del diagnóstico
- *  - hideEmailInput: si true (default), no se muestra input de correo
- *  - id: (opcional) id del diagnóstico en BD
- */
 export default function EmailPdfBar({
   captureRef,
   url = "",
@@ -30,105 +17,88 @@ export default function EmailPdfBar({
   const [sentMsg, setSentMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Parseo seguro: evita "Unexpected end of JSON input"
   async function safeParse(res) {
     const txt = await res.text();
     try { return JSON.parse(txt || "{}"); } catch { return { _raw: txt }; }
   }
 
-  // Espera a que el DOM/estilos terminen de pintar
   const waitForPaint = async (ms = 1200) => {
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     if (ms > 0) await new Promise(r => setTimeout(r, ms));
   };
 
-  // Crea un PDF multipágina a partir del contenedor
   async function makePdfFromRef() {
     if (!captureRef?.current) return null;
 
-    // Asegurar visibilidad del contenedor
-    try { captureRef.current.scrollIntoView({ behavior: "auto", block: "start" }); } catch {}
+    // 1) NO mover la página
+    const prevX = window.scrollX;
+    const prevY = window.scrollY;
 
-    // Esperar pintado (evita PDF con valores en 0 o listas vacías)
-    await waitForPaint(1200);
+    try {
+      await waitForPaint(1200);
 
-    // Render a canvas (doble escala = mejor nitidez)
-    const canvas = await html2canvas(captureRef.current, {
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      scale: 2,
-      logging: false,
-      windowWidth: document.documentElement.scrollWidth,
-      windowHeight: document.documentElement.scrollHeight,
-    });
+      const canvas = await html2canvas(captureRef.current, {
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        scale: 2,
+        logging: false,
+        // 2) Capturar sin depender del scroll actual
+        windowWidth: document.documentElement.scrollWidth,
+        windowHeight: document.documentElement.scrollHeight,
+        scrollX: -window.scrollX,
+        scrollY: -window.scrollY,
+      });
 
-    // Config PDF en puntos (pt) para precisión
-    const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
-    const pageWidth = pdf.internal.pageSize.getWidth();   // ~595 pt
-    const pageHeight = pdf.internal.pageSize.getHeight(); // ~842 pt
-    const margin = 24;
+      const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 24;
 
-    const origW = canvas.width;
-    const origH = canvas.height;
+      const origW = canvas.width;
+      const origH = canvas.height;
+      const imgWidth = pageWidth - margin * 2;
+      const scale = imgWidth / origW;
+      const visiblePerPage = pageHeight - margin * 2;
 
-    // Escalamos la imagen al ancho de página (con márgenes)
-    const imgWidth = pageWidth - margin * 2;
-    const scale = imgWidth / origW;
-    const scaledTotalHeight = origH * scale;
-    const visiblePerPage = pageHeight - margin * 2;
+      let yPx = 0;
+      const slicePx = Math.floor(visiblePerPage / scale);
+      let first = true;
 
-    // Slicing: recortar porciones del canvas original y añadir páginas
-    let yPx = 0;
-    const slicePx = Math.floor(visiblePerPage / scale); // alto en pixeles originales por página
-    let firstPage = true;
+      while (yPx < origH) {
+        const sliceH = Math.min(slicePx, origH - yPx);
 
-    while (yPx < origH) {
-      const sliceHeightPx = Math.min(slicePx, origH - yPx);
+        const slice = document.createElement("canvas");
+        slice.width = origW;
+        slice.height = sliceH;
+        const sctx = slice.getContext("2d");
+        sctx.drawImage(canvas, 0, yPx, origW, sliceH, 0, 0, origW, sliceH);
 
-      // Canvas temporal con el "corte" visible de esta página
-      const sliceCanvas = document.createElement("canvas");
-      sliceCanvas.width = origW;
-      sliceCanvas.height = sliceHeightPx;
-      const sctx = sliceCanvas.getContext("2d");
-      sctx.drawImage(
-        canvas,
-        0, yPx, origW, sliceHeightPx,  // src
-        0, 0, origW, sliceHeightPx     // dst
-      );
+        const img = slice.toDataURL("image/png");
+        const hPt = sliceH * scale;
 
-      const sliceData = sliceCanvas.toDataURL("image/png");
-      const sliceHeightPt = sliceHeightPx * scale;
+        if (!first) pdf.addPage();
+        first = false;
 
-      if (!firstPage) pdf.addPage();
-      firstPage = false;
+        pdf.addImage(img, "PNG", margin, margin, imgWidth, hPt, undefined, "FAST");
 
-      pdf.addImage(
-        sliceData,
-        "PNG",
-        margin,
-        margin,
-        imgWidth,
-        sliceHeightPt,
-        undefined,
-        "FAST"
-      );
+        yPx += sliceH;
+      }
 
-      yPx += sliceHeightPx;
+      const base64 = pdf.output("datauristring").split(",")[1];
+      const filenameSafe = (url || "sitio")
+        .replace(/[^a-z0-9]+/gi, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 60);
+
+      return {
+        filename: `diagnostico_${filenameSafe}.pdf`,
+        base64,
+        contentType: "application/pdf",
+      };
+    } finally {
+      // 3) Restaurar posición exacta
+      window.scrollTo(prevX, prevY);
     }
-
-    // Exporta como base64 (sin encabezado data:)
-    const base64 = pdf.output("datauristring").split(",")[1];
-
-    const filenameSafe = (url || "sitio")
-      .replace(/[^a-z0-9]+/gi, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 60);
-
-    return {
-      filename: `diagnostico_${filenameSafe}.pdf`,
-      base64,
-      contentType: "application/pdf",
-    };
   }
 
   async function handleSend() {
@@ -140,18 +110,13 @@ export default function EmailPdfBar({
 
       if (includePdf) {
         pdf = await makePdfFromRef();
-        if (!pdf) {
-          // Continuar sin PDF si algo falla (pero avisar)
-          console.warn("No se pudo generar el PDF; se enviará sin adjunto.");
-        }
+        if (!pdf) console.warn("No se pudo generar el PDF; se enviará sin adjunto.");
       }
 
-      // Payload SOLO con PDF (sin tabla ni html)
       const payload = {
         id,
         url,
         subject: subject || (url ? `Diagnóstico de ${url}` : "Diagnóstico"),
-        // Si ocultas el input, el backend usará el email guardado en el diagnóstico
         email: hideEmailInput ? undefined : (emailState || "").trim(),
         pdf
       };
@@ -179,6 +144,7 @@ export default function EmailPdfBar({
 
   return (
     <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
+      {/* Si lo tienes dentro de un <form>, esto evita submit */}
       {!hideEmailInput && (
         <input
           type="email"
@@ -195,6 +161,7 @@ export default function EmailPdfBar({
       )}
 
       <button
+        type="button"        
         onClick={handleSend}
         disabled={sending}
         title="Enviar informe al correo (PDF)"
@@ -212,12 +179,8 @@ export default function EmailPdfBar({
         {sending ? "Enviando…" : "Enviar informe (PDF) ✉️"}
       </button>
 
-      {errorMsg && (
-        <span style={{ color: "#dc2626", fontSize: ".95rem" }}>❌ {errorMsg}</span>
-      )}
-      {sentMsg && (
-        <span style={{ color: "#059669", fontSize: ".95rem" }}>✅ {sentMsg}</span>
-      )}
+      {errorMsg && <span style={{ color: "#dc2626", fontSize: ".95rem" }}>❌ {errorMsg}</span>}
+      {sentMsg && <span style={{ color: "#059669", fontSize: ".95rem" }}>✅ {sentMsg}</span>}
     </div>
   );
 }

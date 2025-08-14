@@ -87,49 +87,55 @@ export default function ActionPlanPanel({ opportunities = [], performance = null
       lvl === "high" ? "ap-badge high" : lvl === "mid" ? "ap-badge mid" : "ap-badge low";
     const barClass = `ap-impact-bar ${lvl}`;
 
-    return (
-      <li className="ap-card">
-        <div className="ap-card-row">
-          <div className={leftClass} />
-          <div className="ap-card-body">
-            {/* header */}
-            <div style={{display:"flex", gap:12, alignItems:"flex-start", justifyContent:"space-between"}}>
-              <div style={{minWidth:0}}>
-                <div className="ap-badges">
-                  <span className={badgeClass}><Icon size={14}/> {lvl==="high"?"Crítico":lvl==="mid"?"Medio":"Bajo"}</span>
-                  {o.savingsLabel && <span className="ap-badge muted">Ahorro: {o.savingsLabel}</span>}
-                </div>
-                <div className="ap-title2">{o.title}</div>
+  return (
+    <li className="ap-card">
+      <div className="ap-card-row">
+        <div className={leftClass} />
+        <div className="ap-card-body">
+          {/* header */}
+          <div style={{display:"flex", gap:12, alignItems:"flex-start", justifyContent:"space-between"}}>
+            <div style={{minWidth:0}}>
+              <div className="ap-badges">
+                <span className={badgeClass}><Icon size={14}/> {lvl==="high"?"Crítico":lvl==="mid"?"Medio":"Bajo"}</span>
+                {o.savingsLabel && <span className="ap-badge muted">Ahorro: {o.savingsLabel}</span>}
               </div>
-              <div className="ap-actions">
-                {/* <button className={`ap-btn ${isDone ? "on":""}`} onClick={()=>toggleDone(o._k)}>
-                  {isDone ? <CheckSquare size={16}/> : <Square size={16}/>}
-                  {isDone ? "Marcado":"Marcar"}
-                </button> */}
-                <button className="ap-btn" onClick={()=>toggleOpen(o._k)} aria-expanded={isOpenItem}>
-                  {isOpenItem ? <ChevronUp size={16}/> : <ChevronDown size={16}/>} Detalles
-                </button>
-              </div>
+              <div className="ap-title2">{o.title}</div>
             </div>
-
-            {/* barra */}
-            <div className="ap-impact-wrap">
-              <div className={barClass} style={{ width: `${Math.max(8, bar)}%` }} />
+            <div className="ap-actions">
+              {/* <button className={`ap-btn ${isDone ? "on":""}`} onClick={()=>toggleDone(o._k)}>
+                {isDone ? <CheckSquare size={16}/> : <Square size={16}/>}
+                {isDone ? "Marcado":"Marcar"}
+              </button> */}
+            <button
+              type="button"
+              className="ap-btn"
+              onMouseDown={(e)=>{ e.preventDefault(); }}               // evita que el foco mueva el scroll
+              onClickCapture={(e)=>{ e.preventDefault(); e.stopPropagation(); toggleOpen(o._k); }} // toggle aquí
+              aria-expanded={isOpenItem}
+            >
+              {isOpenItem ? <ChevronUp size={16}/> : <ChevronDown size={16}/>} Detalles
+            </button>
             </div>
-
-            {/* detalle */}
-            {isOpenItem && (
-              <div className="ap-detail">
-                {o.recommendation
-                  ? <p>{o.recommendation}</p>
-                  : <p className="ap-subtle">Sin recomendación específica. Prioriza este ítem por su impacto.</p>}
-              </div>
-            )}
           </div>
+
+          {/* barra */}
+          <div className="ap-impact-wrap">
+            <div className={barClass} style={{ width: `${Math.max(8, bar)}%` }} />
+          </div>
+
+          {/* detalle */}
+          {isOpenItem && (
+            <div className="ap-detail">
+              {o.recommendation
+                ? <p>{o.recommendation}</p>
+                : <p className="ap-subtle">Sin recomendación específica. Prioriza este ítem por su impacto.</p>}
+            </div>
+          )}
         </div>
-      </li>
-    );
-  };
+      </div>
+    </li>
+  );
+};
 
   // Mostrar/ocultar todo
   const showAll = () => { setErrOpen(true); setImpOpen(true); };
@@ -196,7 +202,7 @@ export default function ActionPlanPanel({ opportunities = [], performance = null
 
       {/* ====== Sección: Mejoras ====== */}
       <div className="ap-acc imp">
-        <div className="ap-acc-header" onClick={()=>setImpOpen(v=>!v)}>
+        <div className="ap-acc-header" onMouseDown={(e)=>e.preventDefault()} onClick={(e)=>{ e.preventDefault(); e.stopPropagation(); setImpOpen(v=>!v); }}>
           <div className="ap-acc-title">
             <AlertCircle size={18} color="#92400e" />
             Mejoras

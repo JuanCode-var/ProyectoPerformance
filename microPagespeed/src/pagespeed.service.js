@@ -5,7 +5,11 @@ import https from 'https';
 import * as chromeLauncher from 'chrome-launcher';
 import lighthouse from 'lighthouse';
 
-const endpoint   = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed=es';
+const endpoint   = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed' + 
+`?url=${encodeURIComponent(targetUrl)}` +
+  `&strategy=${strategy || 'mobile'}` +
+  `&category=performance` +
+  `&locale=es`; // 👈 idioma';
 const httpAgent  = new http.Agent({ keepAlive: true });
 const httpsAgent = new https.Agent({ keepAlive: true });
 

@@ -135,6 +135,19 @@ function buildOpportunities(apiData, processed) {
   return opps;
 }
 
+//Convierte en español
+const ES = new Map([
+  // títulos
+  ['Avoid multiple page redirects', 'Evitar múltiples redirecciones de página'],
+  ['Reduce unused JavaScript', 'Reducir JavaScript no utilizado'],
+  ['Initial server response time was short', 'Tiempo de respuesta inicial del servidor'],
+  // descripciones cortas (puedes ampliar a tu gusto):
+  ['Reduce unused rules from stylesheets', 'Reducir reglas CSS no utilizadas'],
+]);
+
+const t = (s) => (typeof s === 'string' && ES.get(s)) || s;
+
+
 // ---------------- Component ----------------
 export default function DiagnosticoView() {
   const params = useParams();
