@@ -115,6 +115,17 @@ body {
   background-clip: text;
 }
 
+.diagnostico-title {
+  font-size: 18pt !important;
+  font-weight: 700 !important;
+  color: #111827 !important;
+  background: none !important;
+  -webkit-text-fill-color: initial !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  line-height: 1.25 !important;
+}
+
 /* Fecha */
 .date {
   font-size: 14px;

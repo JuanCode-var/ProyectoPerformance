@@ -514,3 +514,71 @@
     transform: none;
   }
 }
+
+/* ============ PRINT/PDF: restaurar barras y quitar títulos con gradiente ============ */
+
+
+.ap-title{
+  font-size: 18pt !important;
+  font-weight: 700 !important;
+  color: #111827 !important;
+  background: none !important;
+  -webkit-text-fill-color: initial !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  line-height: 1.25 !important;
+}
+
+/* 1) Barras de impacto/errores (track + fill) */
+@media print {
+  .ap-impact-wrap { 
+    height: 8px !important;
+    background: #e5e7eb !important;   /* pista gris */
+  }
+  .ap-impact-bar,
+  .ap-impact-bar.high,
+  .ap-impact-bar.mid,
+  .ap-impact-bar.low {
+    height: 100% !important;
+    background: #9ca3af !important;   /* relleno fijo (sin gradiente) */
+  }
+  /* Mantén el pseudo-elemento pero sin brillo para que no desaparezca nada */
+  .ap-impact-bar::after {
+    display: block !important;
+    background: transparent !important;
+    animation: none !important;
+  }
+}
+
+/* 2) Quitar gradientes en TODOS los títulos (cualquier vista) al imprimir */
+@media print {
+  :is(h1,h2,h3,h4,h5,h6,
+      .ap-title,.ap-title2,.ap-acc-title,.ap-summary-title,
+      [class*="title"], [class*="heading"]) {
+    background: none !important;
+    background-image: none !important;
+    -webkit-background-clip: initial !important;
+    background-clip: border-box !important;
+    -webkit-text-fill-color: initial !important;
+    color: #111827 !important;
+  }
+}
+
+/* 3) Si tu PDF se genera con html2canvas/jsPDF (usa estilos de pantalla),
+      añade la clase .export-pdf al <body> SOLO durante la exportación */
+.export-pdf :is(h1,h2,h3,h4,h5,h6,
+                .ap-title,.ap-title2,.ap-acc-title,.ap-summary-title,
+                [class*="title"], [class*="heading"]) {
+  background: none !important;
+  background-image: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: border-box !important;
+  -webkit-text-fill-color: initial !important;
+  color: #111827 !important;
+}
+.export-pdf .ap-impact-wrap { background: #e5e7eb !important; }
+.export-pdf .ap-impact-bar,
+.export-pdf .ap-impact-bar.high,
+.export-pdf .ap-impact-bar.mid,
+.export-pdf .ap-impact-bar.low { background: #9ca3af !important; }
+.export-pdf .ap-impact-bar::after { display: block !important; background: transparent !important; }

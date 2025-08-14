@@ -5,11 +5,9 @@ import https from 'https';
 import * as chromeLauncher from 'chrome-launcher';
 import lighthouse from 'lighthouse';
 
-const endpoint   = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed' + 
-`?url=${encodeURIComponent(targetUrl)}` +
-  `&strategy=${strategy || 'mobile'}` +
-  `&category=performance` +
-  `&locale=es`; // 👈 idioma';
+// ✅ Base sin query; no uses variables aquí
+const endpoint = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
+
 const httpAgent  = new http.Agent({ keepAlive: true });
 const httpsAgent = new https.Agent({ keepAlive: true });
 
@@ -19,37 +17,76 @@ const cache = new Map(); // key -> { time, data }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// Quita parámetros de tracking que a veces disparan WAF/reglas
+function sanitizeUrl(raw) {
+  try {
+    const u = new URL(raw);
+    ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid','msclkid']
+      .forEach(p => u.searchParams.delete(p));
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
+// Pre-chequeo barato para detectar bloqueo por WAF a Lighthouse
+async function psiLikelyBlocked(url) {
+  try {
+    const common = {
+      timeout: 10000,
+      maxRedirects: 5,
+      validateStatus: () => true,
+      headers: { 'User-Agent': 'Chrome-Lighthouse' },
+    };
+    let r = await axios.head(url, common);
+    if (r.status === 405) {
+      r = await axios.get(url, { ...common, headers: { ...common.headers, Range: 'bytes=0-0' } });
+    }
+    return r.status === 403 || r.status === 404; // bloqueado o no servido a bots
+  } catch {
+    // Si ni siquiera podemos hacer HEAD/GET mínimo, trátalo como bloqueado
+    return true;
+  }
+}
+
 export async function runPageSpeed({
   url,
   strategy = 'mobile',
   categories = ['performance'],
-  key // <- sin default: no leer desde aquí variables de entorno
+  key // sin default; leemos env abajo
 }) {
-  const cacheKey = `${url}::${strategy}`;
+  // 1) Normaliza URL y cache
+  const cleanUrl = sanitizeUrl(url);
+  const cacheKey = `${cleanUrl}::${strategy}`;
   const hit = cache.get(cacheKey);
   if (hit && Date.now() - hit.time < CACHE_TTL_MS) {
     console.log('[micro] cache hit → source=%s', hit.data?.meta?.source);
     return hit.data;
   }
 
-  // Lee de env con ambos nombres admitidos
+  // 2) Key efectiva
   const envKey = (process.env.PSI_API_KEY || process.env.PAGESPEED_API_KEY || '').trim();
   const effectiveKey = (key || envKey || '').trim();
+  console.log('[micro] PSI key in use:', effectiveKey ? `****${effectiveKey.slice(-6)}` : 'none');
 
-  if (effectiveKey) {
-    console.log(`[micro] PSI key in use: ****${effectiveKey.slice(-6)}`);
-  } else {
-    console.log('[micro] PSI key: none (anonymous quota)');
+  // 3) Preflight: si WAF bloquea a Lighthouse, evita PSI y usa local
+  if (await psiLikelyBlocked(cleanUrl)) {
+    console.warn('[micro] PSI bloqueado por WAF (preflight). Usando local.');
+    const payload = await runLocalLighthouse({ url: cleanUrl, strategy, categories });
+    cache.set(cacheKey, { time: Date.now(), data: payload });
+    return payload;
   }
 
-  const u = encodeURIComponent(url);
+  // 4) Construye URL PSI
+  const u = encodeURIComponent(cleanUrl);
   const cats = categories.map(c => `category=${c}`).join('&');
-  const keyQuery = effectiveKey ? `&key=${effectiveKey}` : '';
-  const full = `${endpoint}?url=${u}&strategy=${strategy}&${cats}${keyQuery}`;
+  const keyPart = effectiveKey ? `&key=${effectiveKey}` : '';
+  const full = `${endpoint}?url=${u}&strategy=${strategy}&${cats}${keyPart}`;
 
-  // ——— 1) PSI primero con hasta 3 reintentos (respeta Retry-After en 429) ———
+  // 5) Llama PSI con reintentos (backoff 2s, 5s, 10s)
   for (let attempt = 0; attempt <= 3; attempt++) {
     try {
+      console.log('[micro] PSI about to call → url:', cleanUrl);
       const t0 = Date.now();
       const { data } = await axios.get(full, {
         httpAgent,
@@ -60,27 +97,35 @@ export async function runPageSpeed({
       });
       const durationMs = Date.now() - t0;
 
+      console.log('[micro] PSI OK (attempt %d) ms=%d', attempt, durationMs);
       const payload = toPayloadFromPSI(data, durationMs, strategy);
       cache.set(cacheKey, { time: Date.now(), data: payload });
-      console.log('[micro] source=psi ms=%d', durationMs);
       return payload;
     } catch (e) {
       const status = e?.response?.status;
-      const detail = e?.response?.data?.error?.message || e.message;
-      console.error('[micro] PSI fail (attempt %d): %s %s', attempt, status ?? '-', detail);
+      const msg = e?.response?.data?.error?.message || e.message;
+      const retryAfter = e?.response?.headers?.['retry-after'];
+      console.error('[micro] PSI fail (attempt %d): %s %s', attempt, status ?? '-', msg);
+      if (retryAfter) console.error('[micro] Retry-After header:', retryAfter);
 
+      // 429 o 5xx → reintenta
       if ((status === 429 || (status >= 500 && status <= 599)) && attempt < 3) {
-        const ra = e.response?.headers?.['retry-after'];
-        const waitMs = ra ? Number(ra) * 1000 : 1000 * Math.pow(2, attempt + 1);
+        const waitMs = retryAfter ? Number(retryAfter) * 1000 : [2000, 5000, 10000][attempt];
+        console.log('[micro] PSI retry in %dms', waitMs);
         await sleep(waitMs);
         continue;
       }
-      break; // caer a local
+
+      // 403/404 típicos (login/robots/WAF) → corta a local
+      if (status === 404 || status === 403) {
+        console.warn('[micro] PSI 4xx (posible login/robots/WAF). Fallback a local.');
+      }
+      break; // cae a local
     }
   }
 
-  // ——— 2) Fallback: Lighthouse local ———
-  const payload = await runLocalLighthouse({ url, strategy, categories });
+  // 6) Fallback: Lighthouse local
+  const payload = await runLocalLighthouse({ url: cleanUrl, strategy, categories });
   cache.set(cacheKey, { time: Date.now(), data: payload });
   console.log('[micro] source=local ms=%d', payload?.meta?.duration_ms ?? -1);
   return payload;
