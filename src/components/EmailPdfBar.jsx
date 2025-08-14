@@ -3,153 +3,220 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
 /**
- * Barra para enviar el informe por correo usando tu endpoint JSON:
- *   POST /api/audit/send-report  =>  { url, email, subject?, pdf? }
+ * Barra para enviar el informe por correo SOLO con PDF adjunto.
  *
  * Props:
- *  - captureRef: ref al contenedor que se convertirá a PDF (NO incluye esta barra)
- *  - url: URL auditada (se envía en el body)
- *  - defaultEmail: string inicial opcional
- *  - subject: asunto opcional (default: "Diagnóstico de <url>")
- *  - includePdf: boolean (default true) para adjuntar PDF en el JSON
+ *  - captureRef: ref al contenedor que se convertirá a PDF (gráficas + errores + mejoras + plan)
+ *  - url: URL auditada
+ *  - subject: asunto (p.ej. "Diagnóstico de <url>")
+ *  - endpoint: endpoint backend (default: "/api/audit/send-diagnostic")
+ *  - includePdf: boolean (default true)
+ *  - email: (opcional) si hideEmailInput=false, se usa este email; si true, el backend usará el email del diagnóstico
+ *  - hideEmailInput: si true (default), no se muestra input de correo
+ *  - id: (opcional) id del diagnóstico en BD
  */
-export default function EmailSendBar({
+export default function EmailPdfBar({
   captureRef,
   url = "",
-  defaultEmail = "",
   subject,
-  includePdf = true
+  endpoint = "/api/audit/send-diagnostic",
+  includePdf = true,
+  email = "",
+  hideEmailInput = true,
+  id = null,
 }) {
-  const [email, setEmail] = useState(defaultEmail);
+  const [emailState, setEmailState] = useState(email || "");
   const [sending, setSending] = useState(false);
   const [sentMsg, setSentMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const finalSubject = subject || (url ? `Diagnóstico de ${url}` : "Diagnóstico");
-
-  async function makePdfBlob() {
-    const el = captureRef?.current;
-    if (!el) throw new Error("No se encontró el contenedor a capturar.");
-    const prevY = window.scrollY;
-    window.scrollTo(0, 0);
-    try {
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        windowWidth: document.documentElement.scrollWidth,
-        windowHeight: document.documentElement.scrollHeight,
-      });
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const imgW = pageW;
-      const imgH = (canvas.height * imgW) / canvas.width;
-
-      let heightLeft = imgH;
-      let position = 0;
-      pdf.addImage(imgData, "PNG", 0, position, imgW, imgH, undefined, "FAST");
-      heightLeft -= pageH;
-
-      while (heightLeft > 0) {
-        position = heightLeft * -1;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, position, imgW, imgH, undefined, "FAST");
-        heightLeft -= pageH;
-      }
-
-      return pdf.output("blob");
-    } finally {
-      window.scrollTo(0, prevY);
-    }
+  // Parseo seguro: evita "Unexpected end of JSON input"
+  async function safeParse(res) {
+    const txt = await res.text();
+    try { return JSON.parse(txt || "{}"); } catch { return { _raw: txt }; }
   }
 
-  async function blobToBase64(blob) {
-    const dataUrl = await new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result);
-      r.onerror = reject;
-      r.readAsDataURL(blob);
+  // Espera a que el DOM/estilos terminen de pintar
+  const waitForPaint = async (ms = 1200) => {
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    if (ms > 0) await new Promise(r => setTimeout(r, ms));
+  };
+
+  // Crea un PDF multipágina a partir del contenedor
+  async function makePdfFromRef() {
+    if (!captureRef?.current) return null;
+
+    // Asegurar visibilidad del contenedor
+    try { captureRef.current.scrollIntoView({ behavior: "auto", block: "start" }); } catch {}
+
+    // Esperar pintado (evita PDF con valores en 0 o listas vacías)
+    await waitForPaint(1200);
+
+    // Render a canvas (doble escala = mejor nitidez)
+    const canvas = await html2canvas(captureRef.current, {
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      scale: 2,
+      logging: false,
+      windowWidth: document.documentElement.scrollWidth,
+      windowHeight: document.documentElement.scrollHeight,
     });
-    // dataUrl = "data:application/pdf;base64,AAAA..."
-    return String(dataUrl).split(",")[1]; // base64 puro
+
+    // Config PDF en puntos (pt) para precisión
+    const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
+    const pageWidth = pdf.internal.pageSize.getWidth();   // ~595 pt
+    const pageHeight = pdf.internal.pageSize.getHeight(); // ~842 pt
+    const margin = 24;
+
+    const origW = canvas.width;
+    const origH = canvas.height;
+
+    // Escalamos la imagen al ancho de página (con márgenes)
+    const imgWidth = pageWidth - margin * 2;
+    const scale = imgWidth / origW;
+    const scaledTotalHeight = origH * scale;
+    const visiblePerPage = pageHeight - margin * 2;
+
+    // Slicing: recortar porciones del canvas original y añadir páginas
+    let yPx = 0;
+    const slicePx = Math.floor(visiblePerPage / scale); // alto en pixeles originales por página
+    let firstPage = true;
+
+    while (yPx < origH) {
+      const sliceHeightPx = Math.min(slicePx, origH - yPx);
+
+      // Canvas temporal con el "corte" visible de esta página
+      const sliceCanvas = document.createElement("canvas");
+      sliceCanvas.width = origW;
+      sliceCanvas.height = sliceHeightPx;
+      const sctx = sliceCanvas.getContext("2d");
+      sctx.drawImage(
+        canvas,
+        0, yPx, origW, sliceHeightPx,  // src
+        0, 0, origW, sliceHeightPx     // dst
+      );
+
+      const sliceData = sliceCanvas.toDataURL("image/png");
+      const sliceHeightPt = sliceHeightPx * scale;
+
+      if (!firstPage) pdf.addPage();
+      firstPage = false;
+
+      pdf.addImage(
+        sliceData,
+        "PNG",
+        margin,
+        margin,
+        imgWidth,
+        sliceHeightPt,
+        undefined,
+        "FAST"
+      );
+
+      yPx += sliceHeightPx;
+    }
+
+    // Exporta como base64 (sin encabezado data:)
+    const base64 = pdf.output("datauristring").split(",")[1];
+
+    const filenameSafe = (url || "sitio")
+      .replace(/[^a-z0-9]+/gi, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60);
+
+    return {
+      filename: `diagnostico_${filenameSafe}.pdf`,
+      base64,
+      contentType: "application/pdf",
+    };
   }
 
   async function handleSend() {
     setSentMsg("");
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setSentMsg("❌ Ingresa un correo válido.");
-      return;
-    }
-
+    setErrorMsg("");
+    setSending(true);
     try {
-      setSending(true);
+      let pdf = null;
 
-      let pdfPayload = undefined;
       if (includePdf) {
-        const blob = await makePdfBlob();
-        const base64 = await blobToBase64(blob);
-        pdfPayload = {
-          filename: `diagnostico-${new Date().toISOString().slice(0,10)}.pdf`,
-          contentType: "application/pdf",
-          base64
-        };
+        pdf = await makePdfFromRef();
+        if (!pdf) {
+          // Continuar sin PDF si algo falla (pero avisar)
+          console.warn("No se pudo generar el PDF; se enviará sin adjunto.");
+        }
       }
 
-      const resp = await fetch("/api/audit/send-report", {
+      // Payload SOLO con PDF (sin tabla ni html)
+      const payload = {
+        id,
+        url,
+        subject: subject || (url ? `Diagnóstico de ${url}` : "Diagnóstico"),
+        // Si ocultas el input, el backend usará el email guardado en el diagnóstico
+        email: hideEmailInput ? undefined : (emailState || "").trim(),
+        pdf
+      };
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url,
-          email,
-          subject: finalSubject,
-          pdf: pdfPayload // tu API puede ignorarlo si no lo usa
-        })
+        body: JSON.stringify(payload),
       });
 
-      const text = await resp.text();
-      let payload;
-      try { payload = JSON.parse(text); } catch { payload = { message: text }; }
-      if (!resp.ok) throw new Error(payload.error || payload.message || `Error ${resp.status}`);
+      const data = await safeParse(res);
+      if (!res.ok) {
+        const msg = data.error || data.message || data.detail || data._raw || `Error ${res.status}`;
+        throw new Error(msg);
+      }
 
-      setSentMsg(`✅ ${payload.message || "Correo enviado con éxito."}`);
+      setSentMsg(data.message || "Informe enviado correctamente");
     } catch (e) {
-      setSentMsg(`❌ ${e.message || e}`);
+      setErrorMsg(e.message || "Error al enviar el informe");
     } finally {
       setSending(false);
+      setTimeout(() => setSentMsg(""), 5000);
     }
   }
 
   return (
-    <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
-      <div style={{ display:'inline-flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+    <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
+      {!hideEmailInput && (
         <input
           type="email"
           placeholder="cliente@correo.com"
-          value={email}
-          onChange={(e)=>setEmail(e.target.value)}
-          style={{ padding:'8px 10px', border:'1px solid #e5e7eb', borderRadius:10, minWidth:240 }}
+          value={emailState}
+          onChange={(e) => setEmailState(e.target.value)}
+          style={{
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid #e5e7eb",
+            minWidth: 260,
+          }}
         />
-        <button
-          className="btn-primary"
-          disabled={sending}
-          onClick={handleSend}
-          title="Enviar informe al correo"
-        >
-          {sending ? 'Enviando…' : 'Enviar informe por correo ✉️'}
-        </button>
-      </div>
+      )}
 
+      <button
+        onClick={handleSend}
+        disabled={sending}
+        title="Enviar informe al correo (PDF)"
+        style={{
+          background: "#2563EB",
+          color: "#fff",
+          border: "none",
+          padding: "12px 16px",
+          borderRadius: 10,
+          cursor: sending ? "default" : "pointer",
+          boxShadow: "0 1px 2px rgba(0,0,0,.08)",
+          fontWeight: 600
+        }}
+      >
+        {sending ? "Enviando…" : "Enviar informe (PDF) ✉️"}
+      </button>
+
+      {errorMsg && (
+        <span style={{ color: "#dc2626", fontSize: ".95rem" }}>❌ {errorMsg}</span>
+      )}
       {sentMsg && (
-        <p style={{
-          marginTop: '0.5rem',
-          fontSize: '0.9rem',
-          color: sentMsg.startsWith('❌') ? '#dc2626' : '#047857'
-        }}>
-          {sentMsg}
-        </p>
+        <span style={{ color: "#059669", fontSize: ".95rem" }}>✅ {sentMsg}</span>
       )}
     </div>
   );

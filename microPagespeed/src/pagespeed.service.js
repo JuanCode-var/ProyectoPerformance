@@ -5,7 +5,7 @@ import https from 'https';
 import * as chromeLauncher from 'chrome-launcher';
 import lighthouse from 'lighthouse';
 
-const endpoint   = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
+const endpoint   = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed=es';
 const httpAgent  = new http.Agent({ keepAlive: true });
 const httpsAgent = new https.Agent({ keepAlive: true });
 

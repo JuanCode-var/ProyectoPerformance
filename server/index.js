@@ -5,53 +5,37 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import diagnosticRoutes from "./routes/diagnostic.routes.js";
 import { connectDB } from './database/mongo.js';
 import formRoutes from './routes/formRoutes.js';
 
-// ────────────────────────────────────────────────────────────
-// Utilidades para __dirname en módulos ES
+// __dirname en ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
-// ────────────────────────────────────────────────────────────
 
-// 1) Conexión a MongoDB
-await connectDB();
-
-// 2) Instancia de Express
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 4000;
 
-// 3) Middlewares globales
+// Middlewares
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json({ limit: '10mb' })); // que no falte el body parser
-app.use('/api', formRoutes);               // ⬅️ monta todas las rutas bajo /api
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
-// 4) Rutas de la API
-app.use('/api/audit', formRoutes);
-app.use("/api/diagnostics", diagnosticRoutes);
+// Conexión a DB
+connectDB();
 
-// 5) Ruta de salud
-app.get('/', (_req, res) => res.send('Backend en línea'));
+// Rutas
+app.use('/api', formRoutes);
 
-// 6) Archivos estáticos del front (opcional)
-app.use(
-  '/static',
-  express.static(path.join(__dirname, '../client/public')),
-);
+// Health
+app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// server/index.js (al final, antes de app.listen)
+// Error handler
 app.use((err, req, res, next) => {
   console.error('🚨 Unhandled error:', err);
-  res
-    .status(err.status || 500)
-    .json({ error: err.message || 'Error interno del servidor' });
+  res.status(err.status || 500).json({ error: err.message || 'Error interno del servidor' });
 });
 
-// 7) Levantar servidor
+// Start
 app.listen(PORT, () => {
   console.log(`🚀 Gateway escuchando en http://localhost:${PORT}`);
 });
-

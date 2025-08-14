@@ -1,4 +1,5 @@
 // src/components/HistoricoView.jsx
+
 import React, { useState, useEffect } from 'react';
 import { useLocation, Link, Navigate, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -85,6 +86,12 @@ function readTimeMetricMs(doc, key) {
   return 0;
 }
 
+// 🔒 Parseo seguro: nunca lanza aunque el backend devuelva vacío o texto
+async function safeParse(res) {
+  const txt = await res.text();
+  try { return JSON.parse(txt || '[]'); } catch { return []; }
+}
+
 export default function HistoricoView() {
   const query      = useQuery();
   const url        = query.get('url') || '';
@@ -102,12 +109,12 @@ export default function HistoricoView() {
     (async () => {
       try {
         const res  = await fetch(`/api/audit/history?url=${encodeURIComponent(url)}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
-        setHistory(data);
+        const data = await safeParse(res); // ← blindado
+        if (!res.ok) throw new Error((data && data.error) || `Error ${res.status}`);
+        setHistory(Array.isArray(data) ? data : []);
         setCurrentIndex(Array(metricKeys.length).fill(0));
       } catch (e) {
-        setErr(e.message);
+        setErr(e.message || 'Error cargando histórico');
       }
     })();
   }, [url]);

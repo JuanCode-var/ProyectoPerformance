@@ -29,7 +29,7 @@ const testInfos = {
     icon: '🚀',
   },
   security: {
-    title: 'Security',
+    title: 'Seguridad',
     description: 'La API de seguridad detecta vulnerabilidades y analiza cabeceras seguras.',
     icon: '🛡️',
   },
@@ -92,6 +92,58 @@ export default function Formulario() {
           email: formData.email,
         }),
       });
+
+      // Utilidad: parseo seguro (evita Unexpected end of JSON input)
+async function safeParse(res) {
+  const text = await res.text();
+  try { return JSON.parse(text || '{}'); }
+  catch { return { _raw: text }; }
+}
+
+async function onSubmit(e) {
+  e.preventDefault();
+  setError(null);
+  setLoading(true);
+
+  try {
+    const body = {
+      url,                        // <-- el valor del input URL
+      type: 'pagespeed',          // o lo que uses (pagespeed|unlighthouse|all)
+      strategy: estrategia || 'mobile',
+      name,
+      email,                      // el del formulario
+      nocache: false
+    };
+
+    const res = await fetch('/api/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await safeParse(res);
+
+    if (!res.ok || data.ok === false) {
+      const msg =
+        data.error ||
+        data.message ||
+        data.detail ||
+        data._raw ||
+        `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+
+    // ✅ éxito: usa el _id o el objeto como lo hacías antes
+    // por ejemplo:
+    // navigate(`/diagnostico/${data._id}`);
+
+    setLoading(false);
+  } catch (err) {
+    setLoading(false);
+    setError(err.message || 'Error inesperado');
+  }
+}
+
 
       // Leer cuerpo como texto y parsear con control de errores
       const text = await response.text();

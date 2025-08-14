@@ -1,59 +1,169 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import CircularGauge from './CircularGauge';
-import ActionPlanPanel from './ActionPlanPanel';
+import ActionPlanPanel from '../components/ActionPlanPanel';
+import EmailSendBar from "../components/EmailPdfBar";
 import '../styles/diagnostico.css';
 
 const API_LABELS = { pagespeed: 'Lighthouse', unlighthouse: 'Unlighthouse' };
 
-// ms → segundos (1 decimal)
+// ---------------- Utils ----------------
+async function safeParseJSON(res) {
+  const text = await res.text();
+  try { return JSON.parse(text || '{}'); }
+  catch { return { _raw: text }; }
+}
+
 const toSeconds = (ms) =>
   (typeof ms === 'number' && !Number.isNaN(ms))
     ? Math.round((ms / 1000) * 10) / 10
     : null;
 
-// 🎨 Umbrales por métrica (segundos)
 function gaugeColor(metricId, value) {
   const green = '#22c55e', amber = '#f59e0b', red = '#ef4444', gray = '#9ca3af';
   if (value == null) return gray;
-  if (metricId === 'performance') {
-    if (value >= 90) return green;
-    if (value >= 50) return amber;
-    return red;
-  }
+  if (metricId === 'performance') return value >= 90 ? green : value >= 50 ? amber : red;
   switch (metricId) {
-    case 'fcp':  return (value < 1.8) ? green : (value <= 3.0 ? amber : red);
-    case 'lcp':  return (value < 2.5) ? green : (value <= 4.0 ? amber : red);
-    case 'tbt':  return (value < 0.2) ? green : (value <= 0.6 ? amber : red);
-    case 'si':   return (value < 3.4) ? green : (value <= 5.8 ? amber : red);
-    case 'ttfb': return (value < 0.8) ? green : (value <= 1.8 ? amber : red);
+    case 'fcp':  return value < 1.8 ? green : value <= 3.0 ? amber : red;
+    case 'lcp':  return value < 2.5 ? green : value <= 4.0 ? amber : red;
+    case 'tbt':  return value < 0.2 ? green : value <= 0.6 ? amber : red;
+    case 'si':   return value < 3.4 ? green : value <= 5.8 ? amber : red;
+    case 'ttfb': return value < 0.8 ? green : value <= 1.8 ? amber : red;
     default:     return amber;
   }
 }
 const trendSymbol = (t) => t === 'up' ? '↑' : t === 'down' ? '↓' : '→';
 const trendColor  = (t) => t === 'up' ? '#16a34a' : t === 'down' ? '#ef4444' : '#6b7280';
 
+// ✅ Busca audits en cualquier forma (PSI remoto y Lighthouse local)
+function pickAudits(apiData) {
+  return (
+    apiData?.raw?.lighthouseResult?.audits || // PSI
+    apiData?.raw?.audits ||                   // 👈 LOCAL (LHR puro)
+    apiData?.lighthouseResult?.audits ||
+    apiData?.result?.lhr?.audits ||
+    apiData?.result?.lighthouseResult?.audits ||
+    apiData?.data?.lhr?.audits ||
+    apiData?.data?.lighthouseResult?.audits ||
+    apiData?.audits ||
+    {}
+  );
+}
+
+// ---------------- Builders ----------------
+function buildFindings(apiData, processed) {
+  const fromProcessed = {
+    errors: Array.isArray(processed?.errors) ? processed.errors : [],
+    improvements: Array.isArray(processed?.improvements) ? processed.improvements : [],
+  };
+  if (fromProcessed.errors.length || fromProcessed.improvements.length) return fromProcessed;
+
+  const auditsObj = pickAudits(apiData);
+  const all = Object.entries(auditsObj).map(([id, a]) => ({ id, ...a }));
+
+  const errors = [];
+  const improvements = [];
+
+  for (const a of all) {
+    if (a?.scoreDisplayMode === 'manual' || a?.scoreDisplayMode === 'notApplicable') continue;
+
+    const item = {
+      id: a.id,
+      title: a.title || a.id,
+      description: a.description || '',
+      displayValue: a.displayValue || '',
+      details: a.details || null,
+      score: typeof a.score === 'number' ? a.score : null,
+      typeHint: a?.details?.type || null, // 'opportunity' | 'diagnostic'
+    };
+
+    if (typeof item.score === 'number') {
+      if (item.score < 0.5) errors.push(item);
+      else if (item.score < 1) improvements.push(item);
+    } else if (item.typeHint === 'opportunity') {
+      improvements.push(item);
+    }
+  }
+
+  errors.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  improvements.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  return { errors, improvements };
+}
+
+function buildOpportunities(apiData, processed) {
+  if (Array.isArray(processed?.opportunities) && processed.opportunities.length) {
+    return processed.opportunities.map((o) => ({
+      type: 'improvement', severity: 'info', impactScore: 100, ...o
+    }));
+  }
+
+  const auditsObj = pickAudits(apiData);
+  const all = Object.entries(auditsObj).map(([id, a]) => ({ id, ...a }));
+  const opps = [];
+
+  for (const a of all) {
+    const d = a.details || {};
+    const hasOppType = d.type === 'opportunity';
+    const savingsMs = (typeof d.overallSavingsMs === 'number') ? d.overallSavingsMs : null;
+    const savingsB  = (typeof d.overallSavingsBytes === 'number') ? d.overallSavingsBytes : null;
+
+    if (hasOppType || savingsMs != null || savingsB != null) {
+      let savingsLabel = '';
+      if (savingsMs != null && savingsMs > 0) {
+        savingsLabel = (savingsMs >= 100)
+          ? `${Math.round((savingsMs/1000)*10)/10}s`
+          : `${Math.round(savingsMs)}ms`;
+      } else if (savingsB != null && savingsB > 0) {
+        const kb = savingsB/1024;
+        savingsLabel = (kb >= 1024) ? `${(kb/1024).toFixed(1)}MB` : `${Math.round(kb)}KB`;
+      } else if (a.displayValue) {
+        savingsLabel = a.displayValue;
+      }
+
+      opps.push({
+        id: a.id,
+        title: a.title || a.id,
+        recommendation: a.description || '',
+        savingsLabel,
+        impactScore: (savingsMs || 0) + (savingsB ? Math.min(savingsB/10, 1000) : 0),
+        type: 'improvement',
+        severity: 'info',
+      });
+    }
+  }
+  opps.sort((b, a) => (a.impactScore || 0) - (b.impactScore || 0));
+  return opps;
+}
+
+// ---------------- Component ----------------
 export default function DiagnosticoView() {
   const params = useParams();
   const location = useLocation();
-  const id = params?.id || new URLSearchParams(location.search).get('id'); // guard: evita /api/audit/undefined
+  const id = params?.id || new URLSearchParams(location.search).get('id');
 
   const [auditData, setAuditData] = useState(null);
   const [err, setErr] = useState('');
   const [activeApi, setActiveApi] = useState('');
   const [processed, setProcessed] = useState(null);
 
+  const contenedorReporteRef = useRef(null);
+
   useEffect(() => {
     setAuditData(null); setErr(''); setActiveApi(''); setProcessed(null);
     if (!id) return;
+    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(String(id).trim());
+    if (!isValidObjectId) { setErr('ID inválido'); return; }
+
     let mounted = true;
     (async () => {
       try {
         const res = await fetch(`/api/audit/${id}`);
-        const payload = await res.json();
-        if (!res.ok) throw new Error(payload.error || `Error ${res.status}`);
+        const payload = await safeParseJSON(res);
+        if (!res.ok) {
+          const msg = payload.error || payload.message || payload._raw || `HTTP ${res.status}`;
+          throw new Error(msg);
+        }
 
-        // Selección de API preferida
         const available = Object.keys(payload.audit || {}).filter(k => {
           const m = (payload.audit[k] || {}).metrics || payload.audit[k] || {};
           return Object.keys(m).length > 0;
@@ -65,13 +175,13 @@ export default function DiagnosticoView() {
           setActiveApi(apis[0] || '');
           setAuditData(payload);
 
+          // procesado puede fallar (404). Si falla, el fallback a LHR se encarga.
           if (payload.url) {
             fetch(`/api/diagnostics/${encodeURIComponent(payload.url)}/processed`)
               .then(async (r) => {
-                const text = await r.text();
-                if (!r.ok) throw new Error(text || `HTTP ${r.status}`);
-                if (!text) throw new Error('Empty response');
-                return JSON.parse(text);
+                const data = await safeParseJSON(r);
+                if (!r.ok) throw new Error(data.error || data.message || data._raw || `HTTP ${r.status}`);
+                return data;
               })
               .then((d) => { if (mounted) setProcessed(d); })
               .catch(() => {});
@@ -120,7 +230,6 @@ export default function DiagnosticoView() {
     );
   }
 
-  // Métricas y fallback
   let performance = null;
   if (typeof apiData.performance === 'number') performance = Math.round(apiData.performance);
   else if (typeof metrics.performance === 'number') performance = Math.round(metrics.performance);
@@ -134,12 +243,9 @@ export default function DiagnosticoView() {
   const siSec   = toSeconds(metrics.si)   ?? processed?.metrics?.find(m => m.key === 'si')?.raw  ?? null;
   const ttfbSec = toSeconds(metrics.ttfb) ?? processed?.metrics?.find(m => m.key === 'ttfb')?.raw?? null;
 
-  // TBT: en PSI viene en ms; en processed suele venir ms también
   const tbtApiS   = toSeconds(metrics.tbt);
   const tbtProcMs = processed?.metrics?.find(m => m.key === 'tbt')?.raw;
-  const tbtSec = (tbtApiS != null)
-    ? tbtApiS
-    : (typeof tbtProcMs === 'number' ? Math.round((tbtProcMs/1000)*10)/10 : null);
+  const tbtSec = (tbtApiS != null) ? tbtApiS : (typeof tbtProcMs === 'number' ? Math.round((tbtProcMs/1000)*10)/10 : null);
 
   const trendByKey = {};
   if (processed?.metrics) for (const m of processed.metrics) trendByKey[m.key] = m.trend;
@@ -154,69 +260,111 @@ export default function DiagnosticoView() {
   ];
 
   const source = apiData?.meta?.source;
+  const { errors: detectedErrors, improvements } = buildFindings(apiData, processed);
+  const opportunities = buildOpportunities(apiData, processed);
+
+  // Normalización para ActionPlanPanel
+  const mapFindingToOpp = (arr, kind) => arr.map((e, i) => {
+    let savingsLabel = e.displayValue || '';
+    const ms = e?.details?.overallSavingsMs;
+    const bytes = e?.details?.overallSavingsBytes;
+    if (!savingsLabel && typeof ms === 'number') {
+      savingsLabel = ms >= 100 ? `${Math.round((ms/1000)*10)/10}s` : `${Math.round(ms)}ms`;
+    } else if (!savingsLabel && typeof bytes === 'number') {
+      const kb = bytes / 1024;
+      savingsLabel = kb >= 1024 ? `${(kb/1024).toFixed(1)}MB` : `${Math.round(kb)}KB`;
+    }
+    return {
+      id: e.id || `finding-${kind}-${i}`,
+      title: e.title || e.id || 'Hallazgo',
+      recommendation: e.description || e.displayValue || '',
+      savingsLabel,
+      type: kind,                                  // 'error' | 'improvement'
+      severity: kind === 'error' ? 'critical' : 'info',
+      impactScore: kind === 'error' ? 2000 : (typeof e.impactScore === 'number' ? e.impactScore : 100),
+    };
+  });
+
+  const planItems = [
+    ...opportunities.map(o => ({
+      type: 'improvement', severity: 'info', impactScore: 100, ...o
+    })),
+    ...mapFindingToOpp(detectedErrors, 'error'),
+    ...mapFindingToOpp(improvements, 'improvement'),
+  ];
 
   return (
     <div className="card">
-      <Link to="/" className="back-link"> Nuevo diagnóstico</Link>
-      <Link to={`/historico?url=${encodeURIComponent(url)}`} className="back-link" style={{ marginLeft: '1rem' }}>Ver histórico de esta URL</Link>
+      <div ref={contenedorReporteRef}>
+        <Link to="/" className="back-link"> Nuevo diagnóstico</Link>
+        <Link to={`/historico?url=${encodeURIComponent(url)}`} className="back-link" style={{ marginLeft: '1rem' }}>Ver histórico de esta URL</Link>
 
-      <h2 className="diagnostico-title">Diagnóstico de <span className="url">{url}</span></h2>
-      <div className="date">{new Date(fecha).toLocaleString()}</div>
+        <h2 className="diagnostico-title">Diagnóstico de <span className="url">{url}</span></h2>
+        <div className="date">{new Date(fecha).toLocaleString()}</div>
 
-      {(source === 'local' || auditData?.isLocal) && (
-        <div role="alert" aria-live="polite" style={{
-          marginTop:12, marginBottom:8, padding:'10px 12px', borderRadius:10,
-          border:'1px solid #f59e0b55', background:'#fffbeb', color:'#92400e',
-          fontSize:'0.9rem', boxShadow:'0 1px 2px rgba(0,0,0,0.04)'
-        }}>
-          <strong style={{ textDecoration: 'underline' }}>Resultado con Lighthouse local</strong>.
-          Google PSI alcanzó su cuota o no estuvo disponible. Este resultado puede diferir del de PSI.
-        </div>
-      )}
-
-      <div className="tabs">
-        {Object.keys(audit).map(api => (
-          <button
-            key={api}
-            onClick={() => setActiveApi(api)}
-            className={`tab-button${activeApi === api ? ' active' : ''}`}
-          >
-            {API_LABELS[api] || api}
-          </button>
-        ))}
-      </div>
-
-      <div className="diagnostico-grid">
-        {items.map(item => (
-          <div key={item.id} className="item">
-            <h3 className="item-label" style={{display:'flex',alignItems:'center',gap:8}}>
-              {item.label}
-              {processed && trendByKey[item.id] && (
-                <span style={{fontSize:12, color: trendColor(trendByKey[item.id])}}>
-                  {trendSymbol(trendByKey[item.id])}
-                </span>
-              )}
-            </h3>
-            <CircularGauge
-              value={item.value ?? 0}
-              max={item.id === 'performance' ? 100 : undefined}
-              color={gaugeColor(item.id, item.value)}
-              decimals={item.id === 'performance' ? 0 : 1}
-              suffix={item.id === 'performance' ? '%' : 's'}
-            />
-            <p className="item-desc">
-              {item.value == null ? 'N/A' : (item.id === 'performance' ? `${item.value}%` : `${item.value.toFixed(1)}s`)} — {item.desc}
-            </p>
+        {/* {(source === 'local' || auditData?.isLocal) && (
+          <div role="alert" aria-live="polite" style={{
+            marginTop:12, marginBottom:8, padding:'10px 12px', borderRadius:10,
+            border:'1px solid #f59e0b55', background:'#fffbeb', color:'#92400e',
+            fontSize:'0.9rem', boxShadow:'0 1px 2px rgba(0,0,0,0.04)'
+          }}>
+            <strong style={{ textDecoration: 'underline' }}>Resultado con Lighthouse local</strong>.
+            Google PSI alcanzó su cuota o no estuvo disponible. Este resultado puede diferir del de PSI.
           </div>
-        ))}
-      </div>
+        )} */}
 
-      {processed && (
+        <div className="tabs">
+          {Object.keys(audit).map(api => (
+            <button
+              key={api}
+              onClick={() => setActiveApi(api)}
+              className={`tab-button${activeApi === api ? ' active' : ''}`}
+            >
+              {API_LABELS[api] || api}
+            </button>
+          ))}
+        </div>
+
+        <div className="diagnostico-grid">
+          {items.map(item => (
+            <div key={item.id} className="item">
+              <h3 className="item-label" style={{display:'flex',alignItems:'center',gap:8}}>
+                {item.label}
+                {processed && trendByKey[item.id] && (
+                  <span style={{fontSize:12, color: trendColor(trendByKey[item.id])}}>
+                    {trendSymbol(trendByKey[item.id])}
+                  </span>
+                )}
+              </h3>
+              <CircularGauge
+                value={item.value ?? 0}
+                max={item.id === 'performance' ? 100 : undefined}
+                color={gaugeColor(item.id, item.value)}
+                decimals={item.id === 'performance' ? 0 : 1}
+                suffix={item.id === 'performance' ? '%' : 's'}
+              />
+              <p className="item-desc">
+                {item.value == null ? 'N/A' : (item.id === 'performance' ? `${item.value}%` : `${item.value.toFixed(1)}s`)} — {item.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+
         <ActionPlanPanel
-          opportunities={processed.opportunities || []}
+          opportunities={planItems}
           performance={performance ?? undefined}
         />
-      )}
+      </div>
+
+      <EmailSendBar
+        captureRef={contenedorReporteRef}
+        url={url}
+        email={auditData?.email || ""}
+        hideEmailInput={true}
+        subject={`Diagnóstico de ${url}`}
+        endpoint="/api/audit/send-diagnostic"
+        includePdf={true}
+      />
     </div>
   );
 }
