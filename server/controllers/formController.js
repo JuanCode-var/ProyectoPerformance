@@ -241,48 +241,89 @@ export async function getAuditHistory(req, res) {
   }
 }
 
-// -------- Enviar reporte histórico --------
-// POST /api/audit/send-report
+// ─────────────────────────────────────────────────────────────
+// POST /api/audit/send-report  → envía histórico por correo (formateado)
+// ─────────────────────────────────────────────────────────────
 export async function sendReport(req, res) {
   try {
     const { url, email } = req.body || {};
-    if (!url || !email) return res.status(400).json({ error: 'Falta parámetro url o email' });
+    if (!url || !email) {
+      return res.status(400).json({ error: 'Falta parámetro url o email' });
+    }
 
     const docs = await Audit.find({ url }).sort({ fecha: 1 });
-    if (!docs.length) return res.status(404).json({ error: 'No hay datos previos para esa URL' });
+    if (!docs.length) {
+      return res.status(404).json({ error: 'No hay datos previos para esa URL' });
+    }
+
+    // helpers
+    const toSec1 = (ms) =>
+      (typeof ms === 'number' && !Number.isNaN(ms))
+        ? `${(Math.round((ms / 1000) * 10) / 10).toFixed(1)}s`
+        : 'N/A';
+
+    const readMs = (doc, key) => {
+      const p = doc?.audit?.pagespeed || {};
+      const u = doc?.audit?.unlighthouse || {};
+
+      if (doc?.metrics && typeof doc.metrics[key] === 'number') return doc.metrics[key];
+      if (p?.metrics && typeof p.metrics[key] === 'number') return p.metrics[key];
+      if (u?.metrics && typeof u.metrics[key] === 'number') return u.metrics[key];
+      if (typeof p[key] === 'number') return p[key];
+      if (typeof u[key] === 'number') return u[key];
+
+      const idMap = {
+        fcp: 'first-contentful-paint',
+        lcp: 'largest-contentful-paint',
+        tbt: 'total-blocking-time',
+        si:  'speed-index',
+        ttfb: 'server-response-time',
+      };
+      const lhr = p?.raw?.lighthouseResult;
+      const id  = idMap[key];
+      const nv  = lhr?.audits?.[id]?.numericValue;
+      return (typeof nv === 'number') ? nv : null;
+    };
+
+    const readPerf = (doc) => {
+      if (typeof doc?.performance === 'number' && !Number.isNaN(doc.performance)) {
+        return Math.round(doc.performance);
+      }
+      const p = doc?.audit?.pagespeed || {};
+      if (typeof p.performance === 'number') return Math.round(p.performance);
+      const score = p?.raw?.lighthouseResult?.categories?.performance?.score;
+      if (typeof score === 'number') return Math.round(score * 100);
+      return 'N/A';
+    };
 
     const rowsHtml = docs.map((doc, i) => {
       const fecha = new Date(doc.fecha).toLocaleString();
-      const perf  = doc.performance ?? 'N/A';
+      const perf  = readPerf(doc);
 
-      const read = key => {
-        let v;
-        if (doc.metrics?.[key] != null) v = doc.metrics[key];
-        else if (doc.audit.pagespeed?.metrics?.[key] != null) v = doc.audit.pagespeed.metrics[key];
-        else if (doc.audit.unlighthouse?.metrics?.[key] != null) v = doc.audit.unlighthouse.metrics[key];
-        else if (doc.audit.pagespeed?.[key] != null) v = doc.audit.pagespeed[key];
-        else if (doc.audit.unlighthouse?.[key] != null) v = doc.audit.unlighthouse[key];
-        else return 'N/A';
-        if (key === 'tbt' && v === 0) return 'N/A';
-        return typeof v === 'number' ? Math.round(v) : v;
-      };
+      const lcp  = toSec1(readMs(doc, 'lcp'));
+      const fcp  = toSec1(readMs(doc, 'fcp'));
+      const tbt  = toSec1(readMs(doc, 'tbt'));   // también en segundos como en el diagnóstico
+      const si   = toSec1(readMs(doc, 'si'));
+      const ttfb = toSec1(readMs(doc, 'ttfb'));
 
       const bg = i % 2 === 0 ? '#f9fafb' : '#ffffff';
       return `
         <tr style="background:${bg}">
           <td style="padding:8px;border:1px solid #ddd">${fecha}</td>
           <td style="padding:8px;border:1px solid #ddd;text-align:center">${perf}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('lcp')}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('fcp')}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('tbt')}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('si')}</td>
-          <td style="padding:8px;border:1px solid #ddd;text-align:center">${read('ttfb')}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${lcp}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${fcp}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${tbt}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${si}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${ttfb}</td>
         </tr>`;
     }).join('');
 
     const html = `
       <div style="font-family:Arial,sans-serif;color:#333">
-        <h2 style="text-align:center;color:#2563EB">Informe Histórico de ${url}</h2>
+        <h2 style="text-align:center;color:#2563EB">
+          Informe Histórico de <a href="${url}" style="color:#2563EB;text-decoration:underline">${url}</a>
+        </h2>
         <table style="width:100%;border-collapse:collapse;margin-top:16px">
           <thead>
             <tr style="background:#2563EB;color:#fff">
@@ -295,7 +336,9 @@ export async function sendReport(req, res) {
               <th style="padding:12px;border:1px solid #ddd">TTFB</th>
             </tr>
           </thead>
-          <tbody>${rowsHtml}</tbody>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
         </table>
         <p style="text-align:right;font-size:0.85em;margin-top:24px;color:#666">
           Generado el ${new Date().toLocaleString()}
