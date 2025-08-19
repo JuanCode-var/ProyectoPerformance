@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "axios": "^1.6.0",
@@ -18,7 +19,12 @@
     "lighthouse": "^12.8.1",
     "node-cache": "^5.1.2",
     "path": "^0.12.7",
-    "pino": "^8.21.0",
-    "pino-pretty": "^13.1.1"
+    "pino": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.3.0",
+    "pino-pretty": "^13.1.1",
+    "typescript": "^5.9.2"
   }
 }

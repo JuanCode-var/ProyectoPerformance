@@ -1,0 +1,489 @@
+// server/controllers/formController.ts
+import type { Request, Response } from "express";
+import axios from "axios";
+import nodemailer from "nodemailer";
+import Mail from "nodemailer/lib/mailer";
+import type { SentMessageInfo } from "nodemailer/lib/smtp-transport";
+
+import Audit from "../database/esquemaBD.js";
+import { readMetrics, extractOpportunities } from "../../src/utils/lh.js";
+
+// -------- Ping/Info --------
+export async function auditPing(_req: Request, res: Response) {
+  return res.json({
+    ok: true,
+    message: "Audit API ready",
+    endpoints: [
+      "POST /api/audit",
+      "GET  /api/audit/:id",
+      "GET  /api/audit/history?url=...",
+      "POST /api/audit/send-diagnostic",
+      "POST /api/audit/send-report",
+    ],
+  });
+}
+
+function withAudit(base?: string) {
+  if (!base) return "/audit";
+  const trimmed = String(base).replace(/\/+$/, "");
+  return trimmed.endsWith("/audit") ? trimmed : `${trimmed}/audit`;
+}
+
+// -------- Crear auditoría --------
+export async function guardarDatos(req: Request, res: Response) {
+  const fail = (status: number, msg: string, extra: Record<string, unknown> = {}) =>
+    res.status(status).json({ ok: false, error: msg, ...extra });
+
+  try {
+    const {
+      url,
+      type = "pagespeed",
+      strategy = "mobile",
+      name,
+      email,
+      nocache,
+    } = (req.body || {}) as {
+      url?: string;
+      type?: "pagespeed" | "unlighthouse" | "all" | string | string[];
+      strategy?: "mobile" | "desktop" | (string & {});
+      name?: string;
+      email?: string;
+      nocache?: boolean;
+    };
+
+    if (!url || !/^https?:\/\//i.test(url)) return fail(400, "URL inválida");
+
+    const MS_PAGESPEED_URL = process.env.MS_PAGESPEED_URL || "http://localhost:3001";
+    const MS_UNLIGHTHOUSE_URL = process.env.MS_UNLIGHTHOUSE_URL || "http://localhost:3002";
+
+    const MICROSERVICES: Record<"pagespeed" | "unlighthouse", { endpoint: string }> = {
+      pagespeed: { endpoint: withAudit(MS_PAGESPEED_URL) },
+      unlighthouse: { endpoint: withAudit(MS_UNLIGHTHOUSE_URL) },
+    };
+
+    const tipos = Array.isArray(type)
+      ? (type as string[])
+      : type === "all"
+      ? (Object.keys(MICROSERVICES) as Array<keyof typeof MICROSERVICES>)
+      : [type];
+
+    const invalid = tipos.filter((t) => !(t in MICROSERVICES));
+    if (invalid.length) return fail(400, `Tipo(s) inválido(s): ${invalid.join(", ")}`);
+
+    // Cache 1h
+    try {
+      const CACHE_TTL = 1000 * 60 * 60;
+      const cutoff = new Date(Date.now() - CACHE_TTL);
+      const cached = await Audit.findOne({
+        url,
+        tipos,
+        strategy,
+        fecha: { $gte: cutoff },
+      });
+      if (!nocache && cached) {
+        const resp: any = cached.toObject();     // 👈 aquí el tipo explícito
+        resp.ok = true;
+        resp.isLocal = resp?.audit?.pagespeed?.meta?.source === "local";
+        return res.json(resp);
+      }
+    } catch (e: any) {
+      console.warn("⚠️ Cache lookup falló:", e?.message); // eslint-disable-line no-console
+    }
+
+    // Llamadas a microservicios
+    const serviceCall = async (t: "pagespeed" | "unlighthouse") => {
+      const endpoint = MICROSERVICES[t].endpoint;
+      const payload = t === "unlighthouse" ? { url } : { url, strategy: strategy as string };
+      try {
+        const r = await axios.post(endpoint, payload, { timeout: 300000 });
+        return { [t]: r.data } as Record<string, unknown>;
+      } catch (err: any) {
+        const msg =
+          err?.response?.data?.detail ||
+          err?.response?.data?.error ||
+          err?.code ||
+          err?.message ||
+          "error";
+        const status = err?.response?.status ?? null;
+        return { [t]: { error: msg, status } } as Record<string, unknown>;
+      }
+    };
+
+    const partials = await Promise.all(
+      (tipos as Array<"pagespeed" | "unlighthouse">).map(serviceCall)
+    );
+    const audit = partials.reduce<Record<string, any>>((acc, cur) => ({ ...acc, ...cur }), {});
+
+    const allFailed = (tipos as string[]).every((t) => audit[t] && audit[t].error);
+    if (allFailed) return fail(502, "Ningún microservicio respondió correctamente", { details: audit });
+
+    const onlyPagespeedOk = tipos.length === 1 && audit.pagespeed && !audit.pagespeed.error;
+    const perfResolved =
+      onlyPagespeedOk &&
+      typeof audit.pagespeed?.performance === "number" &&
+      !Number.isNaN(audit.pagespeed.performance)
+        ? Math.round(audit.pagespeed.performance)
+        : onlyPagespeedOk &&
+          audit.pagespeed?.raw?.lighthouseResult?.categories?.performance?.score != null
+        ? Math.round(audit.pagespeed.raw.lighthouseResult.categories.performance.score * 100)
+        : undefined;
+
+    // Guardar en DB
+    try {
+      const doc = await Audit.create({
+        url,
+        type: (tipos as string[])[0],
+        tipos,
+        name,
+        email,
+        strategy,
+        audit,
+        performance: onlyPagespeedOk ? perfResolved : undefined,
+        metrics: onlyPagespeedOk ? audit.pagespeed?.metrics : undefined,
+        fecha: new Date(),
+      });
+      const docObj: any = doc.toObject();               // 👈 cast explícito
+      docObj.ok = true;                                 // set
+      docObj.isLocal = docObj?.audit?.pagespeed?.meta?.source === "local"; // read
+      return res.status(201).json(docObj);  
+    } catch (e: any) {
+      console.error("❌ Error guardando en DB:", e?.message); // eslint-disable-line no-console
+      // devolvemos resultado sin persistir
+      return res.status(200).json({
+        ok: true,
+        persisted: false,
+        url,
+        strategy,
+        name,
+        email,
+        audit,
+        performance: onlyPagespeedOk ? perfResolved : undefined,
+        metrics: onlyPagespeedOk ? audit.pagespeed?.metrics : undefined,
+        fecha: new Date().toISOString(),
+      });
+    }
+  } catch (e: any) {
+    console.error("❌ Error inesperado en /api/audit:", e); // eslint-disable-line no-console
+    return res.status(500).json({ error: "Error al procesar la auditoría", detail: e?.message });
+  }
+}
+
+// -------- Obtener auditoría por ID --------
+export async function getAuditById(req: Request, res: Response) {
+  try {
+    const id = (req.params?.id || "").trim();
+    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(id);
+    if (!isValidObjectId) return res.status(400).json({ error: "ID inválido" });
+
+    const doc = await Audit.findById(id);
+    if (!doc) return res.status(404).json({ error: "No encontrado" });
+
+    const out = doc.toObject();
+    type PagespeedMeta = { audit?: { pagespeed?: { meta?: { source?: string } } } };
+    const docObj = doc.toObject<PagespeedMeta & Record<string, any>>();
+    docObj.ok = true;
+    docObj.isLocal = docObj.audit?.pagespeed?.meta?.source === "local";
+
+    return res.json(out);
+  } catch (e: any) {
+    console.error("❌ Error en getAuditById:", e); // eslint-disable-line no-console
+    return res.status(500).json({ error: "Error interno" });
+  }
+}
+
+// -------- Historial por URL --------
+export async function getAuditHistory(req: Request, res: Response) {
+  try {
+    const rawParam = (req.query?.url ?? "").toString().trim();
+    if (!rawParam) return res.status(400).json({ error: "Falta el parámetro url" });
+
+    let decoded = rawParam;
+    try { decoded = decodeURIComponent(rawParam); } catch {}
+
+    const stripHash = (u: string) => u.split("#")[0];
+    const stripQuery = (u: string) => u.split("?")[0];
+    const stripSlash = (u: string) => (u.endsWith("/") ? u.slice(0, -1) : u);
+    const base = stripSlash(stripQuery(stripHash(decoded)));
+
+    const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const rxBase = new RegExp("^" + esc(base) + "/?$", "i");
+
+    const filter = {
+      $or: [{ url: decoded }, { url: base }, { url: base + "/" }, { url: { $regex: rxBase } }],
+    };
+
+    const docs = await Audit.find(filter).sort({ fecha: 1 }).lean();
+
+    const out = (docs || []).map((o: any) => {
+      let perf =
+        typeof o.performance === "number" && !Number.isNaN(o.performance)
+          ? Math.round(o.performance)
+          : null;
+
+      if (perf == null && typeof o.audit?.pagespeed?.performance === "number") {
+        perf = Math.round(o.audit.pagespeed.performance);
+      }
+      if (perf == null) {
+        const score =
+          o.audit?.pagespeed?.raw?.lighthouseResult?.categories?.performance?.score;
+        if (typeof score === "number") perf = Math.round(score * 100);
+      }
+
+      const pick = (key: string) => {
+        const v =
+          o.metrics?.[key] ??
+          o.audit?.pagespeed?.metrics?.[key] ??
+          o.audit?.unlighthouse?.metrics?.[key] ??
+          o.audit?.pagespeed?.[key] ??
+          o.audit?.unlighthouse?.[key] ??
+          null;
+        return typeof v === "number" && !Number.isNaN(v) ? v : null;
+      };
+
+      return {
+        _id: o._id,
+        url: o.url,
+        fecha: o.fecha,
+        performance: perf,
+        metrics: {
+          lcp: pick("lcp"),
+          fcp: pick("fcp"),
+          tbt: pick("tbt"),
+          si: pick("si"),
+          ttfb: pick("ttfb"),
+        },
+        audit: o.audit,
+        email: o.email,
+        strategy: o.strategy,
+        type: o.type,
+        tipos: o.tipos,
+      };
+    });
+
+    return res.json(out);
+  } catch (e: any) {
+    console.error("❌ getAuditHistory error:", e); // eslint-disable-line no-console
+    return res.status(200).json([]); // degradar a vacío para no romper el front
+  }
+}
+
+// -------- Enviar histórico por email --------
+export async function sendReport(req: Request, res: Response) {
+  try {
+    const { url, email } = (req.body || {}) as { url?: string; email?: string };
+    if (!url || !email) return res.status(400).json({ error: "Falta parámetro url o email" });
+
+    const docs = await Audit.find({ url }).sort({ fecha: 1 });
+    if (!docs.length) return res.status(404).json({ error: "No hay datos previos para esa URL" });
+
+    const toSec1 = (ms: number | null | undefined) =>
+      typeof ms === "number" && !Number.isNaN(ms)
+        ? `${(Math.round((ms / 1000) * 10) / 10).toFixed(1)}s`
+        : "N/A";
+
+    const readMs = (doc: any, key: "fcp" | "lcp" | "tbt" | "si" | "ttfb") => {
+      const p = doc?.audit?.pagespeed || {};
+      const u = doc?.audit?.unlighthouse || {};
+
+      if (doc?.metrics && typeof doc.metrics[key] === "number") return doc.metrics[key];
+      if (p?.metrics && typeof p.metrics[key] === "number") return p.metrics[key];
+      if (u?.metrics && typeof u.metrics[key] === "number") return u.metrics[key];
+      if (typeof p[key] === "number") return p[key];
+      if (typeof u[key] === "number") return u[key];
+
+      const idMap: Record<typeof key, string> = {
+        fcp: "first-contentful-paint",
+        lcp: "largest-contentful-paint",
+        tbt: "total-blocking-time",
+        si: "speed-index",
+        ttfb: "server-response-time",
+      };
+      const lhr = p?.raw?.lighthouseResult;
+      const id = idMap[key];
+      const nv = lhr?.audits?.[id]?.numericValue;
+      return typeof nv === "number" ? nv : null;
+    };
+
+    const readPerf = (doc: any) => {
+      if (typeof doc?.performance === "number" && !Number.isNaN(doc.performance))
+        return Math.round(doc.performance);
+      const p = doc?.audit?.pagespeed || {};
+      if (typeof p.performance === "number") return Math.round(p.performance);
+      const score = p?.raw?.lighthouseResult?.categories?.performance?.score;
+      if (typeof score === "number") return Math.round(score * 100);
+      return "N/A";
+    };
+
+    const rowsHtml = docs
+      .map((doc: any, i: number) => {
+        const fecha = new Date(doc.fecha).toLocaleString();
+        const perf = readPerf(doc);
+
+        const lcp = toSec1(readMs(doc, "lcp"));
+        const fcp = toSec1(readMs(doc, "fcp"));
+        const tbt = toSec1(readMs(doc, "tbt"));
+        const si = toSec1(readMs(doc, "si"));
+        const ttfb = toSec1(readMs(doc, "ttfb"));
+
+        const bg = i % 2 === 0 ? "#f9fafb" : "#ffffff";
+        return `
+        <tr style="background:${bg}">
+          <td style="padding:8px;border:1px solid #ddd">${fecha}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${perf}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${lcp}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${fcp}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${tbt}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${si}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center">${ttfb}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;color:#333">
+        <h2 style="text-align:center;color:#2563EB">
+          Informe Histórico de <a href="${url}" style="color:#2563EB;text-decoration:underline">${url}</a>
+        </h2>
+        <table style="width:100%;border-collapse:collapse;margin-top:16px">
+          <thead>
+            <tr style="background:#2563EB;color:#fff">
+              <th style="padding:12px;border:1px solid #ddd">Fecha / Hora</th>
+              <th style="padding:12px;border:1px solid #ddd">Perf.</th>
+              <th style="padding:12px;border:1px solid #ddd">LCP</th>
+              <th style="padding:12px;border:1px solid #ddd">FCP</th>
+              <th style="padding:12px;border:1px solid #ddd">TBT</th>
+              <th style="padding:12px;border:1px solid #ddd">SI</th>
+              <th style="padding:12px;border:1px solid #ddd">TTFB</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+        <p style="text-align:right;font-size:0.85em;margin-top:24px;color:#666">
+          Generado el ${new Date().toLocaleString()}
+        </p>
+      </div>
+    `;
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+
+    const mailOptions: Mail.Options = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: `Informe Histórico de ${url}`,
+      html,
+    };
+
+    const info: SentMessageInfo = await transporter.sendMail(mailOptions);
+    return res.status(200).json({ message: "Informe enviado correctamente", messageId: info.messageId });
+  } catch (err: any) {
+    console.error("❌ Error al enviar el informe:", err); // eslint-disable-line no-console
+    return res.status(500).json({ error: "Error al enviar el informe", detail: err.message });
+  }
+}
+
+// -------- Enviar diagnóstico individual --------
+export async function sendDiagnostic(req: Request, res: Response) {
+  try {
+    const { id, url, email, subject, pdf } = (req.body || {}) as {
+      id?: string;
+      url?: string;
+      email?: string;
+      subject?: string;
+      pdf?: { base64?: string; filename?: string; contentType?: string } | null;
+    };
+
+    if (!id && !url) return res.status(400).json({ error: "Falta id o url" });
+
+    let doc: any = null;
+    if (id) doc = await Audit.findById(id).lean();
+    else doc = await Audit.findOne({ url }).sort({ fecha: -1 }).lean();
+    if (!doc) return res.status(404).json({ error: "No hay diagnóstico para ese criterio" });
+
+    let toEmail = (email || doc.email || "").trim();
+    if (!toEmail) return res.status(400).json({ error: "No hay email disponible" });
+
+    const metrics = readMetrics(doc);
+    const opps = extractOpportunities(doc).slice(0, 10);
+
+    const pct = (v: number | null | undefined) => (v == null ? "N/A" : `${Math.round(v)}%`);
+    const fmtS = (s: number | null | undefined) => (s == null ? "N/A" : `${Number(s).toFixed(2)}s`);
+    const fmtMs = (ms: number | null | undefined) => (ms == null ? "N/A" : `${Math.round(ms)}ms`);
+
+    const kpi = (label: string, val: string) =>
+      `<div style="flex:1;min-width:120px;border:1px solid #E5E7EB;border-radius:12px;padding:12px;text-align:center">
+         <div style="font-size:12px;color:#6B7280">${label}</div>
+         <div style="font-size:20px;font-weight:700;color:#111827;margin-top:4px">${val}</div>
+       </div>`;
+
+    const fecha = new Date(doc.fecha).toLocaleString();
+    const title = subject || `Diagnóstico de ${doc.url}`;
+
+    const oppLi = opps
+      .map((o) => {
+        const s = o.savingsLabel ? ` · Ahorro: ${o.savingsLabel}` : "";
+        const r = o.recommendation ? `<div style="color:#374151;margin-top:4px">${o.recommendation}</div>` : "";
+        return `<li style="margin:0 0 10px 0"><div style="font-weight:600;color:#111827">${o.title || o.id}${s}</div>${r}</li>`;
+      })
+      .join("");
+
+    const html = `
+      <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.45">
+        <h2 style="text-align:center;color:#2563EB;margin:0 0 4px 0">${title}</h2>
+        <div style="text-align:center;font-size:12px;color:#6B7280">Generado: ${fecha} · Estrategia: ${doc.strategy || "mobile"}</div>
+        <div style="text-align:center;font-size:12px;color:#6B7280;margin-bottom:16px">Fuente: ${doc.audit?.pagespeed?.meta?.source || "desconocida"}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:16px 0">
+          ${kpi("Performance", pct(metrics.performance))}
+          ${kpi("FCP", fmtS(metrics.fcp))}
+          ${kpi("LCP", fmtS(metrics.lcp))}
+          ${kpi("TBT", fmtMs(metrics.tbt))}
+          ${kpi("Speed Index", fmtS(metrics.si))}
+          ${kpi("TTFB", fmtS(metrics.ttfb))}
+        </div>
+        <h3 style="margin:20px 0 8px;color:#111827">Plan de acción sugerido</h3>
+        <div style="border:1px solid #E5E7EB;border-radius:12px;padding:12px">
+          ${opps.length ? `<ul style="padding-left:18px;margin:0;list-style:disc;">${oppLi}</ul>` : `<p style="color:#374151;margin:0">No se detectaron oportunidades relevantes.</p>`}
+        </div>
+        <p style="text-align:right;font-size:12px;color:#6B7280;margin-top:24px">
+          URL: <a href="${doc.url}" style="color:#2563EB">${doc.url}</a>
+        </p>
+      </div>
+    `;
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+
+    const filenameSafe = (url || doc.url || "sitio")
+      .replace(/[^a-z0-9]+/gi, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60);
+    const filename = (pdf as any)?.filename || `diagnostico_${filenameSafe}.pdf`;
+
+    const mailOptions: Mail.Options = {
+      from: process.env.EMAIL_USER,
+      to: toEmail,
+      subject: title,
+      html,
+      attachments:
+        pdf?.base64
+          ? [
+              {
+                filename,
+                content: Buffer.from(pdf.base64, "base64"),
+                contentType: pdf.contentType || "application/pdf",
+              },
+            ]
+          : undefined,
+    };
+
+    const info: SentMessageInfo = await transporter.sendMail(mailOptions);
+    return res.status(200).json({ message: "Informe de diagnóstico enviado correctamente", messageId: info.messageId });
+  } catch (e: any) {
+    console.error("❌ Error en sendDiagnostic:", e); // eslint-disable-line no-console
+    return res.status(500).json({ error: "Error al enviar el diagnóstico", detail: e.message });
+  }
+}

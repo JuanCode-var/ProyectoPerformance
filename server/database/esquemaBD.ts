@@ -1,0 +1,58 @@
+// server/database/esquemaBD.ts
+import mongoose from "mongoose";
+
+// Subdocumento de métricas (igual al original)
+const MetricSchema = new mongoose.Schema(
+  {
+    fcp: Number,
+    lcp: Number,
+    // cls: Number,
+    tbt: Number,
+    si: Number,
+    ttfb: Number,
+  },
+  { _id: false }
+);
+
+// Tipos mínimos del documento
+export interface Metric {
+  fcp?: number | null;
+  lcp?: number | null;
+  tbt?: number | null;
+  si?: number | null;
+  ttfb?: number | null;
+}
+
+export interface AuditDoc extends mongoose.Document {
+  url: string;
+  type: "pagespeed" | "unlighthouse" | (string & {});
+  strategy: "mobile" | "desktop" | (string & {});
+  name?: string;
+  email?: string;
+  performance?: number;
+  metrics?: Metric | null;
+  raw?: unknown;
+  audit?: unknown;
+  fecha: Date;
+}
+
+// Esquema principal de Auditoría (misma estructura/campos)
+const AuditSchema = new mongoose.Schema<AuditDoc>(
+  {
+    url: { type: String, required: true, index: true },
+    type: { type: String, enum: ["pagespeed", "unlighthouse"], required: true },
+    strategy: { type: String, enum: ["mobile", "desktop"], default: "mobile" },
+    name: { type: String },
+    email: { type: String },
+    performance: Number,
+    metrics: MetricSchema,
+    raw: Object,
+    audit: Object,
+    fecha: { type: Date, default: Date.now },
+  },
+  { collection: "audits" }
+);
+
+// Export default (igual que en JS)
+const Audit = mongoose.model<AuditDoc>("Audit", AuditSchema);
+export default Audit;
