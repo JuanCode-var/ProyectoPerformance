@@ -49,7 +49,10 @@ async function psiLikelyBlocked(url: string): Promise<boolean> {
     };
     let r = await axios.head(url, common);
     if (r.status === 405) {
-      r = await axios.get(url, { ...common, headers: { ...common.headers, Range: "bytes=0-0" } });
+      r = await axios.get(url, {
+        ...common,
+        headers: { ...common.headers, Range: "bytes=0-0" },
+      });
     }
     return r.status === 403 || r.status === 404; // bloqueado o no servido a bots
   } catch {
@@ -58,13 +61,42 @@ async function psiLikelyBlocked(url: string): Promise<boolean> {
   }
 }
 
+// ---------- Helpers de extracción ----------
+function extractMetricsFromLHR(lhr: any) {
+  const audits = lhr?.audits || {};
+  return {
+    fcp: audits["first-contentful-paint"]?.numericValue ?? null,
+    lcp: audits["largest-contentful-paint"]?.numericValue ?? null,
+    cls: audits["cumulative-layout-shift"]?.numericValue ?? null,
+    tbt: audits["total-blocking-time"]?.numericValue ?? null,
+    si: audits["speed-index"]?.numericValue ?? null,
+    ttfb: audits["server-response-time"]?.numericValue ?? null,
+  };
+}
+
+function extractCategoryScores(lhr: any) {
+  const cats = lhr?.categories || {};
+  const out: Record<string, number> = {};
+  (["performance", "accessibility", "best-practices", "seo"] as const).forEach(
+    (k) => {
+      const s = cats?.[k]?.score;
+      if (typeof s === "number" && !Number.isNaN(s)) {
+        out[k] = Math.round(s * 100);
+      }
+    }
+  );
+  return out;
+}
+
+// ---------- Tipos/entrada ----------
 export type RunPageSpeedArgs = {
   url: string;
   strategy?: "mobile" | "desktop" | (string & {});
-  categories?: string[];
+  categories?: string[]; // Ej: ["performance","accessibility","best-practices","seo"]
   key?: string;
 };
 
+// ---------- Entrada pública ----------
 export async function runPageSpeed({
   url,
   strategy = "mobile",
@@ -83,7 +115,10 @@ export async function runPageSpeed({
   // 2) Key efectiva
   const envKey = (process.env.PSI_API_KEY || process.env.PAGESPEED_API_KEY || "").trim();
   const effectiveKey = (key || envKey || "").trim();
-  console.log("[micro] PSI key in use:", effectiveKey ? `****${effectiveKey.slice(-6)}` : "none"); // eslint-disable-line no-console
+  console.log(
+    "[micro] PSI key in use:",
+    effectiveKey ? `****${effectiveKey.slice(-6)}` : "none"
+  ); // eslint-disable-line no-console
 
   // 3) Preflight: si WAF bloquea a Lighthouse, evita PSI y usa local
   if (await psiLikelyBlocked(cleanUrl)) {
@@ -95,7 +130,9 @@ export async function runPageSpeed({
 
   // 4) Construye URL PSI
   const u = encodeURIComponent(cleanUrl);
-  const cats = (categories || []).map((c) => `category=${c}`).join("&");
+  const cats = (categories || [])
+    .map((c) => `category=${encodeURIComponent(c)}`)
+    .join("&");
   const keyPart = effectiveKey ? `&key=${effectiveKey}` : "";
   const full = `${endpoint}?url=${u}&strategy=${strategy}&${cats}${keyPart}`;
 
@@ -119,14 +156,17 @@ export async function runPageSpeed({
       return payload;
     } catch (e: any) {
       const status = e?.response?.status;
-      const msg = e?.response?.data?.error?.message || e?.message || String(e);
+      const msg =
+        e?.response?.data?.error?.message || e?.message || String(e);
       const retryAfter = e?.response?.headers?.["retry-after"];
       console.error("[micro] PSI fail (attempt %d): %s %s", attempt, status ?? "-", msg); // eslint-disable-line no-console
       if (retryAfter) console.error("[micro] Retry-After header:", retryAfter); // eslint-disable-line no-console
 
       // 429 o 5xx → reintenta
       if ((status === 429 || (status >= 500 && status <= 599)) && attempt < 3) {
-        const waitMs = retryAfter ? Number(retryAfter) * 1000 : [2000, 5000, 10000][attempt];
+        const waitMs = retryAfter
+          ? Number(retryAfter) * 1000
+          : [2000, 5000, 10000][attempt];
         console.log("[micro] PSI retry in %dms", waitMs); // eslint-disable-line no-console
         await sleep(waitMs);
         continue;
@@ -147,25 +187,22 @@ export async function runPageSpeed({
   return payload;
 }
 
+// ---------- PSI → payload unificado ----------
 function toPayloadFromPSI(data: any, durationMs: number, strategy: string) {
-  const lhr = data.lighthouseResult;
-  const audits = lhr?.audits || {};
-  const metrics = {
-    fcp: audits["first-contentful-paint"]?.numericValue ?? null,
-    lcp: audits["largest-contentful-paint"]?.numericValue ?? null,
-    cls: audits["cumulative-layout-shift"]?.numericValue ?? null,
-    tbt: audits["total-blocking-time"]?.numericValue ?? null,
-    si: audits["speed-index"]?.numericValue ?? null,
-    ttfb: audits["server-response-time"]?.numericValue ?? null,
-  };
-  const perfScore = Math.round((lhr?.categories?.performance?.score ?? 0) * 100);
+  const lhr = data?.lighthouseResult;
+  const metrics = extractMetricsFromLHR(lhr);
+  const categoryScores = extractCategoryScores(lhr);
+  const perfScore =
+    typeof lhr?.categories?.performance?.score === "number"
+      ? Math.round(lhr.categories.performance.score * 100)
+      : 0;
 
   return {
-    url: data.id || lhr?.finalUrl,
+    url: data?.id || lhr?.finalUrl,
     strategy,
     fetchedAt: lhr?.fetchTime ?? new Date().toISOString(),
-    performance: perfScore,
-    categoryScores: { performance: perfScore },
+    performance: categoryScores.performance ?? perfScore, // compat
+    categoryScores, // ← performance, accessibility, best-practices, seo
     metrics,
     meta: {
       finalUrl: lhr?.finalUrl,
@@ -179,6 +216,7 @@ function toPayloadFromPSI(data: any, durationMs: number, strategy: string) {
   };
 }
 
+// ---------- Lighthouse local ----------
 async function runLocalLighthouse({
   url,
   strategy = "mobile",
@@ -189,7 +227,9 @@ async function runLocalLighthouse({
   categories?: string[];
 }): Promise<any> {
   // 👇 Lanzamos Chrome y recién ahí usamos chrome.port
-  const chrome = await chromeLauncher.launch({ chromeFlags: ["--headless=new", "--no-sandbox"] });
+  const chrome = await chromeLauncher.launch({
+    chromeFlags: ["--headless=new", "--no-sandbox"],
+  });
   try {
     const opts: Flags = {
       port: chrome.port,
@@ -200,12 +240,24 @@ async function runLocalLighthouse({
     const config = {
       extends: "lighthouse:default",
       settings: {
-        onlyCategories: categories,
+        onlyCategories: categories, // ← respetar lo pedido por el caller
         formFactor: strategy === "mobile" ? "mobile" : "desktop",
         screenEmulation:
           strategy === "mobile"
-            ? { mobile: true, width: 360, height: 640, deviceScaleFactor: 2, disabled: false }
-            : { mobile: false, width: 1350, height: 940, deviceScaleFactor: 1, disabled: false },
+            ? {
+                mobile: true,
+                width: 360,
+                height: 640,
+                deviceScaleFactor: 2,
+                disabled: false,
+              }
+            : {
+                mobile: false,
+                width: 1350,
+                height: 940,
+                deviceScaleFactor: 1,
+                disabled: false,
+              },
         throttling:
           strategy === "mobile"
             ? { rttMs: 150, throughputKbps: 1638.4, cpuSlowdownMultiplier: 4 }
@@ -217,24 +269,20 @@ async function runLocalLighthouse({
     const rr: any = await lighthouse(url, opts, config as any);
     const durationMs = Date.now() - t0;
 
-    const lhr = rr.lhr;
-    const audits = lhr?.audits || {};
-    const metrics = {
-      fcp: audits["first-contentful-paint"]?.numericValue ?? null,
-      lcp: audits["largest-contentful-paint"]?.numericValue ?? null,
-      cls: audits["cumulative-layout-shift"]?.numericValue ?? null,
-      tbt: audits["total-blocking-time"]?.numericValue ?? null,
-      si: audits["speed-index"]?.numericValue ?? null,
-      ttfb: audits["server-response-time"]?.numericValue ?? null,
-    };
-    const perfScore = Math.round((lhr?.categories?.performance?.score ?? 0) * 100);
+    const lhr = rr?.lhr;
+    const metrics = extractMetricsFromLHR(lhr);
+    const categoryScores = extractCategoryScores(lhr);
+    const perfScore =
+      typeof lhr?.categories?.performance?.score === "number"
+        ? Math.round(lhr.categories.performance.score * 100)
+        : 0;
 
     return {
       url: lhr?.finalUrl || url,
       strategy,
       fetchedAt: lhr?.fetchTime ?? new Date().toISOString(),
-      performance: perfScore,
-      categoryScores: { performance: perfScore },
+      performance: categoryScores.performance ?? perfScore, // compat
+      categoryScores, // ← performance, accessibility, best-practices, seo
       metrics,
       meta: {
         finalUrl: lhr?.finalUrl,

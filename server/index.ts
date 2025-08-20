@@ -6,6 +6,9 @@ import { fileURLToPath } from 'url';
 
 import { connectDB } from './database/mongo.js';      // 👈 mantén .js (NodeNext)
 import formRoutes from './routes/formRoutes.js';      // 👈 mantén .js (NodeNext)
+import { getDiagnosticsRaw, getDiagnosticsProcessed, getDiagnosticsProcessedById } from "./../server/controllers/FormController.js";
+// ajusta la ruta relativa si tu index no está en la misma carpeta
+
 
 // __dirname en ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +27,12 @@ connectDB();
 
 // Rutas
 app.use('/api', formRoutes);
+
+// server/index.ts (server Express)
+app.get("/api/diagnostics/:rawUrl", getDiagnosticsRaw as any);
+app.get("/api/diagnostics/:rawUrl/processed", getDiagnosticsProcessed as any);
+app.get("/api/diagnostics/by-id/:id/processed", getDiagnosticsProcessedById as any);
+
 
 // Health
 app.get('/health', (_req: Request, res: Response) => res.json({ ok: true }));

@@ -29,6 +29,8 @@ function withAudit(base?: string) {
   return trimmed.endsWith("/audit") ? trimmed : `${trimmed}/audit`;
 }
 
+const ALL_CATEGORIES = ["performance", "accessibility", "best-practices", "seo"] as const;
+
 // -------- Crear auditoría --------
 export async function guardarDatos(req: Request, res: Response) {
   const fail = (status: number, msg: string, extra: Record<string, unknown> = {}) =>
@@ -81,7 +83,7 @@ export async function guardarDatos(req: Request, res: Response) {
         fecha: { $gte: cutoff },
       });
       if (!nocache && cached) {
-        const resp: any = cached.toObject();     // 👈 aquí el tipo explícito
+        const resp: any = cached.toObject();
         resp.ok = true;
         resp.isLocal = resp?.audit?.pagespeed?.meta?.source === "local";
         return res.json(resp);
@@ -93,7 +95,11 @@ export async function guardarDatos(req: Request, res: Response) {
     // Llamadas a microservicios
     const serviceCall = async (t: "pagespeed" | "unlighthouse") => {
       const endpoint = MICROSERVICES[t].endpoint;
-      const payload = t === "unlighthouse" ? { url } : { url, strategy: strategy as string };
+      // ⬇️ Para pagespeed pedimos SIEMPRE todas las categorías (mantiene compat)
+      const payload =
+        t === "unlighthouse"
+          ? { url }
+          : { url, strategy: strategy as string, categories: [...ALL_CATEGORIES] };
       try {
         const r = await axios.post(endpoint, payload, { timeout: 300000 });
         return { [t]: r.data } as Record<string, unknown>;
@@ -118,10 +124,20 @@ export async function guardarDatos(req: Request, res: Response) {
     if (allFailed) return fail(502, "Ningún microservicio respondió correctamente", { details: audit });
 
     const onlyPagespeedOk = tipos.length === 1 && audit.pagespeed && !audit.pagespeed.error;
+
+    // ⬇️ Resolver performance (top-level) con preferencia a categoryScores.performance
+    const catScores = audit.pagespeed?.categoryScores || {};
+    const perfFromCat =
+      typeof catScores?.performance === "number" && !Number.isNaN(catScores.performance)
+        ? Math.round(catScores.performance)
+        : null;
+
     const perfResolved =
-      onlyPagespeedOk &&
-      typeof audit.pagespeed?.performance === "number" &&
-      !Number.isNaN(audit.pagespeed.performance)
+      onlyPagespeedOk && perfFromCat != null
+        ? perfFromCat
+        : onlyPagespeedOk &&
+          typeof audit.pagespeed?.performance === "number" &&
+          !Number.isNaN(audit.pagespeed.performance)
         ? Math.round(audit.pagespeed.performance)
         : onlyPagespeedOk &&
           audit.pagespeed?.raw?.lighthouseResult?.categories?.performance?.score != null
@@ -137,15 +153,15 @@ export async function guardarDatos(req: Request, res: Response) {
         name,
         email,
         strategy,
-        audit,
+        audit, // ⬅️ aquí va todo el objeto con categoryScores dentro de pagespeed
         performance: onlyPagespeedOk ? perfResolved : undefined,
         metrics: onlyPagespeedOk ? audit.pagespeed?.metrics : undefined,
         fecha: new Date(),
       });
-      const docObj: any = doc.toObject();               // 👈 cast explícito
-      docObj.ok = true;                                 // set
-      docObj.isLocal = docObj?.audit?.pagespeed?.meta?.source === "local"; // read
-      return res.status(201).json(docObj);  
+      const docObj: any = doc.toObject();
+      docObj.ok = true;
+      docObj.isLocal = docObj?.audit?.pagespeed?.meta?.source === "local";
+      return res.status(201).json(docObj);
     } catch (e: any) {
       console.error("❌ Error guardando en DB:", e?.message); // eslint-disable-line no-console
       // devolvemos resultado sin persistir
@@ -178,13 +194,13 @@ export async function getAuditById(req: Request, res: Response) {
     const doc = await Audit.findById(id);
     if (!doc) return res.status(404).json({ error: "No encontrado" });
 
-    const out = doc.toObject();
+    // 🔧 Devolvemos el doc con flags, no el 'out' previo
     type PagespeedMeta = { audit?: { pagespeed?: { meta?: { source?: string } } } };
     const docObj = doc.toObject<PagespeedMeta & Record<string, any>>();
     docObj.ok = true;
     docObj.isLocal = docObj.audit?.pagespeed?.meta?.source === "local";
 
-    return res.json(out);
+    return res.json(docObj);
   } catch (e: any) {
     console.error("❌ Error en getAuditById:", e); // eslint-disable-line no-console
     return res.status(500).json({ error: "Error interno" });
@@ -485,5 +501,130 @@ export async function sendDiagnostic(req: Request, res: Response) {
   } catch (e: any) {
     console.error("❌ Error en sendDiagnostic:", e); // eslint-disable-line no-console
     return res.status(500).json({ error: "Error al enviar el diagnóstico", detail: e.message });
+  }
+}
+
+// =====================
+// Helpers de normalización
+// =====================
+function normalizeUrlFromParam(rawParam: string) {
+  let decoded = rawParam;
+  try { decoded = decodeURIComponent(rawParam); } catch {}
+
+  const stripHash  = (u: string) => u.split("#")[0];
+  const stripQuery = (u: string) => u.split("?")[0];
+  const stripSlash = (u: string) => (u.endsWith("/") ? u.slice(0, -1) : u);
+
+  const base = stripSlash(stripQuery(stripHash(decoded)));
+
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  // Prefijo por base PERO permitiendo que después venga / ? # o fin de string
+  // (cubre https://dominio, https://dominio/..., https://dominio?x=..., etc.)
+  const rxBase = new RegExp("^" + esc(base) + "(?:[/?#]|$)", "i");
+
+  // Por si quieres matchear por ORIGEN (host) cuando cambia el path
+  let origin = base;
+  try { origin = new URL(base).origin; } catch {}
+  const rxOrigin = new RegExp("^" + esc(origin) + "(?:[/?#]|$)", "i");
+
+  return { decoded, base, rxBase, origin, rxOrigin, esc };
+}
+
+// Construye un filtro más rico: busca por url, por meta.finalUrl y por variantes
+function buildDiagnosticsFilter(decoded: string, base: string, rxBase: RegExp, rxOrigin: RegExp) {
+  return {
+    $or: [
+      // URL tal cual llegó
+      { url: decoded },
+      // base exacta y base con "/"
+      { url: base }, { url: base + "/" },
+      // cualquier subruta de base
+      { url: { $regex: rxBase } },
+      // por ORIGEN (por si se guardó con rutas diferentes)
+      { url: { $regex: rxOrigin } },
+
+      // PSI/local pueden tener finalUrl distinto (redirecciones, saneos…)
+      { "audit.pagespeed.meta.finalUrl": decoded },
+      { "audit.pagespeed.meta.finalUrl": { $regex: rxBase } },
+      { "audit.pagespeed.meta.finalUrl": { $regex: rxOrigin } },
+
+      // Algunas implementaciones guardan url en estos campos
+      { "audit.pagespeed.url": decoded },
+      { "audit.pagespeed.url": { $regex: rxBase } },
+      { "audit.pagespeed.url": { $regex: rxOrigin } },
+
+      { "audit.unlighthouse.url": decoded },
+      { "audit.unlighthouse.url": { $regex: rxBase } },
+      { "audit.unlighthouse.url": { $regex: rxOrigin } },
+    ]
+  };
+}
+
+// =====================
+// GET /api/diagnostics/:rawUrl
+// Devuelve el último doc en bruto
+// =====================
+export async function getDiagnosticsRaw(req: Request, res: Response) {
+  try {
+    const rawUrl = (req.params?.rawUrl || "").trim();
+    if (!rawUrl) return res.status(400).json({ error: "Falta parámetro :rawUrl" });
+
+    const { decoded, base, rxBase, rxOrigin } = normalizeUrlFromParam(rawUrl);
+    const filter = buildDiagnosticsFilter(decoded, base, rxBase, rxOrigin);
+
+    const doc = await Audit.findOne(filter).sort({ fecha: -1 }).lean();
+    if (!doc) return res.status(404).json({ error: "No hay diagnósticos para esa URL" });
+
+    return res.json(doc);
+  } catch (e: any) {
+    console.error("❌ getDiagnosticsRaw error:", e);
+    return res.status(500).json({ error: "Error interno" });
+  }
+}
+
+// =====================
+// GET /api/diagnostics/:rawUrl/processed
+// Devuelve métricas + oportunidades normalizadas
+// =====================
+export async function getDiagnosticsProcessed(req: Request, res: Response) {
+  try {
+    const rawUrl = (req.params?.rawUrl || "").trim();
+    if (!rawUrl) return res.status(400).json({ error: "Falta parámetro :rawUrl" });
+
+    const { decoded, base, rxBase, rxOrigin } = normalizeUrlFromParam(rawUrl);
+    const filter = buildDiagnosticsFilter(decoded, base, rxBase, rxOrigin);
+
+    const doc = await Audit.findOne(filter).sort({ fecha: -1 }).lean();
+    if (!doc) return res.status(404).json({ error: "No hay diagnósticos para esa URL" });
+
+    const metrics = readMetrics(doc);
+    const opportunities = extractOpportunities(doc);
+    return res.json({ metrics, opportunities });
+  } catch (e: any) {
+    console.error("❌ getDiagnosticsProcessed error:", e);
+    return res.status(500).json({ error: "Error interno" });
+  }
+}
+
+// =====================
+// GET /api/diagnostics/by-id/:id/processed
+// Fallback directo por _id (útil si por URL no se encuentra)
+// =====================
+export async function getDiagnosticsProcessedById(req: Request, res: Response) {
+  try {
+    const id = (req.params?.id || "").trim();
+    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(id);
+    if (!isValidObjectId) return res.status(400).json({ error: "ID inválido" });
+
+    const doc = await Audit.findById(id).lean();
+    if (!doc) return res.status(404).json({ error: "No encontrado" });
+
+    const metrics = readMetrics(doc);
+    const opportunities = extractOpportunities(doc);
+    return res.json({ metrics, opportunities });
+  } catch (e: any) {
+    console.error("❌ getDiagnosticsProcessedById error:", e);
+    return res.status(500).json({ error: "Error interno" });
   }
 }
