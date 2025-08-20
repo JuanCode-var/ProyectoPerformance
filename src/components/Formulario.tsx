@@ -3,7 +3,6 @@ import React, { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Globe, Mail, User, ArrowRight, Info, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import '../styles/formulario.css';
 
 // --- Animations ---
 const containerVariants = {

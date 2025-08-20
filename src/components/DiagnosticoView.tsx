@@ -4,7 +4,6 @@ import { useParams, Link, useLocation } from 'react-router-dom';
 import CircularGauge from './CircularGauge';
 import ActionPlanPanel from './ActionPlanPanel';
 import EmailSendBar from "./EmailPdfBar";
-import '../styles/diagnostico.css';
 
 const API_LABELS: Record<string, string> = { pagespeed: 'Lighthouse', unlighthouse: 'Unlighthouse' };
 

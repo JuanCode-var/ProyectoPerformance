@@ -4,8 +4,6 @@ import { useLocation, Link, Navigate, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import CircularGauge from './CircularGauge';
-import '../styles/diagnostico.css';
-import '../styles/historico.css';
 
 function useQuery(): URLSearchParams {
   return new URLSearchParams(useLocation().search);

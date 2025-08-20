@@ -5,7 +5,6 @@ import {
   ChevronDown, ChevronUp, /*Filter,*/ ListChecks, SortDesc,
   /*CheckSquare, Square,*/ Eye, EyeOff
 } from "lucide-react";
-import "../styles/ActionPlanPanel.css";
 
 /* ==== Tipos ==== */
 type SeverityLevel = "high" | "mid" | "low";

@@ -1,0 +1,177 @@
+/* ------------------------------------------------------
+   Histórico (versión Tailwind conservando clases originales)
+   ------------------------------------------------------ */
+
+@layer components {
+  /* Card principal */
+  .card {
+    @apply relative mx-auto my-8 max-w-[1400px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-8 shadow-2xl backdrop-blur-md;
+  }
+  .card::before {
+    content: "";
+    @apply absolute left-0 right-0 top-0 h-1 rounded-t-2xl;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  }
+
+  /* Enlace de vuelta */
+  .back-link {
+    @apply mb-6 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-blue-500 no-underline transition;
+  }
+  .back-link:hover {
+    @apply -translate-y-[1px] border-blue-500 bg-blue-500 text-white shadow-md;
+  }
+  .back-link::before { content: "←"; font-size: 16px; }
+
+  /* Títulos */
+  .title,
+  .diagnostico-title {
+    @apply mb-2 mt-0 text-4xl font-bold leading-tight;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+  }
+  .title .url { @apply break-words font-semibold text-blue-500; }
+
+  /* Fecha */
+  .date { @apply mb-6 text-sm font-medium text-slate-400; }
+
+  /* Éxito */
+  .success-msg {
+    @apply mb-6 inline-flex items-center gap-2 rounded-xl border px-5 py-3 text-sm font-medium text-emerald-500;
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border-color: #a7f3d0;
+  }
+  .success-msg::before { content: "✓"; font-size: 16px; font-weight: 700; }
+
+  /* Loading */
+  .loading { @apply px-8 py-16 text-center; }
+  .loading-placeholder { @apply mt-16 flex flex-col items-center text-slate-500; }
+  .spinner {
+    @apply mx-auto my-6 h-14 w-14 rounded-full border-4 border-slate-200;
+    border-top-color: #3b82f6;
+    animation: spin 1s linear infinite;
+  }
+
+  /* Grid principal de gauges */
+  .gauges-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 32px;
+    margin-top: 32px;
+  }
+
+  /* Tarjeta métrica */
+  .gauge-card {
+    @apply relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-7 shadow-lg transition;
+  }
+  .gauge-card::before {
+    content: "";
+    @apply absolute left-0 right-0 top-0 h-1;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    transform: scaleX(0);
+    transition: transform .3s ease;
+  }
+  .gauge-card:hover { @apply -translate-y-[6px] border-blue-500 shadow-2xl; }
+  .gauge-card:hover::before { transform: scaleX(1); }
+
+  .gauges-grid .gauge-card:nth-child(odd)  { background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); }
+  .gauges-grid .gauge-card:nth-child(even) { background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%); }
+
+  /* Carrusel histórico */
+  .historico-carousel { @apply flex items-center justify-center gap-5 py-5; }
+
+  .carousel-btn {
+    @apply flex h-12 w-12 items-center justify-center rounded-full border-2 border-slate-200 bg-slate-50 text-base font-bold text-slate-900 shadow-sm transition disabled:cursor-not-allowed disabled:border-slate-100 disabled:bg-slate-300 disabled:text-slate-400;
+  }
+  .carousel-btn:hover:not(:disabled) { @apply scale-105 border-blue-500 bg-blue-500 text-white shadow-md; }
+
+  /* Área central del gauge */
+  .carousel-gauge {
+    @apply min-w-[200px] rounded-xl border-2 border-slate-200 bg-slate-50 p-5 text-center shadow-sm transition;
+  }
+  .carousel-gauge:hover { @apply border-blue-500 shadow-md; }
+
+  /* Indicador de página */
+  .carousel-indicator {
+    @apply mt-4 rounded-2xl border border-slate-200 bg-slate-200 px-4 py-2 text-center text-sm font-medium text-slate-500;
+  }
+
+  /* Valores / fechas */
+  .historic-gauge .item-value,
+  .carousel-gauge .item-value { @apply mt-3 text-3xl font-bold leading-none text-slate-900; }
+  .historic-gauge .date,
+  .carousel-gauge .date {
+    @apply mt-3 inline-block rounded-lg bg-blue-500/10 px-2 py-1 text-[13px] font-medium leading-5 text-slate-400;
+  }
+
+  /* Label de métricas */
+  .item-label { @apply mb-4 text-center text-sm font-semibold uppercase tracking-wide text-slate-900; }
+
+  /* Tabs */
+  .tabs {
+    @apply mb-6 flex gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1;
+  }
+  .tab-button {
+    @apply flex-1 cursor-pointer rounded-lg border-0 bg-transparent px-5 py-3 text-sm font-medium text-slate-500 transition;
+  }
+  .tab-button.active { @apply bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm; }
+  .tab-button:hover:not(.active) { @apply bg-white text-slate-900; }
+
+  /* Botón primary */
+  .btn-primary {
+    @apply rounded-xl border-0 bg-gradient-to-br from-blue-500 to-blue-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition;
+  }
+  .btn-primary:hover { @apply -translate-y-[2px] shadow-md; }
+
+  /* Métricas */
+  .metrics-title { @apply mt-8 mb-4 text-2xl font-semibold text-slate-900; }
+  .metrics-list {
+    @apply m-0 grid list-none gap-3 p-0;
+  }
+  .metrics-list li {
+    @apply flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-medium text-slate-900;
+  }
+  .metrics-list li::before { content: "▶"; color: #3b82f6; font-size: 12px; }
+
+  /* Errores */
+  .error {
+    @apply flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-5 py-4 font-semibold text-red-600;
+  }
+  .error::before { content: "⚠"; font-size: 18px; }
+
+  /* Scroll personalizado en filas de histórico */
+  .historico-row::-webkit-scrollbar { height: 8px; }
+  .historico-row::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 4px; }
+  .historico-row::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 4px; }
+  .historico-row::-webkit-scrollbar-thumb:hover { background: #2563eb; }
+}
+
+/* Utilidades y animaciones necesarias */
+@layer utilities {
+  @keyframes spin { to { transform: rotate(360deg); } }
+}
+
+/* Responsivo (respetando tus breakpoints) */
+@layer components {
+  @media (max-width: 1024px) {
+    .gauges-grid { grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px; }
+  }
+  @media (max-width: 768px) {
+    .card { @apply m-4 rounded-xl p-6; }
+    .gauges-grid { grid-template-columns: 1fr; gap: 20px; }
+    .title, .diagnostico-title { @apply text-2xl; }
+    .tabs { @apply flex-col; }
+    .historico-carousel { @apply gap-3; }
+    .carousel-btn { @apply h-10 w-10 text-base; }
+    .carousel-gauge { @apply min-w-[160px] p-4; }
+  }
+  @media (max-width: 480px) {
+    .card { @apply m-3 p-5; }
+    .gauge-card { @apply rounded-xl p-5; }
+    .carousel-gauge .item-value { @apply text-2xl; }
+    .historico-carousel { @apply flex-col gap-4; }
+    .carousel-indicator { @apply mt-2; }
+  }
+}

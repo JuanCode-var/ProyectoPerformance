@@ -1,4 +1,9 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4 runtime (global, NO modules) */
+@import "tailwindcss";
 
+/* Mantén tus estilos globales tal cual */
+@import "./styles/formulario.tw.css";
+@import "./styles/historico.tw.css";
+@import "./styles/diagnostico.tw.css";
+@import "./styles/action-plan-panel.tw.css";
+@import "./styles/navbar.tw.css";

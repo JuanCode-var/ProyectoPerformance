@@ -1,0 +1,192 @@
+/* ------------------------------------------------------
+   Formulario (Tailwind version con mismas clases)
+   ------------------------------------------------------ */
+
+/* 1) Base: mantenemos tu fondo animado como CSS (no hay utilidades para ::before / ::after) */
+@layer base {
+  body {
+    @apply min-h-screen overflow-x-hidden font-sans text-slate-900;
+    background: radial-gradient(circle at 25% 25%, rgba(59,130,246,.15) 0%, transparent 50%),
+                radial-gradient(circle at 75% 75%, rgba(139,92,246,.12) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(20,184,166,.08) 0%, transparent 50%),
+                linear-gradient(135deg, rgba(255,255,255,.95) 0%, rgba(240,248,255,.85) 50%, rgba(255,255,255,.9) 100%);
+    background-attachment: fixed;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  body::before,
+  body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: -1; }
+
+  body::before {
+    background:
+      radial-gradient(circle at 25% 25%, rgba(59,130,246,.15) 0%, transparent 50%),
+      radial-gradient(circle at 75% 75%, rgba(139,92,246,.12) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(20,184,166,.08) 0%, transparent 50%);
+    animation: floatingOrbs 25s ease-in-out infinite;
+  }
+  body::after {
+    background:
+      linear-gradient(45deg, transparent 30%, rgba(255,255,255,.1) 50%, transparent 70%),
+      linear-gradient(-45deg, transparent 30%, rgba(59,130,246,.05) 50%, transparent 70%);
+    animation: shimmerOverlay 30s linear infinite;
+  }
+}
+
+/* 2) Componentes: mismas clases con utilidades Tailwind */
+@layer components {
+  .form-card {
+    @apply relative mx-auto my-12 max-w-[680px] overflow-hidden rounded-2xl border border-white/40 bg-white/70 p-12 shadow-2xl backdrop-blur-2xl sm:p-10;
+  }
+  .form-card::before {
+    content: "";
+    @apply absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-teal-500;
+    background-size: 200% 100%;
+    animation: gradientShift 3s ease-in-out infinite;
+  }
+
+  .form-header { @apply relative mb-12 text-center; }
+  .logo-container { @apply relative mb-8 inline-block; }
+  .logo-img-form { @apply max-h-16 w-auto drop-shadow-lg transition-transform duration-300 ease-out; }
+  .logo-img-form:hover { @apply scale-[1.05] drop-shadow-xl; }
+
+  .form-title {
+    @apply relative mb-3 text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-black to-black/80 leading-tight;
+  }
+  .form-title::after {
+    content: "";
+    @apply absolute -bottom-3 left-1/2 h-1 w-24 -translate-x-1/2 rounded bg-gradient-to-r from-blue-500 to-purple-500;
+    animation: titleUnderline 2.5s ease-in-out infinite;
+  }
+
+  .form-subtitle { @apply mt-6 text-lg font-medium text-black/90 leading-relaxed; }
+  .brand-highlight { @apply bg-gradient-to-br from-blue-500 to-purple-500 bg-clip-text font-bold text-transparent; }
+
+  .modern-form { @apply flex flex-col gap-8; }
+  .form-field { @apply relative; }
+
+  .field-label { @apply mb-3 block text-base font-semibold text-slate-900; }
+  .tests-label { @apply mb-6 inline-block text-xl font-bold text-slate-900 relative; }
+  .tests-label::after {
+    content: ""; @apply absolute -bottom-1 left-0 h-0.5 w-full rounded bg-gradient-to-r from-blue-500 to-transparent;
+  }
+
+  .input-container { @apply relative flex items-center; }
+  .input-icon { @apply pointer-events-none absolute left-5 z-20 text-[1.125rem] text-slate-400 transition-transform duration-300; }
+  /* si usas peer en el input: */
+  .peer:focus ~ .input-icon { @apply scale-110 text-blue-500; }
+
+  .form-input {
+    @apply w-full rounded-xl border-2 border-slate-200 bg-white/70 px-14 py-5 text-base font-medium text-slate-900 shadow-sm backdrop-blur
+           transition-all duration-300 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white/90 focus:shadow-lg focus:outline-none
+           focus:ring-4 focus:ring-blue-500/10 -translate-y-0;
+  }
+  .form-input:focus { transform: translateY(-2px); }
+
+  .checkbox-group { @apply grid gap-5; }
+  .checkbox-item {
+    @apply relative cursor-pointer overflow-hidden rounded-2xl border-2 border-slate-100 bg-white/60 p-7 shadow-sm backdrop-blur-lg
+           transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-500 hover:shadow-lg;
+  }
+  .checkbox-item::before {
+    content: ""; @apply absolute inset-y-0 left-[-100%] w-full bg-gradient-to-r from-transparent via-blue-500/10 to-transparent;
+    transition: left .6s ease;
+  }
+  .checkbox-item:hover::before { left: 100%; }
+  .checkbox-item.checked { @apply -translate-y-0.5 border-blue-500 bg-gradient-to-br from-blue-500/10 to-purple-500/5 shadow-xl; }
+
+  .checkbox-label { @apply relative z-10 flex w-full items-center justify-between; }
+  .checkbox-label input[type="checkbox"] { @apply sr-only; }
+  .checkbox-content { @apply flex flex-1 items-center gap-5; }
+  .checkbox-icon { @apply flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-500 text-white shadow-md transition-transform duration-300; }
+  .checkbox-item:hover .checkbox-icon { @apply scale-110 rotate-3 shadow-lg; }
+  .checkbox-title { @apply text-lg font-bold leading-snug text-slate-900; }
+
+  .checkbox-check {
+    @apply relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border-4 border-slate-200 bg-white/80 transition-transform duration-300;
+  }
+  .checkbox-item.checked .checkbox-check { @apply scale-110 border-blue-500 bg-blue-500 text-white; }
+  .checkbox-item.checked .checkbox-check::after { content: "✓"; @apply text-sm font-bold; animation: checkPop .3s ease-out; }
+
+  .info-toggle {
+    @apply inline-flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm font-semibold text-blue-600
+           transition hover:-translate-y-0.5 hover:border-blue-500 hover:bg-blue-500/15 hover:shadow-sm;
+  }
+
+  .api-info {
+    @apply relative mt-4 overflow-hidden rounded-xl border-l-4 border-blue-500 bg-gradient-to-br from-slate-50 to-slate-200 p-6 text-slate-600 shadow-sm;
+  }
+  .api-info::before { content: ""; @apply absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-blue-500 to-purple-500; }
+  .api-info p { @apply m-0 font-medium leading-relaxed; }
+
+  .submit-button {
+    @apply relative mt-4 box-border flex min-h-14 w-full items-center justify-center gap-3 overflow-hidden rounded-xl border-0
+           bg-gradient-to-br from-slate-900 to-slate-800 px-8 py-5 text-lg font-bold text-white shadow-lg transition
+           hover:-translate-y-0.5 hover:shadow-xl hover:from-blue-500 hover:to-purple-500 active:translate-y-[-2px];
+  }
+  .submit-button::before {
+    content: ""; @apply absolute inset-y-0 left-[-100%] w-full bg-gradient-to-r from-transparent via-white/20 to-transparent;
+    transition: left .6s ease;
+  }
+  .submit-button:hover::before { left: 100%; }
+  .submit-button.loading { @apply cursor-not-allowed bg-gradient-to-br from-slate-400 to-slate-300 shadow-sm hover:translate-y-0; }
+
+  .loading-spinner { @apply h-5 w-5 flex-shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white; }
+
+  .field-error { @apply mt-3 flex items-center gap-2 text-sm font-semibold text-red-500; animation: errorSlide .3s ease-out; }
+  .field-error::before { content: "⚠"; @apply text-base; }
+
+  .error-alert {
+    @apply mt-6 flex items-center gap-3 rounded-xl border border-red-200 border-l-4 border-l-red-500 bg-gradient-to-br from-red-50 to-red-100
+           p-5 font-semibold text-red-900 shadow-sm;
+  }
+  .error-alert::before { content: "🚨"; @apply text-xl; }
+}
+
+/* 3) Responsivo (mismas ideas) */
+@layer components {
+  @media (max-width: 768px) {
+    .form-card { @apply my-8 mx-4 rounded-xl p-8; }
+    .form-title { @apply text-3xl; }
+    .checkbox-item { @apply p-6; }
+    .checkbox-icon { @apply h-12 w-12 text-base; }
+    .checkbox-check { @apply h-8 w-8; }
+  }
+  @media (max-width: 480px) {
+    .form-card { @apply m-4 p-6; }
+    .form-title { @apply text-2xl; }
+    .checkbox-content { @apply gap-4; }
+    .checkbox-title { @apply text-base; }
+    .submit-button { @apply min-h-12 px-6 py-4 text-base; }
+    .submit-button.loading { @apply min-h-12 px-6 py-4; }
+  }
+}
+
+/* 4) Animaciones originales */
+@layer utilities {
+  @keyframes floatingOrbs {
+    0%,100% { opacity:.6; transform: translateY(0) rotate(0deg); }
+    33%    { opacity:.8; transform: translateY(-10px) rotate(120deg); }
+    66%    { opacity:.7; transform: translateY(5px) rotate(240deg); }
+  }
+  @keyframes shimmerOverlay {
+    0% { transform: translateX(-100%) translateY(-100%); }
+    100% { transform: translateX(100%) translateY(100%); }
+  }
+  @keyframes gradientShift {
+    0%,100% { background-position: 0% 50%; }
+    50%     { background-position: 100% 50%; }
+  }
+  @keyframes titleUnderline {
+    0%,100% { opacity:.7; transform: translateX(-50%) scaleX(1); }
+    50%     { opacity:1; transform: translateX(-50%) scaleX(1.1); }
+  }
+  @keyframes checkPop {
+    0% { transform: scale(0) rotate(180deg); opacity:0; }
+    100% { transform: scale(1) rotate(0deg); opacity:1; }
+  }
+  @keyframes errorSlide {
+    from { opacity:0; transform: translateY(-10px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+}

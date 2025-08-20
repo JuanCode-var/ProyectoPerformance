@@ -1,0 +1,245 @@
+@layer components {
+  :root {
+    --primary-color:#0f172a; --primary-light:#1e293b;
+    --accent-color:#3b82f6; --accent-hover:#2563eb;
+    --success-color:#10b981; --warning-color:#f59e0b; --error-color:#ef4444;
+    --text-primary:#0f172a; --text-secondary:#64748b; --text-muted:#94a3b8;
+    --bg-primary:#fff; --bg-secondary:#f8fafc; --bg-tertiary:#f1f5f9;
+    --border-color:#e2e8f0;
+    --shadow-sm:0 1px 2px 0 rgba(0,0,0,.05);
+    --shadow-md:0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
+    --shadow-lg:0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -2px rgba(0,0,0,.05);
+    --shadow-xl:0 20px 25px -5px rgba(0,0,0,.1), 0 10px 10px -5px rgba(0,0,0,.04);
+    --gradient-accent: linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    @apply min-h-screen;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif;
+    background: linear-gradient(135deg,#f8fafc 0%, #e2e8f0 100%);
+    margin:0; padding:0;
+  }
+
+  /* Card principal */
+  .card {
+    @apply relative mx-auto my-8 max-w-5xl rounded-2xl border p-8 shadow-2xl backdrop-blur;
+    background: var(--bg-primary); border-color: var(--border-color);
+    box-shadow: var(--shadow-xl); overflow:hidden;
+  }
+  .card::before{
+    content:""; @apply absolute left-0 right-0 top-0 h-1 rounded-t-2xl;
+    background: var(--gradient-accent);
+  }
+
+  /* Enlace de vuelta */
+  .back-link {
+    @apply mb-6 inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium no-underline transition;
+    color: var(--accent-color); background: var(--bg-secondary); border-color: var(--border-color);
+  }
+  .back-link:hover { background: var(--accent-color); color:#fff; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .back-link::before { content:"←"; font-size:16px; }
+
+  /* Título principal */
+  .title { @apply m-0 mb-2 text-4xl font-bold leading-tight text-slate-900; }
+  .title .url { color: var(--accent-color); word-break: break-all; @apply font-semibold; }
+
+  .diagnostico-title {
+    @apply m-0 mb-2 text-4xl font-bold leading-tight;
+    color: var(--text-primary);
+    background: var(--gradient-accent);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  }
+
+  /* Fecha */
+  .date { @apply mb-6 text-sm font-medium text-slate-400; }
+
+  /* Mensaje de éxito */
+  .success-msg {
+    @apply mb-6 inline-flex items-center gap-2 rounded-xl border px-5 py-3 text-sm font-medium;
+    color: var(--success-color); background: linear-gradient(135deg,#ecfdf5 0%, #d1fae5 100%); border-color:#a7f3d0;
+  }
+  .success-msg::before { content:"✓"; font-size:16px; font-weight:700; }
+
+  /* Grid de tarjetas */
+  .diagnostico-grid {
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap:24px; margin-top:32px;
+  }
+
+  .item {
+    @apply relative overflow-hidden rounded-2xl border p-6 text-center transition;
+    background: var(--bg-primary); border-color: var(--border-color);
+    box-shadow: var(--shadow-sm);
+  }
+  .item::before{ content:""; @apply absolute left-0 right-0 top-0 h-[3px]; background: var(--gradient-accent); transform:scaleX(0); transition: transform .3s ease; }
+  .item:hover { @apply -translate-y-2; box-shadow: var(--shadow-xl); border-color: var(--accent-color); }
+  .item:hover::before{ transform:scaleX(1); }
+
+  .item-label { @apply mb-4 text-sm font-semibold uppercase tracking-wide text-slate-900; }
+  .item-value { @apply mt-4 text-2xl font-bold leading-none text-slate-900; }
+  .item-desc  { @apply mt-3 text-sm leading-6 text-slate-500; }
+
+  /* Loading */
+  .loading { @apply px-8 py-16 text-center; }
+  .loading-placeholder { @apply mt-16 flex flex-col items-center text-slate-500; }
+  .spinner {
+    @apply mx-auto my-6 h-14 w-14 rounded-full border-4 border-slate-200;
+    border-top-color: var(--accent-color); animation: spin 1s linear infinite;
+  }
+
+  /* Grid de gauges */
+  .gauges-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap:24px; }
+  .gauge-card { @apply rounded-2xl border p-6 shadow-md transition; background:var(--bg-primary); border-color:var(--border-color); }
+  .gauge-card:hover { @apply -translate-y-1 shadow-xl; }
+
+  /* Tabs */
+  .tabs { @apply mb-6 flex gap-2 rounded-xl border p-1; background: var(--bg-secondary); border-color: var(--border-color); }
+  .tab-button { @apply flex-1 cursor-pointer rounded-lg px-5 py-3 text-sm font-medium text-slate-500 transition; background:none; border:none; }
+  .tab-button.active { @apply shadow-sm text-white; background: var(--gradient-accent); }
+  .tab-button:hover:not(.active) { @apply bg-white text-slate-900; }
+
+  /* Métricas */
+  .metrics-title { @apply mt-8 mb-4 text-2xl font-semibold text-slate-900; }
+  .metrics-list { @apply m-0 grid list-none gap-3 p-0; }
+  .metrics-list li { @apply flex items-center gap-3 rounded-xl border bg-slate-50 px-5 py-4 text-sm font-medium text-slate-900; border-color: var(--border-color); }
+  .metrics-list li::before { content:"▶"; color: var(--accent-color); font-size:12px; }
+
+  /* Errores */
+  .error { @apply flex items-center gap-3 rounded-xl border px-5 py-4 font-semibold; color: var(--error-color); background:#fef2f2; border-color:#fecaca; }
+  .error::before { content:"⚠"; font-size:18px; }
+
+  /* Responsive */
+  @media (max-width:768px){
+    .card{ @apply mx-4 rounded-xl px-5 py-6; }
+    .diagnostico-grid{ grid-template-columns:1fr; gap:16px; }
+    .title,.diagnostico-title{ @apply text-3xl; }
+    .tabs{ @apply flex-col; }
+    .tab-button{ @apply text-center; }
+  }
+  @media (max-width:480px){
+    .card{ @apply mx-3 p-4; }
+    .item{ @apply p-4; }
+    .item-value{ @apply text-2xl; }
+  }
+}
+
+@layer utilities {
+  @keyframes spin { to { transform: rotate(360deg); } }
+}
+
+/* ---- Encabezado del Diagnóstico ---- */
+.diagnostico-header h1 {
+  /* Tamaño/tipografía consistentes y corte amable de URLs */
+  @apply text-3xl font-bold leading-tight break-words;
+}
+
+.diagnostico-header small,
+.diagnostico-header .subtitle {
+  @apply text-sm text-gray-500;
+}
+
+/* =========================
+   MODO CAPTURA PDF (html2canvas)
+   ========================= */
+.pdf-capture body {
+  background: #ffffff !important;
+}
+.pdf-capture * {
+  animation: none !important;
+  transition: none !important;
+  filter: none !important;
+  text-shadow: none !important;
+}
+.pdf-capture .card {
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-top: 4px solid var(--accent-color) !important;
+}
+.pdf-capture .card::before {
+  content: none !important; /* evita pseudo-elemento que a veces no renderiza */
+}
+.pdf-capture .diagnostico-title {
+  /* Fallback sin gradiente de texto (si no se renderiza en canvas) */
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  -webkit-text-fill-color: initial !important;
+  color: var(--text-primary) !important;
+}
+.pdf-capture .title .url,
+.pdf-capture .diagnostico-header h1 {
+  word-break: break-all !important;
+  overflow-wrap: anywhere !important;
+}
+.pdf-capture .item:hover,
+.pdf-capture .gauge-card:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+
+/* ====== Mejoras finales compatibilidad PDF ====== */
+
+/* 1) Evitar que las tarjetas/filas se partan entre páginas */
+@layer utilities {
+  .pdf-keep { 
+    break-inside: avoid; 
+    page-break-inside: avoid; 
+  }
+  .pdf-page {
+    break-after: page;     /* Úsala si quieres forzar salto manual */
+    page-break-after: always;
+  }
+}
+
+/* Aplica “no cortar” automáticamente a los bloques típicos del diagnóstico */
+.pdf-capture .card,
+.pdf-capture .item,
+.pdf-capture .gauge-card,
+.pdf-capture .metrics-list li,
+.pdf-capture .error {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* 2) Barra “Lighthouse” sólida (evita degradados que a veces no se rasterizan) */
+.pdf-capture .lighthouse-bar {
+  background: #2563eb !important;
+  height: 12px !important;
+  border-radius: 9999px !important;
+}
+
+/* 3) Encabezado: separación y corte amable de URLs largas */
+.pdf-capture .diagnostico-header h1 {
+  @apply break-words leading-tight;
+  margin-bottom: .25rem !important;
+}
+.pdf-capture .diagnostico-header .subtitle,
+.pdf-capture .title .url {
+  @apply break-words;
+  overflow-wrap: anywhere !important;
+}
+
+/* 4) Márgenes/paddings consistentes en PDF (blanco puro de fondo) */
+.pdf-capture body { background:#fff !important; }
+.pdf-capture .container,
+.pdf-capture .card { 
+  padding-left: 1rem !important; 
+  padding-right: 1rem !important; 
+}
+
+
+/* ===== Shift global a la derecha (solo en pantallas grandes) ===== */
+@layer utilities {
+  /* Wrapper responsivo centrado */
+  .screen-wrap { @apply max-w-[1280px] mx-auto px-4 md:px-6 lg:px-8; }
+
+  /* Desplazamiento hacia la derecha (ajusta a tu gusto) */
+  .shift-right { @apply xl:ml-10 2xl:ml-20; }      /* ~40px/80px aprox. */
+  .card-shift-right { @apply xl:ml-6 2xl:ml-10; }  /* leve para tarjetas internas */
+}
+
+/* En PDF lo centramos para evitar recortes laterales */
+.pdf-capture .shift-right,
+.pdf-capture .card-shift-right { margin-left: 0 !important; }
