@@ -6,6 +6,13 @@ import * as chromeLauncher from "chrome-launcher";
 import lighthouse from "lighthouse";
 import type { Flags } from "lighthouse";
 
+/**
+ * I18N: importamos las utilidades de traducción
+ * - Si tu package.json tiene "type":"module", DEJA el .js al final.
+ * - Si NO usas ESM, cambia a:  ../lib/lh-i18n-es
+ */
+import { tTitle, tRich, tSavings } from "./lib/lh-i18n-es.js";
+
 // ✅ Base sin query
 const endpoint = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 
@@ -56,7 +63,6 @@ async function psiLikelyBlocked(url: string): Promise<boolean> {
     }
     return r.status === 403 || r.status === 404; // bloqueado o no servido a bots
   } catch {
-    // Si ni siquiera podemos hacer HEAD/GET mínimo, trátalo como bloqueado
     return true;
   }
 }
@@ -88,6 +94,93 @@ function extractCategoryScores(lhr: any) {
   return out;
 }
 
+/** 🔵 Localiza el LHR IN-PLACE (ES).
+ *  - Traduce title/description/displayValue en audits.
+ *  - Marca el LHR como localizado.
+ */
+function localizeLhrInPlace(lhr: any) {
+  try {
+    const audits = lhr?.audits || {};
+    for (const id of Object.keys(audits)) {
+      const a = audits[id] || {};
+      if (typeof a.title === "string") a.title = tTitle(a.title);
+      if (typeof a.description === "string")
+        a.description = tRich(a.description);
+      if (typeof a.displayValue === "string")
+        a.displayValue = tSavings(a.displayValue);
+      // Algunos audits tienen subtextos en details; no tocamos items/headers
+      // para evitar reemplazar URLs o labels dinámicos.
+    }
+    // (Opcional) Puedes marcar que ya viene en ES
+    (lhr as any).__i18n = "es";
+  } catch {
+    // ignoramos cualquier problema de i18n para no romper la respuesta
+  }
+}
+
+/** 🔵 Construye un "plan de acción" simple (opportunities + algunos diagnostics) ya en ES */
+function buildPlanChecklistEs(lhr: any) {
+  const audits = lhr?.audits || {};
+  const list: Array<{ title: string; recommendation: string; savings: string }> =
+    [];
+
+  for (const id of Object.keys(audits)) {
+    const a = audits[id] || {};
+    const d = a.details || {};
+    const isOpp = d?.type === "opportunity";
+    const hasSavings =
+      typeof d?.overallSavingsMs === "number" ||
+      typeof d?.overallSavingsBytes === "number" ||
+      /savings/i.test(String(a.displayValue || ""));
+
+    if (isOpp || hasSavings) {
+      // Savings label amigable
+      let savings = "";
+      if (typeof d?.overallSavingsMs === "number" && d.overallSavingsMs > 0) {
+        const ms = d.overallSavingsMs;
+        savings = ms >= 100 ? `${Math.round((ms / 1000) * 10) / 10}s` : `${Math.round(ms)}ms`;
+      } else if (typeof d?.overallSavingsBytes === "number" && d.overallSavingsBytes > 0) {
+        const kb = d.overallSavingsBytes / 1024;
+        savings = kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${Math.round(kb)} KB`;
+      } else if (typeof a.displayValue === "string") {
+        savings = tSavings(a.displayValue);
+      }
+
+      list.push({
+        title: tTitle(a.title || id),
+        recommendation: tRich(a.description || ""),
+        savings,
+      });
+    }
+  }
+
+  // Ordén básico por “impacto” (heurística): ms primero, luego bytes
+  const score = (x: (typeof list)[number]) => {
+    const m = x.savings.match(/([\d.]+)\s*s/);
+    const ms = x.savings.match(/([\d.]+)\s*ms/);
+    const kb = x.savings.match(/([\d.]+)\s*KB/i);
+    const mb = x.savings.match(/([\d.]+)\s*MB/i);
+    if (m) return parseFloat(m[1]) * 10000;
+    if (mb) return parseFloat(mb[1]) * 1000;
+    if (kb) return parseFloat(kb[1]) * 10;
+    if (ms) return parseFloat(ms[1]);
+    return 0;
+  };
+  list.sort((b, a) => score(a) - score(b));
+
+  // Markdown de checklist (como el que pegaste)
+  const md = list
+    .map(
+      (x) =>
+        `- [ ] ${x.recommendation || x.title}${
+          x.savings ? ` (ahorro: ${x.savings})` : ""
+        }`
+    )
+    .join("\n");
+
+  return { items: list, markdown: md };
+}
+
 // ---------- Tipos/entrada ----------
 export type RunPageSpeedArgs = {
   url: string;
@@ -108,7 +201,7 @@ export async function runPageSpeed({
   const cacheKey = `${cleanUrl}::${strategy}`;
   const hit = cache.get(cacheKey);
   if (hit && Date.now() - hit.time < CACHE_TTL_MS) {
-    console.log("[micro] cache hit → source=%s", hit.data?.meta?.source); // eslint-disable-line no-console
+    console.log("[micro] cache hit → source=%s", hit.data?.meta?.source);
     return hit.data;
   }
 
@@ -118,11 +211,11 @@ export async function runPageSpeed({
   console.log(
     "[micro] PSI key in use:",
     effectiveKey ? `****${effectiveKey.slice(-6)}` : "none"
-  ); // eslint-disable-line no-console
+  );
 
   // 3) Preflight: si WAF bloquea a Lighthouse, evita PSI y usa local
   if (await psiLikelyBlocked(cleanUrl)) {
-    console.warn("[micro] PSI bloqueado por WAF (preflight). Usando local."); // eslint-disable-line no-console
+    console.warn("[micro] PSI bloqueado por WAF (preflight). Usando local.");
     const payload = await runLocalLighthouse({ url: cleanUrl, strategy, categories });
     cache.set(cacheKey, { time: Date.now(), data: payload });
     return payload;
@@ -139,7 +232,7 @@ export async function runPageSpeed({
   // 5) Llama PSI con reintentos (backoff 2s, 5s, 10s)
   for (let attempt = 0; attempt <= 3; attempt++) {
     try {
-      console.log("[micro] PSI about to call → url:", cleanUrl); // eslint-disable-line no-console
+      console.log("[micro] PSI about to call → url:", cleanUrl);
       const t0 = Date.now();
       const { data } = await axios.get(full, {
         httpAgent,
@@ -150,31 +243,31 @@ export async function runPageSpeed({
       });
       const durationMs = Date.now() - t0;
 
-      console.log("[micro] PSI OK (attempt %d) ms=%d", attempt, durationMs); // eslint-disable-line no-console
+      // 🔵 Localizamos el LHR de PSI antes de empaquetar
+      if (data?.lighthouseResult) {
+        localizeLhrInPlace(data.lighthouseResult);
+      }
+
+      console.log("[micro] PSI OK (attempt %d) ms=%d", attempt, durationMs);
       const payload = toPayloadFromPSI(data, durationMs, strategy);
       cache.set(cacheKey, { time: Date.now(), data: payload });
       return payload;
     } catch (e: any) {
       const status = e?.response?.status;
-      const msg =
-        e?.response?.data?.error?.message || e?.message || String(e);
+      const msg = e?.response?.data?.error?.message || e?.message || String(e);
       const retryAfter = e?.response?.headers?.["retry-after"];
-      console.error("[micro] PSI fail (attempt %d): %s %s", attempt, status ?? "-", msg); // eslint-disable-line no-console
-      if (retryAfter) console.error("[micro] Retry-After header:", retryAfter); // eslint-disable-line no-console
+      console.error("[micro] PSI fail (attempt %d): %s %s", attempt, status ?? "-", msg);
+      if (retryAfter) console.error("[micro] Retry-After header:", retryAfter);
 
-      // 429 o 5xx → reintenta
       if ((status === 429 || (status >= 500 && status <= 599)) && attempt < 3) {
-        const waitMs = retryAfter
-          ? Number(retryAfter) * 1000
-          : [2000, 5000, 10000][attempt];
-        console.log("[micro] PSI retry in %dms", waitMs); // eslint-disable-line no-console
+        const waitMs = retryAfter ? Number(retryAfter) * 1000 : [2000, 5000, 10000][attempt];
+        console.log("[micro] PSI retry in %dms", waitMs);
         await sleep(waitMs);
         continue;
       }
 
-      // 403/404 típicos (login/robots/WAF) → corta a local
       if (status === 404 || status === 403) {
-        console.warn("[micro] PSI 4xx (posible login/robots/WAF). Fallback a local."); // eslint-disable-line no-console
+        console.warn("[micro] PSI 4xx (posible login/robots/WAF). Fallback a local.");
       }
       break; // cae a local
     }
@@ -183,7 +276,7 @@ export async function runPageSpeed({
   // 6) Fallback: Lighthouse local
   const payload = await runLocalLighthouse({ url: cleanUrl, strategy, categories });
   cache.set(cacheKey, { time: Date.now(), data: payload });
-  console.log("[micro] source=local ms=%d", payload?.meta?.duration_ms ?? -1); // eslint-disable-line no-console
+  console.log("[micro] source=local ms=%d", payload?.meta?.duration_ms ?? -1);
   return payload;
 }
 
@@ -197,13 +290,17 @@ function toPayloadFromPSI(data: any, durationMs: number, strategy: string) {
       ? Math.round(lhr.categories.performance.score * 100)
       : 0;
 
+  // 🔵 Plan en ES ya listo (markdown e items)
+  const plan = buildPlanChecklistEs(lhr);
+
   return {
     url: data?.id || lhr?.finalUrl,
     strategy,
     fetchedAt: lhr?.fetchTime ?? new Date().toISOString(),
-    performance: categoryScores.performance ?? perfScore, // compat
-    categoryScores, // ← performance, accessibility, best-practices, seo
+    performance: categoryScores.performance ?? perfScore,
+    categoryScores,
     metrics,
+    plan_es: plan, // ← { markdown, items[] } en español
     meta: {
       finalUrl: lhr?.finalUrl,
       lighthouseVersion: lhr?.lighthouseVersion,
@@ -211,8 +308,9 @@ function toPayloadFromPSI(data: any, durationMs: number, strategy: string) {
       configSettings: lhr?.configSettings,
       duration_ms: durationMs,
       source: "psi",
+      i18n: "es",
     },
-    raw: data,
+    raw: data, // ← audits/titles/descriptions ya vienen localizados
   };
 }
 
@@ -226,7 +324,6 @@ async function runLocalLighthouse({
   strategy?: "mobile" | "desktop" | (string & {});
   categories?: string[];
 }): Promise<any> {
-  // 👇 Lanzamos Chrome y recién ahí usamos chrome.port
   const chrome = await chromeLauncher.launch({
     chromeFlags: ["--headless=new", "--no-sandbox"],
   });
@@ -240,7 +337,7 @@ async function runLocalLighthouse({
     const config = {
       extends: "lighthouse:default",
       settings: {
-        onlyCategories: categories, // ← respetar lo pedido por el caller
+        onlyCategories: categories,
         formFactor: strategy === "mobile" ? "mobile" : "desktop",
         screenEmulation:
           strategy === "mobile"
@@ -270,6 +367,10 @@ async function runLocalLighthouse({
     const durationMs = Date.now() - t0;
 
     const lhr = rr?.lhr;
+
+    // 🔵 Localizamos el LHR local antes de empaquetar
+    localizeLhrInPlace(lhr);
+
     const metrics = extractMetricsFromLHR(lhr);
     const categoryScores = extractCategoryScores(lhr);
     const perfScore =
@@ -277,13 +378,16 @@ async function runLocalLighthouse({
         ? Math.round(lhr.categories.performance.score * 100)
         : 0;
 
+    const plan = buildPlanChecklistEs(lhr);
+
     return {
       url: lhr?.finalUrl || url,
       strategy,
       fetchedAt: lhr?.fetchTime ?? new Date().toISOString(),
-      performance: categoryScores.performance ?? perfScore, // compat
-      categoryScores, // ← performance, accessibility, best-practices, seo
+      performance: categoryScores.performance ?? perfScore,
+      categoryScores,
       metrics,
+      plan_es: plan, // ← en español
       meta: {
         finalUrl: lhr?.finalUrl,
         lighthouseVersion: lhr?.lighthouseVersion,
@@ -291,8 +395,9 @@ async function runLocalLighthouse({
         configSettings: lhr?.configSettings,
         duration_ms: durationMs,
         source: "local",
+        i18n: "es",
       },
-      raw: lhr,
+      raw: lhr, // ← audits en ES
     };
   } finally {
     await chrome.kill();
