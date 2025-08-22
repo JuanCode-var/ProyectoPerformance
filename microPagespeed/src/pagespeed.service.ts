@@ -1,4 +1,3 @@
-// microPagespeed/src/pagespeed.service.ts
 import axios from "axios";
 import http from "http";
 import https from "https";
@@ -7,9 +6,7 @@ import lighthouse from "lighthouse";
 import type { Flags } from "lighthouse";
 
 /**
- * I18N: importamos las utilidades de traducción
- * - Si tu package.json tiene "type":"module", DEJA el .js al final.
- * - Si NO usas ESM, cambia a:  ../lib/lh-i18n-es
+ * I18N: utilidades de traducción (fallback)
  */
 import { tTitle, tRich, tSavings } from "./lib/lh-i18n-es.js";
 
@@ -94,10 +91,7 @@ function extractCategoryScores(lhr: any) {
   return out;
 }
 
-/** 🔵 Localiza el LHR IN-PLACE (ES).
- *  - Traduce title/description/displayValue en audits.
- *  - Marca el LHR como localizado.
- */
+/** 🔵 Localiza el LHR IN-PLACE (ES). */
 function localizeLhrInPlace(lhr: any) {
   try {
     const audits = lhr?.audits || {};
@@ -108,17 +102,14 @@ function localizeLhrInPlace(lhr: any) {
         a.description = tRich(a.description);
       if (typeof a.displayValue === "string")
         a.displayValue = tSavings(a.displayValue);
-      // Algunos audits tienen subtextos en details; no tocamos items/headers
-      // para evitar reemplazar URLs o labels dinámicos.
     }
-    // (Opcional) Puedes marcar que ya viene en ES
     (lhr as any).__i18n = "es";
   } catch {
-    // ignoramos cualquier problema de i18n para no romper la respuesta
+    // no romper por i18n
   }
 }
 
-/** 🔵 Construye un "plan de acción" simple (opportunities + algunos diagnostics) ya en ES */
+/** 🔵 Plan de acción simple (opportunities + algunos diagnostics) ya en ES */
 function buildPlanChecklistEs(lhr: any) {
   const audits = lhr?.audits || {};
   const list: Array<{ title: string; recommendation: string; savings: string }> =
@@ -134,7 +125,6 @@ function buildPlanChecklistEs(lhr: any) {
       /savings/i.test(String(a.displayValue || ""));
 
     if (isOpp || hasSavings) {
-      // Savings label amigable
       let savings = "";
       if (typeof d?.overallSavingsMs === "number" && d.overallSavingsMs > 0) {
         const ms = d.overallSavingsMs;
@@ -154,7 +144,6 @@ function buildPlanChecklistEs(lhr: any) {
     }
   }
 
-  // Ordén básico por “impacto” (heurística): ms primero, luego bytes
   const score = (x: (typeof list)[number]) => {
     const m = x.savings.match(/([\d.]+)\s*s/);
     const ms = x.savings.match(/([\d.]+)\s*ms/);
@@ -168,7 +157,6 @@ function buildPlanChecklistEs(lhr: any) {
   };
   list.sort((b, a) => score(a) - score(b));
 
-  // Markdown de checklist (como el que pegaste)
   const md = list
     .map(
       (x) =>
@@ -185,7 +173,7 @@ function buildPlanChecklistEs(lhr: any) {
 export type RunPageSpeedArgs = {
   url: string;
   strategy?: "mobile" | "desktop" | (string & {});
-  categories?: string[]; // Ej: ["performance","accessibility","best-practices","seo"]
+  categories?: string[]; // ["performance","accessibility","best-practices","seo"]
   key?: string;
 };
 
@@ -221,13 +209,17 @@ export async function runPageSpeed({
     return payload;
   }
 
-  // 4) Construye URL PSI
-  const u = encodeURIComponent(cleanUrl);
-  const cats = (categories || [])
-    .map((c) => `category=${encodeURIComponent(c)}`)
-    .join("&");
-  const keyPart = effectiveKey ? `&key=${effectiveKey}` : "";
-  const full = `${endpoint}?url=${u}&strategy=${strategy}&${cats}${keyPart}`;
+  // 4) Construye URL PSI (ahora con ES)
+  const params = new URLSearchParams();
+  params.set("url", cleanUrl);
+  params.set("strategy", strategy);
+  (categories || []).forEach((c) => params.append("category", c));
+  if (effectiveKey) params.set("key", effectiveKey);
+  // 👇 Localización en español (ambos por compatibilidad de versiones)
+  params.set("locale", "es");
+  params.set("hl", "es");
+
+  const full = `${endpoint}?${params.toString()}`;
 
   // 5) Llama PSI con reintentos (backoff 2s, 5s, 10s)
   for (let attempt = 0; attempt <= 3; attempt++) {
@@ -243,7 +235,7 @@ export async function runPageSpeed({
       });
       const durationMs = Date.now() - t0;
 
-      // 🔵 Localizamos el LHR de PSI antes de empaquetar
+      // 🔵 Localizamos el LHR de PSI (fallback por si algo quedó en EN)
       if (data?.lighthouseResult) {
         localizeLhrInPlace(data.lighthouseResult);
       }
@@ -290,7 +282,7 @@ function toPayloadFromPSI(data: any, durationMs: number, strategy: string) {
       ? Math.round(lhr.categories.performance.score * 100)
       : 0;
 
-  // 🔵 Plan en ES ya listo (markdown e items)
+  // 🔵 Plan en ES
   const plan = buildPlanChecklistEs(lhr);
 
   return {
@@ -300,7 +292,7 @@ function toPayloadFromPSI(data: any, durationMs: number, strategy: string) {
     performance: categoryScores.performance ?? perfScore,
     categoryScores,
     metrics,
-    plan_es: plan, // ← { markdown, items[] } en español
+    plan_es: plan,
     meta: {
       finalUrl: lhr?.finalUrl,
       lighthouseVersion: lhr?.lighthouseVersion,
@@ -310,7 +302,7 @@ function toPayloadFromPSI(data: any, durationMs: number, strategy: string) {
       source: "psi",
       i18n: "es",
     },
-    raw: data, // ← audits/titles/descriptions ya vienen localizados
+    raw: data,
   };
 }
 
@@ -332,7 +324,9 @@ async function runLocalLighthouse({
       port: chrome.port,
       logLevel: "error",
       output: "json",
-    } as const;
+      // 👇 Localización para Lighthouse local
+      locale: "es",
+    } as any;
 
     const config = {
       extends: "lighthouse:default",
@@ -368,7 +362,7 @@ async function runLocalLighthouse({
 
     const lhr = rr?.lhr;
 
-    // 🔵 Localizamos el LHR local antes de empaquetar
+    // 🔵 Localizamos el LHR local (fallback)
     localizeLhrInPlace(lhr);
 
     const metrics = extractMetricsFromLHR(lhr);
@@ -387,7 +381,7 @@ async function runLocalLighthouse({
       performance: categoryScores.performance ?? perfScore,
       categoryScores,
       metrics,
-      plan_es: plan, // ← en español
+      plan_es: plan,
       meta: {
         finalUrl: lhr?.finalUrl,
         lighthouseVersion: lhr?.lighthouseVersion,
@@ -397,7 +391,7 @@ async function runLocalLighthouse({
         source: "local",
         i18n: "es",
       },
-      raw: lhr, // ← audits en ES
+      raw: lhr,
     };
   } finally {
     await chrome.kill();

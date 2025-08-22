@@ -5,46 +5,77 @@ import CircularGauge from "./CircularGauge";
 import ActionPlanPanel from "./ActionPlanPanel";
 import EmailSendBar from "./EmailPdfBar";
 
-// 👇 usa alias para no chocar con tus funciones locales
+// i18n (usamos alias para no chocar con funciones locales)
 import {
   tTitle as i18nTitle,
   tRich as i18nRich,
   tSavings as i18nSavings,
 } from "../../microPagespeed/src/lib/lh-i18n-es";
 
+// =================== Constantes UI ===================
 const API_LABELS: Record<string, string> = {
   pagespeed: "Lighthouse",
   unlighthouse: "Unlighthouse",
 };
 
-// =============== Utils ===============
+// =================== Utils ===================
 async function safeParseJSON(res: Response): Promise<any> {
   const text = await res.text();
-  try { return JSON.parse(text || "{}"); } catch { return { _raw: text }; }
+  try {
+    return JSON.parse(text || "{}");
+  } catch {
+    return { _raw: text };
+  }
 }
+
 type MetricId =
-  | "performance" | "fcp" | "lcp" | "tbt" | "si" | "ttfb"
-  | "accessibility" | "best-practices" | "seo" | string;
+  | "performance"
+  | "fcp"
+  | "lcp"
+  | "tbt"
+  | "si"
+  | "ttfb"
+  | "cls"
+  | "accessibility"
+  | "best-practices"
+  | "seo"
+  | string;
+
 type Trend = "up" | "down" | "flat" | string;
 
 const trendSymbol = (t?: Trend) => (t === "up" ? "↑" : t === "down" ? "↓" : "→");
-const trendColor  = (t?: Trend) => (t === "up" ? "#16a34a" : t === "down" ? "#ef4444" : "#6b7280");
+const trendColor = (t?: Trend) =>
+  t === "up" ? "#16a34a" : t === "down" ? "#ef4444" : "#6b7280";
+
 const toSeconds = (ms: number | null | undefined): number | null =>
-  typeof ms === "number" && !Number.isNaN(ms) ? Math.round((ms / 1000) * 10) / 10 : null;
+  typeof ms === "number" && !Number.isNaN(ms)
+    ? Math.round((ms / 1000) * 10) / 10
+    : null;
 
 function gaugeColor(metricId: MetricId, value: number | null | undefined) {
-  const green = "#22c55e", amber = "#f59e0b", red = "#ef4444", gray = "#9ca3af";
+  const green = "#22c55e",
+    amber = "#f59e0b",
+    red = "#ef4444",
+    gray = "#9ca3af";
   if (value == null) return gray;
-  if (["performance","accessibility","best-practices","seo"].includes(metricId)) {
+  if (["performance", "accessibility", "best-practices", "seo"].includes(metricId)) {
     return value >= 90 ? green : value >= 50 ? amber : red;
   }
   switch (metricId) {
-    case "fcp":  return value < 1.8 ? green : value <= 3.0 ? amber : red;
-    case "lcp":  return value < 2.5 ? green : value <= 4.0 ? amber : red;
-    case "tbt":  return value < 0.2 ? green : value <= 0.6 ? amber : red;
-    case "si":   return value < 3.4 ? green : value <= 5.8 ? amber : red;
-    case "ttfb": return value < 0.8 ? green : value <= 1.8 ? amber : red;
-    default:     return amber;
+    case "fcp":
+      return value < 1.8 ? green : value <= 3.0 ? amber : red;
+    case "lcp":
+      return value < 2.5 ? green : value <= 4.0 ? amber : red;
+    case "tbt":
+      return value < 0.2 ? green : value <= 0.6 ? amber : red;
+    case "si":
+      return value < 3.4 ? green : value <= 5.8 ? amber : red;
+    case "ttfb":
+      return value < 0.8 ? green : value <= 1.8 ? amber : red;
+    case "cls":
+      return value < 0.1 ? green : value <= 0.25 ? amber : red;
+    default:
+      return amber;
   }
 }
 
@@ -57,19 +88,23 @@ function pickAudits(apiData: any): Record<string, any> {
     apiData?.result?.lighthouseResult?.audits ||
     apiData?.data?.lhr?.audits ||
     apiData?.data?.lighthouseResult?.audits ||
-    apiData?.audits || {}
+    apiData?.audits ||
+    {}
   );
 }
 
 function readCategoryScoresFromApi(apiData: any): {
-  performance: number | null; accessibility: number | null;
-  "best-practices": number | null; seo: number | null;
+  performance: number | null;
+  accessibility: number | null;
+  "best-practices": number | null;
+  seo: number | null;
 } {
   const cats =
     apiData?.raw?.lighthouseResult?.categories ||
     apiData?.raw?.categories ||
     apiData?.lighthouseResult?.categories ||
-    apiData?.categories || null;
+    apiData?.categories ||
+    null;
   const toPct = (x?: number) => (typeof x === "number" ? Math.round(x * 100) : null);
   return {
     performance: toPct(cats?.performance?.score),
@@ -79,18 +114,87 @@ function readCategoryScoresFromApi(apiData: any): {
   };
 }
 
-// =============== Tipos ===============
+// 🔎 Detecta el form factor real del LHR retornado por la API
+function detectFormFactor(apiData: any): "mobile" | "desktop" | undefined {
+  const lhr =
+    apiData?.raw?.lighthouseResult ||
+    apiData?.lighthouseResult ||
+    apiData?.result?.lhr ||
+    apiData?.data?.lhr ||
+    null;
+
+  const cfg = lhr?.configSettings || {};
+  const emu = cfg.emulatedFormFactor ?? cfg.formFactor;
+  if (emu === "mobile" || emu === "desktop") return emu;
+
+  if (cfg?.screenEmulation && typeof cfg.screenEmulation.mobile === "boolean") {
+    return cfg.screenEmulation.mobile ? "mobile" : "desktop";
+  }
+  return undefined;
+}
+
+// Lee segundos directo desde audits del payload actual (ms→s; CLS unitless)
+function getAuditSeconds(apiData: any, id: string): number | null {
+  const audits = pickAudits(apiData);
+  const a = audits?.[id];
+  if (!a) return null;
+
+  if (typeof a.numericValue === "number") {
+    if (/cumulative-layout-shift|^cls$/i.test(id)) {
+      return Math.round(a.numericValue * 100) / 100; // CLS
+    }
+    return toSeconds(a.numericValue);
+  }
+  const dv: string | undefined = a.displayValue;
+  if (dv) {
+    const m1 = dv.match(/([\d.,]+)\s*ms/i);
+    const m2 = dv.match(/([\d.,]+)\s*s/i);
+    if (m1) return Math.round((parseFloat(m1[1].replace(",", ".")) / 1000) * 10) / 10;
+    if (m2) return Math.round(parseFloat(m2[1].replace(",", ".")) * 10) / 10;
+  }
+  return null;
+}
+
+// Intenta forzar el audit correcto por URL+strategy (pasa por tu FormController)
+async function fetchAuditByUrlWithStrategy(url: string, strategy: "mobile" | "desktop", ts: number) {
+  const urlSafe = encodeURIComponent(url);
+  const headers = { "Cache-Control": "no-cache" };
+
+  // Orden de candidatos: diagnostics → audit/by-url → form (ajusta si tu back ya tiene uno exacto)
+  const candidates = [
+    `/api/diagnostics/${urlSafe}/audit?strategy=${strategy}&_=${ts}`,
+    `/api/audit/by-url?url=${urlSafe}&strategy=${strategy}&_=${ts}`,
+    `/api/form/audit?url=${urlSafe}&strategy=${strategy}&_=${ts}`,
+  ];
+
+  for (const endpoint of candidates) {
+    try {
+      const r = await fetch(endpoint, { headers });
+      if (r.ok) return await safeParseJSON(r);
+    } catch {}
+  }
+  return null;
+}
+
+// =================== Tipos ===================
 type ProcessedMetric = { key: string; raw: number | null; trend?: Trend };
 type ProcessedData = {
-  metrics?: ProcessedMetric[] | Record<string, { raw?: number; trend?: Trend } | number>;
-  errors?: any[]; improvements?: any[]; opportunities?: any[];
+  metrics?:
+    | ProcessedMetric[]
+    | Record<string, { raw?: number; trend?: Trend } | number>;
+  errors?: any[];
+  improvements?: any[];
+  opportunities?: any[];
 };
 type AuditEnvelope = {
-  url?: string; fecha?: string; email?: string;
-  strategy?: "mobile" | "desktop" | string; audit?: Record<string, any>;
+  url?: string;
+  fecha?: string;
+  email?: string;
+  strategy?: "mobile" | "desktop" | string;
+  audit?: Record<string, any>;
 };
 
-// ===== Helpers i18n para listas crudas de categorías
+// =================== i18n helpers para listas ===================
 type CatBreakItem = {
   id: string;
   title: string;
@@ -99,16 +203,25 @@ type CatBreakItem = {
   description?: string;
   savingsLabel?: string;
 };
+
 const translateList = (list: any[] | undefined): CatBreakItem[] =>
   Array.isArray(list)
     ? list.map((it: any) => ({
-        ...it,
+        id: String(it?.id ?? ""),
         title: i18nTitle(it?.title || it?.id || ""),
+        scorePct:
+          typeof it?.scorePct === "number"
+            ? it.scorePct
+            : typeof it?.score === "number"
+            ? Math.round(it.score * 100)
+            : null,
+        displayValue: it?.displayValue || "",
         description: i18nRich(it?.description || ""),
+        savingsLabel: it?.savingsLabel || "",
       }))
     : [];
 
-// =============== Builders (plan de acción) ===============
+// =================== Builders (hallazgos / plan) ===================
 function buildFindings(apiData: any, processed: ProcessedData | null) {
   const fromProc = {
     errors: Array.isArray(processed?.errors) ? processed!.errors : [],
@@ -119,13 +232,15 @@ function buildFindings(apiData: any, processed: ProcessedData | null) {
   const auditsObj = pickAudits(apiData);
   const all = Object.entries(auditsObj).map(([id, a]) => ({ id, ...(a as any) }));
 
-  const errors: any[] = [], improvements: any[] = [];
+  const errors: any[] = [],
+    improvements: any[] = [];
   for (const a of all) {
-    if (a?.scoreDisplayMode === "manual" || a?.scoreDisplayMode === "notApplicable") continue;
+    if (a?.scoreDisplayMode === "manual" || a?.scoreDisplayMode === "notApplicable")
+      continue;
     const item = {
       id: (a as any).id,
-      title: i18nTitle((a as any).title || (a as any).id),          // 👈 i18n
-      description: i18nRich((a as any).description || ""),          // 👈 i18n
+      title: i18nTitle((a as any).title || (a as any).id),
+      description: i18nRich((a as any).description || ""),
       displayValue: (a as any).displayValue || "",
       details: (a as any).details || null,
       score: typeof (a as any).score === "number" ? (a as any).score : null,
@@ -146,92 +261,117 @@ function buildFindings(apiData: any, processed: ProcessedData | null) {
 function buildOpportunities(apiData: any, processed: ProcessedData | null) {
   if (Array.isArray(processed?.opportunities) && processed!.opportunities!.length) {
     return processed!.opportunities!.map((o: any) => ({
-      type: "improvement", severity: "info", impactScore: 100,
+      type: "improvement",
+      severity: "info",
+      impactScore: 100,
       ...o,
-      title: i18nTitle(o.title || o.id),                 // 👈 i18n
-      recommendation: i18nRich(o.recommendation || ""),  // 👈 i18n
+      title: i18nTitle(o.title || o.id),
+      recommendation: i18nRich(o.recommendation || ""),
     }));
   }
+
   const auditsObj = pickAudits(apiData);
   const all = Object.entries(auditsObj).map(([id, a]) => ({ id, ...(a as any) }));
+
   const opps: any[] = [];
   for (const a of all) {
     const d = (a as any).details || {};
     const hasOppType = d.type === "opportunity";
     const ms = typeof d.overallSavingsMs === "number" ? d.overallSavingsMs : null;
     const by = typeof d.overallSavingsBytes === "number" ? d.overallSavingsBytes : null;
+
     if (hasOppType || ms != null || by != null) {
-      let savingsLabel = i18nSavings((a as any).displayValue || ""); // 👈 i18n savings
+      let savingsLabel = i18nSavings((a as any).displayValue || "");
       if (!savingsLabel) {
-        if (ms != null && ms > 0) savingsLabel = ms >= 100 ? `${Math.round((ms/1000)*10)/10}s` : `${Math.round(ms)}ms`;
+        if (ms != null && ms > 0)
+          savingsLabel = ms >= 100 ? `${Math.round((ms / 1000) * 10) / 10}s` : `${Math.round(ms)}ms`;
         else if (by != null && by > 0) {
-          const kb = by/1024; savingsLabel = kb >= 1024 ? `${(kb/1024).toFixed(1)}MB` : `${Math.round(kb)}KB`;
+          const kb = by / 1024;
+          savingsLabel = kb >= 1024 ? `${(kb / 1024).toFixed(1)}MB` : `${Math.round(kb)}KB`;
         }
       }
+
       opps.push({
         id: (a as any).id,
-        title: i18nTitle((a as any).title || (a as any).id),    // 👈 i18n
-        recommendation: i18nRich((a as any).description || ""), // 👈 i18n
+        title: i18nTitle((a as any).title || (a as any).id),
+        recommendation: i18nRich((a as any).description || ""),
         savingsLabel,
-        impactScore: (ms || 0) + (by ? Math.min(by/10, 1000) : 0),
-        type: "improvement", severity: "info",
+        impactScore: (ms || 0) + (by ? Math.min(by / 10, 1000) : 0),
+        type: "improvement",
+        severity: "info",
       });
     }
   }
+
   opps.sort((b, a) => ((a as any).impactScore || 0) - ((b as any).impactScore || 0));
   return opps;
 }
 
-// =============== Extra: desglose por categoría (A11y/BP/SEO) ===============
-function getCategoryBreakdown(catKey: "accessibility" | "best-practices" | "seo", apiData: any): CatBreakItem[] {
+// =================== Desglose por categoría (A11y/BP/SEO) ===================
+function getCategoryBreakdown(
+  catKey: "accessibility" | "best-practices" | "seo",
+  apiData: any
+): CatBreakItem[] {
   const categories =
     apiData?.raw?.lighthouseResult?.categories ||
     apiData?.raw?.categories ||
     apiData?.lighthouseResult?.categories ||
-    apiData?.categories || null;
+    apiData?.categories ||
+    null;
 
   const cat = categories?.[catKey];
   if (!cat || !Array.isArray(cat.auditRefs)) return [];
 
   const auditsObj = pickAudits(apiData);
 
-  const items: CatBreakItem[] = cat.auditRefs.map((ref: any) => {
-    const a = auditsObj?.[ref.id] || {};
-    const s = typeof a.score === "number" ? Math.round(a.score * 100) : null;
+  const items = cat.auditRefs
+    .map((ref: any) => {
+      const a = auditsObj?.[ref.id] || {};
+      const sdm: string | undefined = a.scoreDisplayMode;
+      if (sdm === "notApplicable" || sdm === "manual") return null;
 
-    // savings
-    let savingsLabel = "";
-    const d = a.details || {};
-    const ms = typeof d.overallSavingsMs === "number" ? d.overallSavingsMs : null;
-    const by = typeof d.overallSavingsBytes === "number" ? d.overallSavingsBytes : null;
-    if (ms != null && ms > 0) savingsLabel = ms >= 100 ? `${Math.round((ms/1000)*10)/10}s` : `${Math.round(ms)}ms`;
-    else if (by != null && by > 0) {
-      const kb = by/1024; savingsLabel = kb >= 1024 ? `${(kb/1024).toFixed(1)}MB` : `${Math.round(kb)}KB`;
-    }
+      const s =
+        typeof a.score === "number"
+          ? Math.round(a.score * 100)
+          : null;
 
-    return {
-      id: ref.id,
-      title: i18nTitle(a.title || ref.id),           // 👈 i18n
-      scorePct: s,
-      displayValue: a.displayValue || "",
-      description: i18nRich(a.description || ""),    // 👈 i18n
-      savingsLabel,
-    };
-  });
+      // savings
+      let savingsLabel = "";
+      const d = a.details || {};
+      const ms = typeof d.overallSavingsMs === "number" ? d.overallSavingsMs : null;
+      const by = typeof d.overallSavingsBytes === "number" ? d.overallSavingsBytes : null;
 
-  // Orden: primero peores puntajes, luego por weight desc
+      if (ms != null && ms > 0) {
+        savingsLabel = ms >= 100 ? `${Math.round((ms / 1000) * 10) / 10}s` : `${Math.round(ms)}ms`;
+      } else if (by != null && by > 0) {
+        const kb = by / 1024;
+        savingsLabel = kb >= 1024 ? `${(kb / 1024).toFixed(1)}MB` : `${Math.round(kb)}KB`;
+      }
+
+      return {
+        id: String(ref.id),
+        title: i18nTitle(a.title || ref.id),
+        scorePct: s,
+        displayValue: a.displayValue || "",
+        description: i18nRich(a.description || ""),
+        savingsLabel,
+      } as CatBreakItem;
+    })
+    .filter(Boolean) as CatBreakItem[];
+
   items.sort((A, B) => {
-    const sA = A.scorePct ?? -1, sB = B.scorePct ?? -1;
+    const sA = A.scorePct ?? -1,
+      sB = B.scorePct ?? -1;
     if (sA !== sB) return sA - sB;
-    const wA = (cat.auditRefs.find((r: any) => r.id === A.id)?.weight ?? 0);
-    const wB = (cat.auditRefs.find((r: any) => r.id === B.id)?.weight ?? 0);
+    const wA = cat.auditRefs.find((r: any) => r.id === A.id)?.weight ?? 0;
+    const wB = cat.auditRefs.find((r: any) => r.id === B.id)?.weight ?? 0;
     return wB - wA;
   });
 
   return items.slice(0, 9);
 }
 
-// UI de desglose de categoría
+// =================== UI: CategoryBreakdown ===================
 function CategoryBreakdown({
   label,
   items,
@@ -245,193 +385,318 @@ function CategoryBreakdown({
       <h3 style={{ margin: "0 0 12px 0", fontSize: 20, fontWeight: 700, color: "#0f172a" }}>
         Desglose de {label}
       </h3>
-      <div
-        className="diagnostico-grid"
-        style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}
-      >
-        {items.map((it) => (
-          <div key={it.id} className="item" style={{ paddingTop: 12, paddingBottom: 12 }}>
-            <h4 className="item-label" title={typeof it.description === "string" ? it.description : ""}>
-              {it.title}
-            </h4>
-            <CircularGauge
-              value={it.scorePct ?? 0}
-              max={100}
-              color={gaugeColor("performance", it.scorePct)}
-              decimals={0}
-              suffix="%"
-              size={106}
-            />
-            <p className="item-desc" style={{ minHeight: 22 }}>
-              {it.savingsLabel
-                ? `Ahorro: ${it.savingsLabel}`
-                : (it.displayValue || "—")}
-            </p>
-          </div>
-        ))}
+      <div className="diagnostico-grid">
+        {items.map((it) => {
+          const isNull = it.scorePct == null;
+          return (
+            <div key={it.id} className="item">
+              <h4
+                className="item-label"
+                title={typeof it.description === "string" ? it.description : ""}
+              >
+                {it.title}
+              </h4>
+              <CircularGauge
+                value={isNull ? 0 : it.scorePct!}
+                max={100}
+                color={isNull ? "#9ca3af" : gaugeColor("performance", it.scorePct)}
+                decimals={0}
+                suffix="%"
+                size={120}
+              />
+              <p className="item-desc">
+                {isNull
+                  ? "—"
+                  : it.savingsLabel
+                  ? `Ahorro: ${it.savingsLabel}`
+                  : it.displayValue || "—"}
+              </p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// =============== Halo de performance ===============
-function PerformanceHalo({
-  perf,
-  breakdown,
+// =================== PerfDial helpers ===================
+function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: number) {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const s = toRad(startDeg);
+  const e = toRad(endDeg);
+  const x1 = cx + r * Math.cos(s);
+  const y1 = cy + r * Math.sin(s);
+  const x2 = cx + r * Math.cos(e);
+  const y2 = cy + r * Math.sin(e);
+  const large = Math.abs(endDeg - startDeg) > 180 ? 1 : 0;
+  const sweep = endDeg > startDeg ? 1 : 0;
+  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} ${sweep} ${x2} ${y2}`;
+}
+
+// PerfDial (REEMPLAZO)
+type DialSeg = { id: MetricId; label: string; value: number | null };
+
+function PerfDial({
+  score,
+  segments,
+  size = 140,
 }: {
-  perf: { id: string; label: string; value: number | null; desc: string };
-  breakdown: Array<{ id: string; label: string; value: number | null; desc: string }>;
+  score: number | null;
+  segments: DialSeg[];
+  size?: number;
 }) {
-  const W = 880, H = 420, cx = W/2, cy = H/2;
-  const CENTER_W = 280, CENTER_H = 240;
-  const R = 185;
+  const W = size + 28;
+  const H = size + 28;
+  const cx = W / 2;
+  const cy = H / 2 + 2;
 
-  const wanted = ["fcp","lcp","ttfb","tbt","si"];
-  const metricMap: Record<string, any> = {};
-  breakdown.forEach(m => metricMap[m.id] = m);
-  const ids = wanted.filter(k => metricMap[k]);
-  const angles = [-90, -25, 25, 205, 155].slice(0, ids.length);
+  const strokeW = Math.max(8, Math.round(size * 0.083));
+  const segR = size * 0.42;
+  const innerR = size * 0.34;
+  const numFont = Math.round(size * 0.285);
+  const pctFont = Math.round(numFont * 0.47);
 
-  const nodes = ids.map((id, i) => {
-    const a = (angles[i] * Math.PI) / 180;
-    return { ...metricMap[id], x: cx + Math.cos(a)*R, y: cy + Math.sin(a)*R };
-  });
+  const trackColor = "#e5e7eb";
+  const numberColor = "#334155";
+
+  const makeArc = (r: number, startDeg: number, endDeg: number) => {
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const s = toRad(startDeg);
+    const e = toRad(endDeg);
+    const x1 = cx + r * Math.cos(s);
+    const y1 = cy + r * Math.sin(s);
+    const x2 = cx + r * Math.cos(e);
+    const y2 = cy + r * Math.sin(e);
+    const large = Math.abs(endDeg - startDeg) > 180 ? 1 : 0;
+    const sweep = endDeg > startDeg ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} ${sweep} ${x2} ${y2}`;
+  };
+
+  const layout: Record<string, [number, number, number]> = {
+    si:  [-110, -70, -90],
+    fcp: [ -40,   0, -20],
+    lcp: [  20,  60,  40],
+    cls: [ 140, 200, 170],
+    tbt: [ 210, 250, 230],
+  };
+  const segs = segments.filter((s) => layout[s.id]);
 
   return (
-    <div className="card" style={{ position: "relative", width: "100%", overflow: "hidden" }}>
+    <div style={{ width: "100%", display: "grid", placeItems: "center" }}>
+      <svg width={W} height={H}>
+        <circle cx={cx} cy={cy} r={segR} fill="none" stroke={trackColor} strokeWidth={strokeW} />
+        {segs.map((s) => {
+          const [a1, a2, la] = layout[s.id];
+          const col = gaugeColor(s.id, s.value);
+          return (
+            <g key={s.id}>
+              <path
+                d={makeArc(segR, a1, a2)}
+                stroke={col}
+                strokeWidth={strokeW}
+                fill="none"
+                strokeLinecap="round"
+              />
+              <text
+                x={cx + (segR + strokeW * 0.9) * Math.cos((la * Math.PI) / 180)}
+                y={cy + (segR + strokeW * 0.9) * Math.sin((la * Math.PI) / 180)}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                style={{ fontSize: Math.round(size * 0.083), fill: "#111827", fontWeight: 700, fontFamily: "inherit" }}
+              >
+                {s.label}
+              </text>
+            </g>
+          );
+        })}
+        <circle cx={cx} cy={cy} r={innerR} fill="#ffffff" />
+        <text
+          x={cx}
+          y={cy + 4}
+          textAnchor="middle"
+          style={{
+            fontSize: numFont,
+            fontWeight: 800,
+            fill: numberColor,
+            fontFamily: "inherit",
+            letterSpacing: "0.2px",
+          }}
+        >
+          {typeof score === "number" ? (
+            <>
+              {score}
+              <tspan style={{ fontSize: pctFont, fontWeight: 700, fontFamily: "inherit" }}>%</tspan>
+            </>
+          ) : (
+            "—"
+          )}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+// =================== Desglose de Performance (grid tipo SEO) ===================
+const perfMetricDescriptions: Record<string, string> = {
+  fcp: "Tiempo hasta la primera pintura de contenido.",
+  lcp: "Tiempo hasta la pintura del elemento con contenido más grande.",
+  tbt: "Tiempo total de bloqueo durante la carga.",
+  si:  "Índice de velocidad percibida durante el render.",
+  ttfb: "Tiempo que tarda el servidor en enviar el primer byte.",
+  cls: "Estabilidad visual (desplazamientos acumulados).",
+};
+
+function PerfBreakdownGrid({
+  items,
+}: {
+  items: Array<{ id: MetricId; label: string; value: number | null }>;
+}) {
+  if (!items.length) return null;
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
       <h3 style={{ margin: "0 0 12px 0", fontSize: 20, fontWeight: 700, color: "#0f172a" }}>
         Desglose de Performance
       </h3>
-
-      <div style={{ position: "relative", width: W, height: H, margin: "0 auto" }}>
-        {/* centro */}
-        <div
-          className="item"
-          style={{
-            position: "absolute",
-            left: cx - CENTER_W/2, top: cy - CENTER_H/2,
-            width: CENTER_W, height: CENTER_H,
-            display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center",
-          }}
-        >
-          <h4 className="item-label" style={{ marginBottom: 8 }}>{perf.label}</h4>
-          <CircularGauge
-            value={perf.value ?? 0}
-            max={100}
-            color={gaugeColor("performance", perf.value)}
-            decimals={0}
-            suffix="%"
-            size={150}
-          />
-          <p className="item-desc" style={{ textAlign: "center", marginTop: 10 }}>
-            {perf.value == null ? "N/A" : `${perf.value}%`} — {perf.desc}
-          </p>
-        </div>
-
-        {/* nodos alrededor */}
-        {nodes.map((n) => (
-          <div
-            key={n.id}
-            className="item"
-            style={{
-              position: "absolute",
-              left: n.x - 110, top: n.y - 70,
-              width: 220, height: 140,
-              display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center",
-              padding: 12,
-            }}
-          >
-            <h5 className="item-label" style={{ marginBottom: 6 }}>{n.label}</h5>
-            <CircularGauge
-              value={typeof n.value === "number" ? n.value : 0}
-              max={n.id === "performance" ? 100 : undefined}
-              color={gaugeColor(n.id, n.value)}
-              decimals={n.id === "performance" ? 0 : 1}
-              suffix={n.id === "performance" ? "%" : "s"}
-              size={84}
-            />
-            <p className="item-desc" style={{ marginTop: 6 }}>
-              {n.value == null ? "N/A" : n.id === "performance" ? `${n.value}%` : `${n.value.toFixed(1)}s`}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 16, alignItems: "center", marginTop: 8, color: "#64748b", fontSize: 14 }}>
-        <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-          <span style={{ width: 10, height: 10, borderRadius: 999, background: "#ef4444" }} /> 0–49
-        </span>
-        <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-          <span style={{ width: 10, height: 10, borderRadius: 999, background: "#f59e0b" }} /> 50–89
-        </span>
-        <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-          <span style={{ width: 10, height: 10, borderRadius: 999, background: "#22c55e" }} /> 90–100
-        </span>
+      <div className="diagnostico-grid">
+        {items.map((m) => {
+          const isTime = m.id !== "performance" && m.id !== "cls";
+          const isCLS = m.id === "cls";
+          const v = m.value;
+          const subtitle = perfMetricDescriptions[m.id] || "";
+          return (
+            <div key={m.id} className="item">
+              <h4 className="item-label">{m.label}</h4>
+              <CircularGauge
+                value={
+                  v == null
+                    ? 0
+                    : isTime
+                    ? Number(v.toFixed(1))
+                    : isCLS
+                    ? Number((v ?? 0).toFixed(2))
+                    : Number(v)
+                }
+                max={isTime ? undefined : isCLS ? undefined : 100}
+                color={v == null ? "#9ca3af" : gaugeColor(m.id, v)}
+                decimals={isTime ? 1 : isCLS ? 2 : 0}
+                suffix={isTime ? "s" : isCLS ? "" : "%"}
+                size={120}
+              />
+              <p className="item-desc" style={{ marginBottom: 4 }}>
+                {v == null
+                  ? "—"
+                  : isTime
+                  ? `${v.toFixed(1)}s`
+                  : isCLS
+                  ? `${v.toFixed(2)}`
+                  : `${v}%`}
+              </p>
+              <p style={{ margin: 0, fontSize: 12, color: "#64748b", textAlign: "center" }}>
+                {subtitle}
+              </p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// --- Mini componente para mostrar la captura de pantalla de Lighthouse ---
+// =================== Captura final de Lighthouse ===================
+function getFinalScreenshot(apiData: any): string | null {
+  const thumb =
+    apiData?.raw?.lighthouseResult?.audits?.["final-screenshot"]?.details?.data ||
+    apiData?.lighthouseResult?.audits?.["final-screenshot"]?.details?.data ||
+    apiData?.raw?.audits?.["final-screenshot"]?.details?.data ||
+    apiData?.audits?.["final-screenshot"]?.details?.data ||
+    apiData?.raw?.lighthouseResult?.audits?.["screenshot-thumbnails"]?.details?.items?.slice(-1)?.[0]?.data ||
+    apiData?.lighthouseResult?.audits?.["screenshot-thumbnails"]?.details?.items?.slice(-1)?.[0]?.data ||
+    apiData?.raw?.audits?.["screenshot-thumbnails"]?.details?.items?.slice(-1)?.[0]?.data ||
+    apiData?.audits?.["screenshot-thumbnails"]?.details?.items?.slice(-1)?.[0]?.data;
+
+  return typeof thumb === "string" && thumb.startsWith("data:") ? thumb : null;
+}
+
+// =================== Mini modal de screenshot ===================
 function ScreenshotPreview({ src }: { src: string | null }) {
   const [open, setOpen] = React.useState(false);
   if (!src) return null;
 
   return (
     <div className="card" style={{ marginTop: 16 }}>
-      <div style={{
-        display: "flex", alignItems: "center",
-        justifyContent: "space-between", marginBottom: 8
-      }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 8,
+        }}
+      >
         <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#0f172a" }}>
           Vista previa (captura)
         </h3>
         <button
           onClick={() => setOpen(true)}
           style={{
-            padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb",
-            background: "#fff", cursor: "pointer", fontWeight: 600
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: "1px solid #e5e7eb",
+            background: "#fff",
+            cursor: "pointer",
+            fontWeight: 600,
           }}
         >
           Abrir
         </button>
       </div>
 
-      {/* Miniatura pequeña */}
       <img
         src={src}
         alt="Vista previa de la página"
         style={{
-          width: 240, height: "auto", borderRadius: 12,
-          display: "block", boxShadow: "0 1px 8px rgba(0,0,0,.06)"
+          width: 240,
+          height: "auto",
+          borderRadius: 12,
+          display: "block",
+          boxShadow: "0 1px 8px rgba(0,0,0,.06)",
         }}
       />
 
-      {/* Modal para ver grande */}
       {open && (
         <div
           onClick={() => setOpen(false)}
           style={{
-            position: "fixed", inset: 0, background: "rgba(0,0,0,.6)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            zIndex: 1000, padding: 20
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 20,
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: "#fff", borderRadius: 16, padding: 16,
-              maxWidth: "90vw", maxHeight: "90vh", boxShadow: "0 10px 30px rgba(0,0,0,.2)"
+              background: "#fff",
+              borderRadius: 16,
+              padding: 16,
+              maxWidth: "90vw",
+              maxHeight: "90vh",
+              boxShadow: "0 10px 30px rgba(0,0,0,.2)",
             }}
           >
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
               <button
                 onClick={() => setOpen(false)}
                 style={{
-                  padding: "6px 10px", borderRadius: 8, border: "1px solid #e5e7eb",
-                  background: "#fff", cursor: "pointer", fontWeight: 600
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #e5e7eb",
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontWeight: 600,
                 }}
               >
                 Cerrar
@@ -440,7 +705,12 @@ function ScreenshotPreview({ src }: { src: string | null }) {
             <img
               src={src}
               alt="Vista previa ampliada"
-              style={{ maxWidth: "85vw", maxHeight: "80vh", borderRadius: 12, display: "block" }}
+              style={{
+                maxWidth: "85vw",
+                maxHeight: "80vh",
+                borderRadius: 12,
+                display: "block",
+              }}
             />
           </div>
         </div>
@@ -449,12 +719,18 @@ function ScreenshotPreview({ src }: { src: string | null }) {
   );
 }
 
-// =============== Componente principal ===============
+// =================== Componente principal ===================
 export default function DiagnosticoView() {
   const params = useParams();
   const location = useLocation();
   const id: string | null =
     (params as any)?.id || new URLSearchParams(location.search).get("id");
+
+  // NUEVO: estrategia (Móvil/Ordenador)
+  const qs = new URLSearchParams(location.search);
+  const initialStrategy =
+    (qs.get("strategy") === "desktop" ? "desktop" : "mobile") as "mobile" | "desktop";
+  const [strategy, setStrategy] = useState<"mobile" | "desktop">(initialStrategy);
 
   const [auditData, setAuditData] = useState<AuditEnvelope | null>(null);
   const [err, setErr] = useState<string>("");
@@ -464,76 +740,150 @@ export default function DiagnosticoView() {
   // toggles de desgloses
   const [showPerfDetails, setShowPerfDetails] = useState(true);
   const [showAccDetails, setShowAccDetails] = useState(false);
-  const [showBPDetails,  setShowBPDetails]  = useState(false);
+  const [showBPDetails, setShowBPDetails] = useState(false);
   const [showSeoDetails, setShowSeoDetails] = useState(false);
 
   const contenedorReporteRef = useRef<HTMLDivElement | null>(null);
 
+  // Sincroniza la URL con la estrategia seleccionada (para poder compartir el link)
   useEffect(() => {
-    setAuditData(null); setErr(""); setActiveApi(""); setProcessed(null);
-    setShowAccDetails(false); setShowBPDetails(false); setShowSeoDetails(false);
+    const p = new URLSearchParams(location.search);
+    p.set("strategy", strategy);
+    const newUrl = `${location.pathname}?${p.toString()}`;
+    window.history.replaceState(null, "", newUrl);
+  }, [strategy, location.pathname, location.search]);
+
+  useEffect(() => {
+    setAuditData(null);
+    setErr("");
+    setActiveApi("");
+    setProcessed(null);
+    setShowAccDetails(false);
+    setShowBPDetails(false);
+    setShowSeoDetails(false);
+
     if (!id) return;
     const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(String(id).trim());
-    if (!isValidObjectId) { setErr("ID inválido"); return; }
+    if (!isValidObjectId) {
+      setErr("ID inválido");
+      return;
+    }
 
     let mounted = true;
     (async () => {
       try {
-        const res = await fetch(`/api/audit/${id}`);
+        // 🔹 Petición por ID con strategy + anticache
+        const ts = Date.now();
+        const res = await fetch(`/api/audit/${id}?strategy=${strategy}&_=${ts}`, {
+          headers: { "Cache-Control": "no-cache" },
+        });
         const payload = await safeParseJSON(res);
-        if (!res.ok) throw new Error(payload.error || payload.message || payload._raw || `HTTP ${res.status}`);
+        if (!res.ok)
+          throw new Error(
+            payload.error || payload.message || payload._raw || `HTTP ${res.status}`
+          );
 
+        // Selecciona API disponible priorizando pagespeed
         const available = Object.keys(payload.audit || {}).filter((k) => {
           const m = (payload.audit?.[k] || {}).metrics || payload.audit?.[k] || {};
           return Object.keys(m).length > 0;
         });
-        const ORDER = ["pagespeed","unlighthouse"] as const;
-        const apis = ORDER.filter(k => available.includes(k));
-        if (mounted) { setActiveApi(apis[0] || ""); setAuditData(payload); }
+        const ORDER = ["pagespeed", "unlighthouse"] as const;
+        const apis = ORDER.filter((k) => available.includes(k));
+        if (mounted) {
+          setActiveApi(apis[0] || "");
+          setAuditData(payload);
+        }
 
-        if (payload.url) {
-          const urlSafe = encodeURIComponent(payload.url as string);
+        // ✅ Verificamos si el LHR coincide con la estrategia solicitada
+        try {
+          const currentApiKey = apis[0] || "";
+          const currentApiData = (payload.audit?.[currentApiKey] || {}) as any;
+          const ff = detectFormFactor(currentApiData);
+
+          if (payload.url && ff && ff !== strategy) {
+            // Fallback: pedimos por URL+strategy (mismo microservicio, otro endpoint del FormController)
+            const forced = await fetchAuditByUrlWithStrategy(payload.url as string, strategy, ts);
+            if (forced && mounted) {
+              const available2 = Object.keys(forced.audit || {}).filter((k: string) => {
+                const m = (forced.audit?.[k] || {}).metrics || forced.audit?.[k] || {};
+                return Object.keys(m).length > 0;
+              });
+              const apis2 = ORDER.filter((k) => available2.includes(k));
+              setActiveApi(apis2[0] || currentApiKey);
+              setAuditData(forced);
+            }
+          }
+        } catch {}
+
+        // 🔹 Processed con strategy (solo para tendencias)
+        if ((payload.url || (auditData as any)?.url)) {
+          const urlForProcessed = (payload.url || (auditData as any)?.url) as string;
+          const urlSafe = encodeURIComponent(urlForProcessed);
           try {
-            const r = await fetch(`/api/diagnostics/${urlSafe}/processed`);
+            const r = await fetch(
+              `/api/diagnostics/${urlSafe}/processed?strategy=${strategy}&_=${ts}`,
+              { headers: { "Cache-Control": "no-cache" } }
+            );
             if (!r.ok) {
               if (r.status === 404 && (payload as any)?._id) {
-                const r2 = await fetch(`/api/diagnostics/by-id/${(payload as any)._id}/processed`);
+                const r2 = await fetch(
+                  `/api/diagnostics/by-id/${(payload as any)._id}/processed?strategy=${strategy}&_=${ts}`,
+                  { headers: { "Cache-Control": "no-cache" } }
+                );
                 const d2 = await safeParseJSON(r2);
-                if (!r2.ok) throw new Error(d2.error || d2.message || d2._raw || `HTTP ${r2.status}`);
+                if (!r2.ok)
+                  throw new Error(
+                    d2.error || d2.message || d2._raw || `HTTP ${r2.status}`
+                  );
                 if (mounted) setProcessed(d2);
               } else {
                 const errData = await safeParseJSON(r);
-                throw new Error(errData.error || errData.message || errData._raw || `HTTP ${r.status}`);
+                throw new Error(
+                  errData.error || errData.message || errData._raw || `HTTP ${r.status}`
+                );
               }
             } else {
               const d = await safeParseJSON(r);
               if (mounted) setProcessed(d);
             }
-          } catch (e) { console.warn("[diagnostics/processed] fetch error:", e); }
+          } catch (e) {
+            console.warn("[diagnostics/processed] fetch error:", e);
+          }
         }
-      } catch (e: any) { if (mounted) setErr(e?.message || String(e)); }
+      } catch (e: any) {
+        if (mounted) setErr(e?.message || String(e));
+      }
     })();
-    return () => { mounted = false; };
-  }, [id]);
 
-  if (!id) return (
-    <div className="card">
-      <p className="error">Falta el ID del diagnóstico.</p>
-      <Link to="/" className="back-link">← Volver</Link>
-    </div>
-  );
-  if (err) return (
-    <div className="card">
-      <p className="error">Error: {err}</p>
-      <Link to="/" className="back-link">← Volver</Link>
-    </div>
-  );
-  if (!auditData) return (
-    <div className="card loading-placeholder">
-      <div className="spinner" />
-      <p>Cargando diagnóstico…</p>
-    </div>
-  );
+    return () => {
+      mounted = false;
+    };
+  }, [id, strategy]); // <- cambia todo al alternar móvil/ordenador
+
+  if (!id)
+    return (
+      <div className="card">
+        <p className="error">Falta el ID del diagnóstico.</p>
+        <Link to="/" className="back-link">← Volver</Link>
+      </div>
+    );
+
+  if (err)
+    return (
+      <div className="card">
+        <p className="error">Error: {err}</p>
+        <Link to="/" className="back-link">← Volver</Link>
+      </div>
+    );
+
+  if (!auditData)
+    return (
+      <div className="card loading-placeholder">
+        <div className="spinner" />
+        <p>Cargando diagnóstico…</p>
+      </div>
+    );
 
   // ======== Datos ========
   const { url, fecha, audit = {} } = auditData as any;
@@ -544,16 +894,22 @@ export default function DiagnosticoView() {
     return (
       <div className="card">
         <Link to="/" className="back-link">← Nuevo diagnóstico</Link>
-        <Link to={`/historico?url=${encodeURIComponent(url)}`} className="back-link" style={{ marginLeft: "1rem" }}>
+        <Link
+          to={`/historico?url=${encodeURIComponent(url)}`}
+          className="back-link"
+          style={{ marginLeft: "1rem" }}
+        >
           Ver histórico de esta URL
         </Link>
-        <h2 className="diagnostico-title">Diagnóstico de <span className="url">{url}</span></h2>
+        <h2 className="diagnostico-title">
+          Diagnóstico de <span className="url">{url}</span>
+        </h2>
         <p className="no-metrics">No se encontraron métricas para la API seleccionada.</p>
       </div>
     );
   }
 
-  // processed helpers
+  // processed helpers (SOLO para tendencias)
   const pVal = (k: string): number | null => {
     const m: any = (processed as any)?.metrics;
     if (Array.isArray(m)) {
@@ -561,11 +917,13 @@ export default function DiagnosticoView() {
       return typeof v === "number" && !Number.isNaN(v) ? v : null;
     } else if (m && typeof m === "object") {
       const raw = (m as any)[k];
-      const v = typeof raw === "number" ? raw : typeof raw?.raw === "number" ? raw.raw : null;
+      const v =
+        typeof raw === "number" ? raw : typeof raw?.raw === "number" ? raw.raw : null;
       return typeof v === "number" && !Number.isNaN(v) ? v : null;
     }
     return null;
   };
+
   const pTrend = (k: string): Trend | undefined => {
     const m: any = (processed as any)?.metrics;
     if (Array.isArray(m)) return m.find((x: any) => x?.key === k)?.trend as Trend | undefined;
@@ -573,75 +931,97 @@ export default function DiagnosticoView() {
     return undefined;
   };
 
-  // Performance
+  // Performance — SOLO del payload actual (o categories)
   let performance: number | null = null;
-  if (typeof apiData.performance === "number") performance = Math.round(apiData.performance);
-  else if (typeof metrics.performance === "number") performance = Math.round(metrics.performance);
-  else { const pv = pVal("performance"); if (typeof pv === "number") performance = Math.round(pv); }
-
-  // tiempos base
-  const fcpSec  = toSeconds(metrics.fcp)  ?? pVal("fcp");
-  const lcpSec  = toSeconds(metrics.lcp)  ?? pVal("lcp");
-  const siSec   = toSeconds(metrics.si)   ?? pVal("si");
-  let   ttfbSec = toSeconds(metrics.ttfb) ?? pVal("ttfb");
-  const tbtApiS   = toSeconds(metrics.tbt);
-  const tbtProcMs = pVal("tbt");
-  const tbtSec = tbtApiS != null ? tbtApiS : (typeof tbtProcMs === "number" ? Math.round((tbtProcMs/1000)*10)/10 : null);
-
-  // Fallback TTFB
-  if (ttfbSec == null || ttfbSec === 0) {
-    try {
-      const audits = pickAudits(apiData);
-      const a = audits?.["server-response-time"] || audits?.["time-to-first-byte"] || audits?.["metrics"];
-      const nv = a?.numericValue;
-      if (typeof nv === "number" && nv >= 0) ttfbSec = Math.round((nv/1000)*10)/10;
-      const items = a?.details?.items;
-      const obs = Array.isArray(items) && items.length ? items[0]?.observedTimeToFirstByte : undefined;
-      if ((ttfbSec == null || ttfbSec === 0) && typeof obs === "number") ttfbSec = Math.round((obs/1000)*10)/10;
-      if (ttfbSec == null || ttfbSec === 0) {
-        const dv = a?.displayValue as string | undefined;
-        if (dv) {
-          const m1 = dv.match(/([\d.,]+)\s*ms/i);
-          const m2 = dv.match(/([\d.,]+)\s*s/i);
-          if (m1) ttfbSec = Math.round((parseFloat(m1[1].replace(",","."))/1000)*10)/10;
-          else if (m2) ttfbSec = Math.round(parseFloat(m2[1].replace(",","."))*10)/10;
-        }
-      }
-    } catch {}
+  if (typeof apiData.performance === "number")
+    performance = Math.round(apiData.performance);
+  else if (typeof metrics.performance === "number")
+    performance = Math.round(metrics.performance);
+  else {
+    const catsLocal = readCategoryScoresFromApi(apiData);
+    performance = catsLocal.performance;
   }
+
+  // tiempos base — SIEMPRE del payload actual
+  const fcpSec =
+    toSeconds(metrics.fcp) ?? getAuditSeconds(apiData, "first-contentful-paint");
+  const lcpSec =
+    toSeconds(metrics.lcp) ?? getAuditSeconds(apiData, "largest-contentful-paint");
+  const siSec =
+    toSeconds(metrics.si) ?? getAuditSeconds(apiData, "speed-index");
+  const tbtSec =
+    toSeconds(metrics.tbt) ?? getAuditSeconds(apiData, "total-blocking-time");
+  let ttfbSec =
+    toSeconds(metrics.ttfb) ??
+    getAuditSeconds(apiData, "server-response-time") ??
+    getAuditSeconds(apiData, "time-to-first-byte");
+
+  // CLS
+  let clsVal: number | null = null;
+  try {
+    const audits = pickAudits(apiData);
+    const clsAudit =
+      audits?.["cumulative-layout-shift"] || audits?.["cumulative-layout-shift-element"] || audits?.["cls"];
+    const nv = clsAudit?.numericValue;
+    if (typeof nv === "number" && nv >= 0) clsVal = Math.round(nv * 100) / 100;
+  } catch {}
 
   const trendByKey: Record<string, Trend | undefined> = {
     performance: pTrend("performance"),
-    fcp: pTrend("fcp"), lcp: pTrend("lcp"), si: pTrend("si"),
-    ttfb: pTrend("ttfb"), tbt: pTrend("tbt"),
+    fcp: pTrend("fcp"),
+    lcp: pTrend("lcp"),
+    si: pTrend("si"),
+    ttfb: pTrend("ttfb"),
+    tbt: pTrend("tbt"),
+    cls: pTrend("cls"),
   };
 
+  // Categorías — SOLO del payload actual
   const cats = readCategoryScoresFromApi(apiData);
-  const pickPct = (prefer: number | null | undefined, key: "accessibility" | "best-practices" | "seo"): number | null =>
-    typeof prefer === "number" ? Math.round(prefer) : (typeof pVal(key) === "number" ? Math.round(pVal(key)!) : null);
-  const accessibilityPct = pickPct(cats.accessibility, "accessibility");
-  const bestPracticesPct = pickPct(cats["best-practices"], "best-practices");
-  const seoPct           = pickPct(cats.seo, "seo");
+  const accessibilityPct = cats.accessibility;
+  const bestPracticesPct = cats["best-practices"];
+  const seoPct = cats.seo;
 
   // Tarjetas (grid principal)
-  const perfCard = { id: "performance" as MetricId, label: "RENDIMIENTO", value: performance,
-    desc: `Porcentaje de rendimiento según ${API_LABELS[activeApi]}.` };
+  const perfCard = {
+    id: "performance" as MetricId,
+    label: "RENDIMIENTO",
+    value: performance,
+    desc: `Porcentaje de rendimiento según ${API_LABELS[activeApi]} (${strategy === "mobile" ? "Móvil" : "Ordenador"}).`,
+  };
   const categoryCards = [
-    { id: "accessibility" as MetricId,  label: "ACCESIBILIDAD",       value: accessibilityPct, desc: "Buenas prácticas de accesibilidad (WAI-ARIA, contraste, labels, etc.)" },
-    { id: "best-practices" as MetricId, label: "PRACTICAS RECOMEND.", value: bestPracticesPct, desc: "Seguridad y prácticas modernas de desarrollo" },
-    { id: "seo" as MetricId,            label: "SEO",                 value: seoPct,           desc: "Buenas prácticas básicas de SEO" },
+    {
+      id: "accessibility" as MetricId,
+      label: "ACCESIBILIDAD",
+      value: accessibilityPct,
+      desc: "Buenas prácticas de accesibilidad (WAI-ARIA, contraste, labels, etc.)",
+    },
+    {
+      id: "best-practices" as MetricId,
+      label: "PRACTICAS RECOMEND.",
+      value: bestPracticesPct,
+      desc: "Seguridad y prácticas modernas de desarrollo",
+    },
+    {
+      id: "seo" as MetricId,
+      label: "SEO",
+      value: seoPct,
+      desc: "Buenas prácticas básicas de SEO",
+    },
   ];
 
-  // Desglose (solo aquí se muestran las métricas de tiempo)
-  const perfBreakdown = [
-    { id: "fcp" as MetricId,  label: "FCP",  value: fcpSec,  desc: "Tiempo hasta la primera pintura de contenido (s)" },
-    { id: "lcp" as MetricId,  label: "LCP",  value: lcpSec,  desc: "Tiempo hasta la pintura de contenido más grande (s)" },
-    { id: "tbt" as MetricId,  label: "TBT",  value: tbtSec,  desc: "Tiempo total de bloqueo (s)" },
-    { id: "si"  as MetricId,  label: "SI",   value: siSec,   desc: "Índice de velocidad (s)" },
-    { id: "ttfb" as MetricId, label: "TTFB", value: ttfbSec, desc: "Tiempo hasta el primer byte (s)" },
+  // Desglose Performance (grid tipo SEO)
+  const perfBreakItems = [
+    { id: "fcp" as MetricId, label: "FCP", value: fcpSec },
+    { id: "lcp" as MetricId, label: "LCP", value: lcpSec },
+    { id: "tbt" as MetricId, label: "TBT", value: tbtSec },
+    { id: "si"  as MetricId, label: "SI",  value: siSec },
+    clsVal != null
+      ? ({ id: "cls" as MetricId, label: "CLS", value: clsVal } as const)
+      : ({ id: "ttfb" as MetricId, label: "TTFB", value: ttfbSec } as const),
   ];
 
-  // Desgloses por categoría (A11y/BP/SEO) desde LHR traducidos
+  // Desgloses por categoría
   const accBreak = getCategoryBreakdown("accessibility", apiData);
   const bpBreak  = getCategoryBreakdown("best-practices", apiData);
   const seoBreak = getCategoryBreakdown("seo", apiData);
@@ -669,51 +1049,50 @@ export default function DiagnosticoView() {
         savingsLabel,
         type: kind,
         severity: kind === "error" ? "critical" : "info",
-        impactScore:
-          kind === "error" ? 2000 : typeof e.impactScore === "number" ? e.impactScore : 100,
+        impactScore: kind === "error" ? 2000 : typeof e.impactScore === "number" ? e.impactScore : 100,
       };
     });
 
-    // Devuelve la captura final (base64) si está disponible en el LHR
-  function getFinalScreenshot(apiData: any): string | null {
-    const thumb =
-      apiData?.raw?.lighthouseResult?.audits?.["final-screenshot"]?.details?.data ||
-      apiData?.lighthouseResult?.audits?.["final-screenshot"]?.details?.data ||
-      apiData?.raw?.audits?.["final-screenshot"]?.details?.data ||
-      apiData?.audits?.["final-screenshot"]?.details?.data ||
-      // fallback a la última miniatura si no hay final-screenshot
-      apiData?.raw?.lighthouseResult?.audits?.["screenshot-thumbnails"]?.details?.items?.slice(-1)?.[0]?.data ||
-      apiData?.lighthouseResult?.audits?.["screenshot-thumbnails"]?.details?.items?.slice(-1)?.[0]?.data ||
-      apiData?.raw?.audits?.["screenshot-thumbnails"]?.details?.items?.slice(-1)?.[0]?.data ||
-      apiData?.audits?.["screenshot-thumbnails"]?.details?.items?.slice(-1)?.[0]?.data;
-
-    return (typeof thumb === "string" && thumb.startsWith("data:")) ? thumb : null;
-  }
-
   const planItems = [
     ...opportunities.map((o) => ({
-      type: "improvement" as const, severity: "info" as const, impactScore: 100,
+      type: "improvement" as const,
+      severity: "info" as const,
+      impactScore: 100,
       ...o,
-      title: i18nTitle(o.title || o.id),                 // 👈 i18n consistente
-      recommendation: i18nRich(o.recommendation || ""), // 👈 i18n consistente
+      title: i18nTitle(o.title || o.id),
+      recommendation: i18nRich(o.recommendation || ""),
     })),
     ...mapFindingToOpp(detectedErrors, "error"),
     ...mapFindingToOpp(improvements, "improvement"),
   ];
 
-  const renderCard = (item: { id: MetricId; label: string; value: number | null; desc: string }) => {
-    const isPct = ["performance","accessibility","best-practices","seo"].includes(item.id);
+  const renderCard = (item: {
+    id: MetricId;
+    label: string;
+    value: number | null;
+    desc: string;
+  }) => {
+    const isPct = ["performance", "accessibility", "best-practices", "seo"].includes(item.id);
     const clickProps =
-      item.id === "performance" ? { onClick: () => setShowPerfDetails(v => !v), style: { cursor: "pointer" } } :
-      item.id === "accessibility" ? { onClick: () => setShowAccDetails(v => !v), style: { cursor: "pointer" } } :
-      item.id === "best-practices" ? { onClick: () => setShowBPDetails(v => !v), style: { cursor: "pointer" } } :
-      item.id === "seo" ? { onClick: () => setShowSeoDetails(v => !v), style: { cursor: "pointer" } } :
-      {};
+      item.id === "performance"
+        ? { onClick: () => setShowPerfDetails((v) => !v), style: { cursor: "pointer" } }
+        : item.id === "accessibility"
+        ? { onClick: () => setShowAccDetails((v) => !v), style: { cursor: "pointer" } }
+        : item.id === "best-practices"
+        ? { onClick: () => setShowBPDetails((v) => !v), style: { cursor: "pointer" } }
+        : item.id === "seo"
+        ? { onClick: () => setShowSeoDetails((v) => !v), style: { cursor: "pointer" } }
+        : {};
+
     return (
-      <div key={item.id} className="item" {...clickProps}>
+      <div key={item.id} className="item" {...(clickProps as any)}>
         <h3 className="item-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {item.label}
-          {trendByKey[item.id] && <span style={{ fontSize: 12, color: trendColor(trendByKey[item.id]) }}>{trendSymbol(trendByKey[item.id])}</span>}
+          {trendByKey[item.id] && (
+            <span style={{ fontSize: 12, color: trendColor(trendByKey[item.id]) }}>
+              {trendSymbol(trendByKey[item.id])}
+            </span>
+          )}
           {item.id === "performance" && (
             <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
               {showPerfDetails ? "Ocultar desgloses" : "Mostrar desgloses"}
@@ -735,56 +1114,104 @@ export default function DiagnosticoView() {
             </span>
           )}
         </h3>
-        <CircularGauge
-          value={item.value ?? 0}
-          max={isPct ? 100 : undefined}
-          color={gaugeColor(item.id, item.value)}
-          decimals={isPct ? 0 : 1}
-          suffix={isPct ? "%" : "s"}
-          size={120}
-        />
-        <p className="item-desc">
-          {item.value == null ? "N/A" : isPct ? `${item.value}%` : `${(item.value as number).toFixed(1)}s`} — {item.desc}
-        </p>
+
+        {item.id === "performance" ? (
+          <>
+            <PerfDial
+              score={item.value ?? null}
+              segments={[
+                { id: "si",  label: "SI",  value: siSec },
+                { id: "fcp", label: "FCP", value: fcpSec },
+                { id: "lcp", label: "LCP", value: lcpSec },
+                { id: "cls", label: "CLS", value: clsVal },
+                { id: "tbt", label: "TBT", value: tbtSec },
+              ].filter(Boolean) as DialSeg[]}
+              size={130}
+            />
+            <p className="item-desc">
+              {item.value == null ? "N/A" : `${item.value}%`} — {item.desc}
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="w-full min-h-[160px] flex items-center justify-center">
+              <CircularGauge
+                value={item.value ?? 0}
+                max={isPct ? 100 : undefined}
+                color={gaugeColor(item.id, item.value)}
+                decimals={isPct ? 0 : 1}
+                suffix={isPct ? "%" : "s"}
+                size={120}
+              />
+            </div>
+            <p className="item-desc">
+              {item.value == null
+                ? "N/A"
+                : isPct
+                ? `${item.value}%`
+                : `${(item.value as number).toFixed(1)}s`}{" "}
+              — {item.desc}
+            </p>
+          </>
+        )}
       </div>
     );
   };
 
-  // ============ UI ============
+  // =================== UI ===================
   return (
     <div className="card">
       <div ref={contenedorReporteRef}>
         <Link to="/" className="back-link">Nuevo diagnóstico</Link>
-        <Link to={`/historico?url=${encodeURIComponent(url as string)}`} className="back-link" style={{ marginLeft: "1rem" }}>
+        <Link
+          to={`/historico?url=${encodeURIComponent(url as string)}`}
+          className="back-link"
+          style={{ marginLeft: "1rem" }}
+        >
           Ver histórico de esta URL
         </Link>
 
-        <h2 className="diagnostico-title">Diagnóstico de <span className="url">{url}</span></h2>
+        <h2 className="diagnostico-title">
+          Diagnóstico de <span className="url">{url}</span>
+        </h2>
         <div className="date">{new Date(fecha as string).toLocaleString()}</div>
 
-        <div className="tabs">
-          {Object.keys(audit as Record<string, any>).map((api) => (
-            <button key={api} onClick={() => setActiveApi(api)} className={`tab-button${activeApi === api ? " active" : ""}`}>
-              {API_LABELS[api] || api}
-            </button>
-          ))}
+        {/* NUEVO: Tabs de estrategia (Móvil | Ordenador) */}
+        <div className="tabs" style={{ marginTop: 8 }}>
+          <button
+            onClick={() => setStrategy("mobile")}
+            className={`tab-button${strategy === "mobile" ? " active" : ""}`}
+            title="Ejecuta/consulta métricas para móviles"
+          >
+            📱 Móvil
+          </button>
+          <button
+            onClick={() => setStrategy("desktop")}
+            className={`tab-button${strategy === "desktop" ? " active" : ""}`}
+            title="Ejecuta/consulta métricas para ordenadores"
+            style={{ marginLeft: 8 }}
+          >
+            🖥️ Ordenador
+          </button>
         </div>
 
-        {/* Grid principal: solo performance + categorías */}
+        {/* 🔕 Barra de API (Lighthouse/Unlighthouse) eliminada */}
+
+        {/* Grid principal: performance + categorías */}
         <div className="diagnostico-grid">
           {renderCard(perfCard)}
           {categoryCards.map(renderCard)}
         </div>
 
-        {/* Desglose Performance */}
+        {/* Desglose Performance — tipo SEO */}
         {showPerfDetails && (
           <>
-            <PerformanceHalo perf={perfCard} breakdown={perfBreakdown} />
+            <PerfBreakdownGrid items={perfBreakItems as any} />
             <ScreenshotPreview src={getFinalScreenshot(apiData)} />
           </>
         )}
 
-        {/* Desglose Accesibilidad / Best Practices / SEO (traducción asegurada) */}
+        {/* Desglose Accesibilidad / Best Practices / SEO */}
         {showAccDetails && (
           <CategoryBreakdown
             label="Accesibilidad"
@@ -806,18 +1233,23 @@ export default function DiagnosticoView() {
           />
         )}
 
-        <ActionPlanPanel opportunities={planItems as any} performance={performance ?? undefined} />
+        <ActionPlanPanel
+          opportunities={planItems as any}
+          performance={performance ?? undefined}
+        />
       </div>
 
-      <EmailSendBar
-        captureRef={contenedorReporteRef as any}
-        url={url as string}
-        email={(auditData as any)?.email || ""}
-        hideEmailInput={true}
-        subject={`Diagnóstico de ${url}`}
-        endpoint="/api/audit/send-diagnostic"
-        includePdf={true}
-      />
+    <EmailSendBar
+    captureRef={contenedorReporteRef}
+    url={url as string}
+    subject={`Diagnóstico de ${url}`}
+    includePdf
+    applyPdfClass
+    pdfClassName="pdf-root"
+    /* sin captureWidthPx => autodetecta; pásalo si quieres fijar, ej. 1280 */
+    extraWaitMs={200}
+    endpoint="/api/audit/send-diagnostic"
+  />
     </div>
   );
 }

@@ -1,193 +1,200 @@
-// src/lib/lh-i18n-es.ts
-// Traductor “best-effort” para títulos, descripciones y etiquetas de ahorro de Lighthouse/PSI.
-// i18n Lighthouse helpers
+/**
+ * i18n ligero para resultados Lighthouse → ES
+ * - tTitle(): traduce títulos y encabezados (incluye textos dentro de [enlaces])
+ * - tRich(): traduce descripciones conservando markdown y enlaces
+ * - tSavings(): normaliza etiquetas de “ahorro” (ms/s/KiB/KB/MB, etc.)
+ *
+ * Diseño:
+ * 1) Diccionarios de títulos/etiquetas comunes
+ * 2) Reglas de fraseo genéricas (Learn more..., Consider..., etc.)
+ * 3) Frases concretas que aparecen en Plan de acción y Detalles
+ */
 
-type U = unknown;
+type Dict = Array<[RegExp, string]>;
 
-const norm = (s: U) =>
-  String(s ?? "")
-    .toLowerCase()
-    .replace(/[`’'"]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+const rx = (s: string, flags = "gi") => new RegExp(s.replace(/\//g, "\\/"), flags);
 
-/** Traducciones exactas (respetan mayúsculas/espaciado del LHR) */
-const T_EXACT = new Map<string, string>([
-  // ===== Métricas / secciones comunes =====
-  ["First Contentful Paint", "Primera pintura con contenido (FCP)"],
-  ["Largest Contentful Paint", "Pintura de mayor contenido (LCP)"],
-  ["Largest Contentful Paint element", "Elemento de la pintura de contenido más grande (LCP)"],
-  ["Speed Index", "Índice de velocidad (SI)"],
-  ["Time to Interactive", "Tiempo hasta interactivo (TTI)"],
-  ["Total Blocking Time", "Tiempo total de bloqueo (TBT)"],
-  ["Cumulative Layout Shift", "Desplazamiento acumulado de diseño (CLS)"],
-  ["Document request latency", "Latencia de la solicitud del documento"],
-  ["Network Round Trip Times", "Tiempos de ida y vuelta de red (RTT)"],
-
-  // ===== Oportunidades / diagnósticos =====
-  ["Eliminate render-blocking resources", "Eliminar recursos que bloquean el renderizado"],
-  ["Reduce unused JavaScript", "Reducir JavaScript no utilizado"],
-  ["Reduce unused CSS", "Reducir CSS no utilizado"],
-  ["Serve images in next-gen formats", "Servir imágenes en formatos modernos"],
-  ["Efficiently encode images", "Codificar imágenes eficientemente"],
-  ["Properly size images", "Ajustar tamaño de imágenes"],
-  ["Defer offscreen images", "Diferir imágenes fuera de pantalla"],
-  ["Preload Largest Contentful Paint image", "Precargar la imagen de LCP"],
-  ["Avoid chaining critical requests", "Evitar encadenamiento de solicitudes críticas"],
-  ["Enable text compression", "Habilitar compresión de texto"],
-  ["Serve static assets with an efficient cache policy", "Servir recursos estáticos con una política de caché eficiente"],
-  ["Avoid enormous network payloads", "Evitar cargas de red enormes"],
-  ["Reduce server response times (TTFB)", "Reducir el tiempo de respuesta del servidor (TTFB)"],
-  ["Render blocking requests", "Solicitudes que bloquean el renderizado"],
-  ["User Timing marks and measures", "Marcadores y mediciones de User Timing"],
-  ["Remove duplicate modules in JavaScript bundles", "Eliminar módulos duplicados en paquetes de JavaScript"],
-  ["Minify CSS", "Minificar CSS"],
-  ["Minify JavaScript", "Minificar JavaScript"],
-  ["Avoid long main-thread tasks", "Evitar tareas largas en el hilo principal"],
-  ["Avoid an excessive DOM size", "Evitar un tamaño de DOM excesivo"],
-  ["Avoids an excessive DOM size", "Evita un tamaño de DOM excesivo"],
-  ["Avoid non-composited animations", "Evitar animaciones no compuestas"],
-  ["Image elements do not have explicit `width` and `height`", "Los elementos de imagen no tienen `width` ni `height` explícitos"],
-  ["Image elements do not have [alt] attributes", "Los elementos de imagen no tienen atributo [alt]"],
-  ["Links are not crawlable", "Los enlaces no se pueden rastrear"],
-  ["Links do not have a discernible name", "Los enlaces no tienen un nombre descriptivo"],
-  ["Browser errors were logged to the console", "Se registraron errores del navegador en la consola"],
-  ["Issues were logged in the 'Issues' panel in Chrome Devtools", "Se registraron problemas en el panel 'Issues' de Chrome DevTools"],
-  ["Forced reflow", "Reflujo forzado"],
-  ["LCP request discovery", "Descubrimiento de solicitud de LCP"],
-  ["Optimize LCP by making the LCP image [discoverable] from the HTML immediately, and [avoiding lazy-loading].",
-   "Optimiza LCP haciendo que la imagen de LCP sea detectables desde el HTML inmediatamente y evitando la carga diferida."
-  ],
-
-  // ===== Reglas de accesibilidad (AXE/ARIA) =====
-  ["'[accesskey]' values are unique", "Los valores de '[accesskey]' son únicos"],
-  ["`button`, `link`, and `menuitem` elements have accessible names", "Los elementos `button`, `link` y `menuitem` tienen nombres accesibles"],
-  ["ARIA input fields have accessible names", "Los campos de entrada ARIA tienen nombres accesibles"],
-  ["ARIA `meter` elements have accessible names", "Los elementos ARIA `meter` tienen nombres accesibles"],
-  ["ARIA `progressbar` elements have accessible names", "Los elementos ARIA `progressbar` tienen nombres accesibles"],
-  ["Elements with an ARIA `role` that require children to contain a specific `role` have all required children.",
-   "Los elementos con `role` de ARIA que requieren hijos con un `role` específico tienen todos los hijos requeridos."
-  ],
-  ["Elements with the `role=text` attribute do not have focusable descendents.",
-   "Los elementos con el atributo `role=text` no tienen descendientes enfocables."
-  ],
-  ["ARIA toggle fields have accessible names", "Los campos de alternancia ARIA tienen nombres accesibles"],
-  ["ARIA `tooltip` elements have accessible names", "Los elementos ARIA `tooltip` tienen nombres accesibles"],
-  ["ARIA `treeitem` elements have accessible names", "Los elementos ARIA `treeitem` tienen nombres accesibles"],
-
-  // ===== Legacy JS / font display =====
-  ["Avoid serving legacy JavaScript to modern browsers", "Evitar servir JavaScript heredado a navegadores modernos"],
-  ["Font display", "Visualización de fuentes (font-display)"],
-]);
-
-/** Traducciones por similitud (sin importar mayúsculas ni acentos) */
-const T_SOFT = new Map<string, string>([
-  ["first contentful paint", "Primera pintura con contenido (FCP)"],
-  ["largest contentful paint element", "Elemento de la pintura de contenido más grande (LCP)"],
-  ["largest contentful paint", "Pintura de mayor contenido (LCP)"],
-  ["cumulative layout shift", "Desplazamiento acumulado de diseño (CLS)"],
-  ["document request latency", "Latencia de la solicitud del documento"],
-  ["browser errors were logged to the console", "Se registraron errores del navegador en la consola"],
-  ["issues were logged in the issues panel in chrome devtools", "Se registraron problemas en el panel 'Issues' de Chrome DevTools"],
-  ["links are not crawlable", "Los enlaces no se pueden rastrear"],
-  ["links do not have a discernible name", "Los enlaces no tienen un nombre descriptivo"],
-  ["forced reflow", "Reflujo forzado"],
-  ["avoid an excessive dom size", "Evitar un tamaño de DOM excesivo"],
-  ["avoid non-composited animations", "Evitar animaciones no compuestas"],
-  ["network round trip times", "Tiempos de ida y vuelta de red (RTT)"],
-  ["image elements do not have [alt] attributes", "Los elementos de imagen no tienen atributo [alt]"],
-  ["remove duplicate modules in javascript bundles", "Eliminar módulos duplicados en paquetes de JavaScript"],
-  ["minify css", "Minificar CSS"],
-  ["minify javascript", "Minificar JavaScript"],
-  ["avoid long main-thread tasks", "Evitar tareas largas en el hilo principal"],
-  ["enable text compression", "Habilitar compresión de texto"],
-]);
-
-/** Reemplazos en descripciones largas manteniendo markdown y enlaces */
-const REPL_LIST: Array<[RegExp, string]> = [
-  // Genéricas de guía
-  [/\[Learn more\]\(([^)]+)\)/gi, "[Más información]($1)"],
-  [/\[More information\]\(([^)]+)\)/gi, "[Más información]($1)"],
-  [/\[Learn more about ([^\]]+)\]\(([^)]+)\)/gi, "[Más información sobre $1]($2)"],
-  [/\[Learn how to ([^\]]+)\]\(([^)]+)\)/gi, "[Aprende cómo $1]($2)"],
-  [/\[Learn why ([^\]]+)\]\(([^)]+)\)/gi, "[Aprende por qué $1]($2)"],
-
-  // TTFB
-  [/Keep the server response time for the main document short because all other requests depend on it\./gi,
-   "Mantén corto el tiempo de respuesta del servidor para el documento principal, porque todas las demás solicitudes dependen de él."
-  ],
-
-  // Imágenes / formatos
-  [/Image formats like WebP and AVIF often provide better compression than PNG or JPEG, which means faster downloads and less data consumption\./gi,
-   "Los formatos de imagen como WebP y AVIF suelen ofrecer mejor compresión que PNG o JPEG, lo que implica descargas más rápidas y menor consumo de datos."
-  ],
-
-  // Listeners pasivos
-  [/Consider marking your touch and wheel event listeners as `passive`/gi,
-   "Considera marcar tus listeners de eventos de toque y rueda como `passive`"
-  ],
-
-  // CLS / FCP / LCP textos intro
-  [/Largest Contentful Paint marks the time at which the largest text or image is painted\./gi,
-   "Largest Contentful Paint (LCP) marca el tiempo en el que se pinta el texto o imagen más grande."
-  ],
-  [/First Contentful Paint marks the time at which the first text or image is painted\./gi,
-   "First Contentful Paint (FCP) indica el tiempo en el que se pinta el primer texto o imagen."
-  ],
-  [/These are the largest layout shifts observed on the page\./gi,
-   "Estos son los mayores desplazamientos de diseño observados en la página."
-  ],
-
-  // “Issues panel”
-  [/Issues were logged to the 'Issues' panel in Chrome Devtools/gi,
-   "Se registraron problemas en el panel 'Issues' de Chrome DevTools"
-  ],
-
-  // Reflow forzado
-  [/A forced reflow occurs when JavaScript queries geometric properties.*?state\./gi,
-   "Se produce un reflujo forzado cuando JavaScript consulta propiedades geométricas (como offsetWidth) después de que los estilos han quedado invalidados por un cambio en el estado del DOM."
-  ],
+// ————————————————————————————————————————————————————————
+// 1) TÍTULOS / ETIQUETAS (también para textos entre corchetes de enlaces)
+// ————————————————————————————————————————————————————————
+const TITLES: Dict = [
+  // Plan de acción / performance
+  [rx("\\bAvoid chaining critical requests\\b"), "Evita encadenar solicitudes críticas"],
+  [rx("\\bReduce unused JavaScript\\b"), "Reduce JavaScript no utilizado"],
+  [rx("\\bDocument request latency\\b"), "Latencia de la solicitud del documento"],
+  [rx("\\bSpeed Index\\b"), "Índice de velocidad (SI)"],
+  [rx("\\bLargest Contentful Paint element\\b"), "Elemento de LCP (Largest Contentful Paint)"],
+  [rx("\\bLargest Contentful Paint\\b"), "LCP (Largest Contentful Paint)"],
+  [rx("\\bFirst Contentful Paint\\b"), "FCP (First Contentful Paint)"],
+  [rx("\\bMinimize third-party usage\\b"), "Minimiza el uso de terceros"],
+  [rx("\\bNetwork dependency tree\\b"), "Árbol de dependencias de red"],
+  [rx("\\bTime to Interactive\\b"), "Time to Interactive (TTI)"],
+  [rx("\\bTotal Blocking Time\\b"), "Tiempo total de bloqueo (TBT)"],
+  [rx("\\bRemove duplicate modules in JavaScript bundles\\b"), "Elimina módulos duplicados en JavaScript"],
+  [rx("\\bUse efficient animated content\\b"), "Usa formatos eficientes para contenido animado"],
+  [rx("\\bOptimize image size\\b"), "Optimiza el tamaño de las imágenes"],
+  [rx("\\bNetwork round trip times\\b"), "Tiempos de ida y vuelta de red"],
+  [rx("\\bAvoids an excessive DOM size\\b"), "Evita un tamaño de DOM excesivo"],
+  [rx("\\bDocument uses legible font sizes\\b"), "El documento usa tamaños de fuente legibles"],
+  [rx("\\bServe images in next-gen formats\\b"), "Sirve imágenes en formatos modernos (WebP/AVIF)"],
+  [rx("\\bMinify CSS\\b"), "Minificar CSS"],
+  [rx("\\bMinify JavaScript\\b"), "Minificar JavaScript"],
+  [rx("\\bAvoid serving legacy JavaScript to modern browsers\\b"), "Evita servir JavaScript heredado a navegadores modernos"],
+  [rx("\\bEnable text compression\\b"), "Habilita compresión de texto"],
+  [rx("\\bReduce JavaScript execution time\\b"), "Reduce el tiempo de ejecución de JavaScript"],
+  [rx("\\bDefer offscreen images\\b"), "Difere imágenes fuera de la vista"],
+  [rx("\\bCumulative Layout Shift\\b"), "Desplazamiento acumulado de diseño (CLS)"],
+  [rx("\\bUser Timing marks and measures\\b"), "Marcas y mediciones de User Timing"],
+  // Buenas prácticas / SEO
+  [rx("\\bUses HTTPS\\b"), "Usa HTTPS"],
+  [rx("\\bAvoids deprecated APIs\\b"), "Evita APIs obsoletas"],
+  [rx("\\bAvoids third-party cookies\\b"), "Evita cookies de terceros"],
+  [rx("\\bLinks have descriptive text\\b"), "Los enlaces tienen texto descriptivo"],
+  [rx("\\bPage isn'?t blocked from indexing\\b"), "La página no está bloqueada para indexación"],
+  [rx("\\bDocument has a <title> element\\b"), "El documento tiene un elemento <title>"],
+  [rx("\\bDocument does not have a meta description\\b"), "El documento no tiene una meta descripción"],
+  [rx("\\brobots\\.txt is valid\\b"), "robots.txt es válido"],
+  [rx("\\bPage has successful HTTP status code\\b"), "La página responde con un código HTTP correcto"],
 ];
 
-/** Traduce textos tipo “Ahorro … / found …” que vienen en badges */
-export function tSavings(s: U): string {
-  let out = String(s ?? "");
-  out = out.replace(/\bEst savings of\b/gi, "Ahorro est. de");
-  out = out.replace(/\bsavings of\b/gi, "Ahorro de");
-  out = out.replace(/\bAhorro:\b/gi, "Ahorro:");
-  out = out.replace(/\bchains? found\b/gi, "cadenas encontradas");
-  out = out.replace(/\blayout shifts? found\b/gi, "desplazamientos de diseño encontrados");
-  out = out.replace(/\blong tasks? found\b/gi, "tareas largas encontradas");
-  out = out.replace(/\banimated elements? found\b/gi, "elementos animados encontrados");
-  out = out.replace(/\bresources? found\b/gi, "recursos encontrados");
-  out = out.replace(/\belements?\b/gi, "elementos");
-  return out;
-}
+// ————————————————————————————————————————————————————————
+// 2) REGLAS DE FRASEO GENÉRICAS (mantienen enlaces/markdown)
+// ————————————————————————————————————————————————————————
+const PHRASES_GENERIC: Dict = [
+  [rx("\\bLearn more about\\b"), "Más información sobre"],
+  [rx("\\bLearn how to\\b"), "Aprende cómo"],
+  [rx("\\bLearn more\\b"), "Más información"],
+  [rx("\\bConsider\\b"), "Considera"],
+  [rx("\\bYour first network request is the most important\\b"), "Tu primera solicitud de red es la más importante"],
+  [rx("\\bReduce its latency by avoiding redirects, ensuring a fast server response, and enabling text compression\\b"),
+   "Reduce su latencia evitando redirecciones, asegurando una respuesta rápida del servidor y habilitando la compresión de texto"],
+  [rx("\\bYou may find delivering smaller JS payloads helps with this\\b"),
+   "Entregar cargas de JS más pequeñas suele ayudar con esto"],
+  [rx("\\bby reducing the length of chains, reducing the download size of resources, or deferring the download of unnecessary resources to improve page load\\b"),
+   "reduciendo la longitud de las cadenas, disminuyendo el tamaño de descarga de recursos o difiriendo los recursos innecesarios para mejorar la carga de la página"],
+];
 
-/** Títulos cortos (id → título) */
-export function tTitle(s: U): string {
-  if (typeof s !== "string") return String(s ?? "");
-  const exact = T_EXACT.get(s);
-  if (exact) return exact;
-  return T_SOFT.get(norm(s)) || s;
-}
+// ————————————————————————————————————————————————————————
+// 3) FRASES CONCRETAS QUE SUELEN SALIR EN DETALLES / PLAN
+// ————————————————————————————————————————————————————————
+const PHRASES_SPECIFIC: Dict = [
+  [rx("\\bThis is the largest contentful element painted within the viewport\\b"),
+   "Este es el elemento con mayor contenido pintado dentro del viewport"],
+  [rx("\\bLargest Contentful Paint marks the time at which the largest text or image is painted\\b"),
+   "LCP marca el momento en que se pinta el texto o imagen más grande"],
+  [rx("\\bFirst Contentful Paint marks the time at which the first text or image is painted\\b"),
+   "FCP marca el momento en que se pinta el primer texto o imagen"],
+  [rx("\\bSpeed Index shows how quickly the contents of a page are visibly populated\\b"),
+   "El Índice de velocidad (Speed Index) muestra qué tan rápido se llena visualmente el contenido de una página"],
+  [rx("\\bCumulative Layout Shift measures the movement of visible elements within the viewport\\b"),
+   "El Desplazamiento Acumulado de Diseño (CLS) mide el movimiento de los elementos visibles dentro del viewport"],
+  [rx("\\bReduce unused JavaScript and defer loading scripts until they are required to decrease bytes consumed by network activity\\b"),
+   "Reduce JavaScript no utilizado y difiere la carga de scripts hasta que sean necesarios para disminuir bytes consumidos por la red"],
+  [rx("\\bThe Critical Request Chains below show you what resources are loaded with a high priority\\b"),
+   "Las cadenas de solicitudes críticas muestran qué recursos se cargan con alta prioridad"],
+  [rx("\\bServer latencies can impact web performance\\b"),
+   "Las latencias del servidor pueden afectar el rendimiento web"],
+];
 
-/** Descripciones con markdown (mantiene enlaces) */
-export function tRich(s: U): string {
+// ————————————————————————————————————————————————————————
+// 4) AHORROS / MAGNITUDES
+// ————————————————————————————————————————————————————————
+const SAVINGS: Dict = [
+  [rx("\\bAhorro:?\\s*Est(?:imated|) savings of\\s*([\\d.,]+)\\s*Ki?B\\b"), "Ahorro estimado de $1 KiB"],
+  [rx("\\bEst savings of\\s*([\\d.,]+)\\s*Ki?B\\b"), "Ahorro estimado de $1 KiB"],
+  [rx("\\bTotal size was\\s*([\\d.,]+)\\s*Ki?B\\b"), "El tamaño total fue de $1 KiB"],
+  [rx("\\bRoot document took\\s*([\\d.,]+)\\s*ms\\b"), "El documento raíz tardó $1 ms"],
+  [rx("\\b(\\d+)\\s*layout shifts found\\b"), "$1 desplazamientos de diseño encontrados"],
+  [rx("\\b(\\d+)\\s*resources found\\b"), "$1 recursos encontrados"],
+  [rx("\\bThird-party code blocked the main thread for\\s*(\\d+)\\s*ms\\b"),
+   "El código de terceros bloqueó el hilo principal durante $1 ms"],
+];
+
+// Utilidades de reemplazo
+const applyDict = (input: string, dict: Dict): string =>
+  dict.reduce((acc, [re, out]) => acc.replace(re, out), input);
+
+// ————————————————————————————————————————————————————————
+// API pública
+// ————————————————————————————————————————————————————————
+/**
+ * Traduce un título o etiqueta corta (incluye contenidos dentro de [corchetes]).
+ */
+export function tTitle(s: unknown): string {
   if (typeof s !== "string" || !s) return String(s ?? "");
   let out = s;
-  for (const [re, rep] of REPL_LIST) out = out.replace(re, rep);
-  // Ajustes menores comunes
-  out = out.replace(/\bcolor contrast\b/gi, "contraste de color");
-  out = out.replace(/\bserver response time\b/gi, "tiempo de respuesta del servidor");
+
+  // Traducir primero los textos dentro de enlaces [ ... ]
+  // (no rompe el markdown; solo cambia el interior)
+  out = out.replace(/\[([^\]]+)\]/g, (_m, inside) => {
+    const translated = applyDict(inside, TITLES);
+    return `[${translated}]`;
+  });
+
+  // Y después el resto del string
+  out = applyDict(out, TITLES);
+
+  // Limpieza menor
+  out = out.replace(/\s+/g, " ").trim();
   return out;
 }
 
-/** Azúcar: traduce un “audit-like” in place */
-export function translateAuditLike<T extends { title?: string; description?: string; displayValue?: string }>(a: T): T {
+/**
+ * Traduce descripciones conservando markdown, enlaces y backticks.
+ * Aplica reglas genéricas y frases específicas.
+ */
+export function tRich(s: unknown): string {
+  if (typeof s !== "string" || !s) return String(s ?? "");
+  let out = s;
+
+  // Normalizaciones rápidas para evitar mezclas EN/ES
+  out = applyDict(out, PHRASES_GENERIC);
+  out = applyDict(out, PHRASES_SPECIFIC);
+
+  // También traducimos títulos si vienen incrustados dentro de corchetes de un enlace
+  out = out.replace(/\[([^\]]+)\]/g, (_m, inside) => `[${applyDict(inside, TITLES)}]`);
+
+  // Ajustes de puntuación comunes “Más información sobre …”
+  out = out.replace(/\((\s*https?:\/\/[^\s)]+)\)/gi, "($1)");
+  out = out.replace(/\s+/g, " ").trim();
+  return out;
+}
+
+/**
+ * Traduce/normaliza etiquetas de “ahorro” o displayValue
+ * (ms ↔ s, KiB/KB/MB, frases típicas).
+ * Si no coincide nada, devuelve el texto original tal cual.
+ */
+export function tSavings(s: unknown): string {
+  if (!s) return "";
+  let out = String(s);
+
+  // Normalizar commas vs puntos en números dentro de unidades ms/s cuando vienen como texto
+  out = out.replace(/\b([\d]+),([\d]+)\b/g, "$1.$2");
+
+  // Reglas de ahorro
+  out = applyDict(out, SAVINGS);
+
+  // Traducciones sueltas frecuentes
+  out = out
+    .replace(/\bEst(?:imated)? savings of\b/gi, "Ahorro estimado de")
+    .replace(/\bSavings\b/gi, "Ahorro")
+    .replace(/\bgain\b/gi, "ahorro")
+    .replace(/\bms\b/gi, "ms")
+    .replace(/\bKi?B\b/gi, "KiB");
+
+  return out.trim();
+}
+
+/**
+ * Utilidad opcional por si quieres forzar ES en un objeto de auditoría
+ * (traduce título/description/displayValue si existen).
+ */
+export function ensureEsAudit<T extends { title?: any; description?: any; displayValue?: any }>(a: T): T {
   if (!a) return a;
-  if (a.title) a.title = tTitle(a.title);
-  if (a.description) a.description = tRich(a.description);
-  if (a.displayValue) a.displayValue = tSavings(a.displayValue);
-  return a;
+  const copy: any = { ...a };
+  if (copy.title) copy.title = tTitle(copy.title);
+  if (copy.description) copy.description = tRich(copy.description);
+  if (copy.displayValue) copy.displayValue = tSavings(copy.displayValue);
+  return copy as T;
 }

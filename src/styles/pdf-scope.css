@@ -1,0 +1,177 @@
+/* Burbuja de estilos SOLO para el área a exportar */
+.pdf-root {
+  /* ancho fijo = coincide con el captureWidthPx del EmailPdfBar */
+  width: 1200px;
+  max-width: 1200px;
+  background: #ffffff;
+  color: #111827; /* gray-900 */
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  letter-spacing: 0;
+  line-height: 1.45;
+}
+
+/* Normalización suave de tipografía dentro del PDF (evita títulos gigantes) */
+.pdf-root h1 { margin: 0; font-weight: 800; font-size: 28px; line-height: 1.15; }
+.pdf-root h2 { margin: 0; font-weight: 700; font-size: 22px; line-height: 1.2; }
+.pdf-root h3 { margin: 0; font-weight: 700; font-size: 18px; line-height: 1.25; }
+.pdf-root p  { margin: 0; font-size: 14px; line-height: 1.55; }
+
+/* Tarjetas y secciones, por si tu vista depende de utilidades de Tailwind */
+.pdf-root .card {
+  border: 1px solid #e5e7eb; /* gray-200 */
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: none;
+}
+
+/* Encabezado azul (si lo usas) con texto controlado */
+.pdf-root .hero-title {
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 800;
+  color: #0b1026; /* casi negro, mejora contraste sobre azul */
+  word-break: break-word;
+}
+
+/* Evita saltos raros en medidores/canvas/svg durante html2canvas */
+.pdf-root svg, .pdf-root canvas, .pdf-root img { image-rendering: auto; }
+
+/* Evita que el contenedor cambie por responsive */
+@media (max-width: 1200px) {
+  .pdf-root { width: 1200px; }
+}
+
+/* Normalización fuerte para títulos del PDF */
+.pdf-root .diagnostico-title { 
+  font-size: 24px !important; 
+  line-height: 1.2 !important; 
+  font-weight: 800; 
+  margin: 0 0 6px 0;
+}
+
+/* Centrado y contención de tarjetas/gauges SOLO en PDF */
+.pdf-root .diagnostico-grid .item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  overflow: hidden;               /* evita que el SVG se “salga” del cuadro */
+  border-radius: 16px;            /* respeta bordes redondeados al cortar */
+}
+
+.pdf-root .diagnostico-grid .item .item-label { 
+  align-self: stretch;
+}
+
+.pdf-root .diagnostico-grid .item .w-full {
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Asegura que SVG/canvas no generen espacios inline ni desborden */
+.pdf-root svg, 
+.pdf-root canvas, 
+.pdf-root img { 
+  display: block; 
+  max-width: 100%; 
+  height: auto; 
+}
+
+/* Box sizing consistente para evitar ensanches inesperados */
+.pdf-root, 
+.pdf-root * { box-sizing: border-box; }
+
+/* Tipografía y contención general */
+.pdf-root { background:#fff; color:#111827; }
+.pdf-root, .pdf-root * { box-sizing: border-box; }
+
+/* Evita que se partan tarjetas/barras entre páginas */
+.pdf-root .card,
+.pdf-root .item { break-inside: avoid; page-break-inside: avoid; }
+
+/* Centrado/contención de gauges en tarjetas */
+.pdf-root .diagnostico-grid .item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  overflow: hidden;          /* que nada sobresalga del borde redondeado */
+  border-radius: 16px;
+}
+
+.pdf-root .diagnostico-grid .item .w-full {
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Los gráficos no deben dejar espacios inline ni desbordar */
+.pdf-root svg,
+.pdf-root canvas,
+.pdf-root img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Título: tamaño estable para PDF (evita inflarse) */
+.pdf-root .diagnostico-title {
+  font-size: 24px !important;
+  line-height: 1.2 !important;
+  font-weight: 800;
+  margin: 0 0 6px 0;
+}
+.pdf-root, .pdf-root * { box-sizing: border-box; }
+.pdf-root { background:#fff; color:#111827; }
+
+/* Evita desbordes y cortes en tarjetas/gauges */
+.pdf-root .diagnostico-grid .item {
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  overflow:hidden; border-radius:16px; break-inside:avoid; page-break-inside:avoid;
+}
+.pdf-root .diagnostico-grid .item .w-full {
+  min-height:160px; display:flex; align-items:center; justify-content:center;
+}
+.pdf-root svg, .pdf-root canvas, .pdf-root img { display:block; max-width:100%; height:auto; }
+
+/* Título estable */
+.pdf-root .diagnostico-title { font-size:24px !important; line-height:1.2 !important; font-weight:800; margin:0 0 6px 0; }
+
+/* 2.1 Evitar cortes a la mitad y centrar/contener gauges */
+.pdf-root, .pdf-root * { box-sizing: border-box; }
+.pdf-root .card,
+.pdf-root .item { break-inside: avoid; page-break-inside: avoid; }
+
+.pdf-root .diagnostico-grid .item {
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  overflow:hidden; border-radius:16px;
+}
+.pdf-root .diagnostico-grid .item .w-full {
+  min-height:160px; display:flex; align-items:center; justify-content:center;
+}
+.pdf-root svg, .pdf-root canvas, .pdf-root img { display:block; max-width:100%; height:auto; }
+
+/* 2.2 Encabezado bonito en PDF: sin franja azul y con respiro arriba */
+.pdf-root { padding-top: 8px; }
+.pdf-root .diagnostico-title {
+  background: none !important;
+  text-shadow: none !important;
+  font-size: 24px !important;
+  line-height: 1.2 !important;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+}
+/* Si tu franja azul es un pseudo-elemento del título, lo ocultamos */
+.pdf-root .diagnostico-title::before,
+.pdf-root .diagnostico-title::after { display: none !important; }
+/* Si la franja pertenece a la barra de pestañas, la suavizamos/ocultamos */
+.pdf-root .tabs::before,
+.pdf-root .tabs::after { display: none !important; }
+/* Evitar sticky en PDF que pueda superponerse al título */
+.pdf-root .sticky,
+.pdf-root [style*="position: sticky"] { position: static !important; top: auto !important; }
