@@ -52,7 +52,7 @@ export default function EmailPdfBar({
     try { return JSON.parse(txt || "{}"); } catch { return { _raw: txt }; }
   }
 
-  // -------- utilidades ----------
+  // Espera estable: 2x rAF, fuentes e imágenes
   const waitForReady = async (doc: Document, root: HTMLElement, msExtra = 0) => {
     await new Promise<void>((r) => doc.defaultView?.requestAnimationFrame(() =>
       doc.defaultView?.requestAnimationFrame(() => r())
@@ -68,6 +68,7 @@ export default function EmailPdfBar({
     if (msExtra > 0) await new Promise<void>((r) => setTimeout(r, msExtra));
   };
 
+  // Copia CSS (link y style) al iframe
   function copyStylesTo(doc: Document) {
     const head = doc.head;
     const srcDoc = document;
@@ -84,47 +85,61 @@ export default function EmailPdfBar({
     });
   }
 
-  // Calcula zonas a evitar (para no cortar tarjetas/gauges a la mitad)
+  // Zonas a evitar (no cortar dentro de …)
   function computeAvoidRects(root: HTMLElement): Array<[number, number]> {
+    // cards, items, etc. (¡siéntete libre de añadir selectores tuyos!)
     const sel = [
       ".diagnostico-grid .item",
       ".card",
-      ".opportunities-list .item",
       ".issues-list .item",
+      ".opportunities-list .item",
     ].join(",");
-
     const rootTop = root.getBoundingClientRect().top;
     const rects: Array<[number, number]> = [];
     Array.from(root.querySelectorAll(sel)).forEach((el) => {
       const r = (el as HTMLElement).getBoundingClientRect();
       const top = Math.max(0, r.top - rootTop);
       const bottom = top + r.height;
-      if (bottom - top > 20) rects.push([top, bottom]);
+      if (bottom - top > 24) rects.push([top, bottom]);
     });
-
-    // unimos rectas solapadas
     rects.sort((a, b) => a[0] - b[0]);
     const merged: Array<[number, number]> = [];
     for (const [t, b] of rects) {
-      if (!merged.length || t > merged[merged.length - 1][1] + 4) {
-        merged.push([t, b]);
-      } else {
-        merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], b);
-      }
+      if (!merged.length || t > merged[merged.length - 1][1] + 4) merged.push([t, b]);
+      else merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], b);
     }
     return merged;
   }
 
-  function findSafeCut(y: number, spans: Array<[number, number]>, maxY: number): number {
-    // si y cae dentro de una span, bajamos al final de la span (+espacio)
-    const pad = 8; // px extra para respiración
-    for (const [t, b] of spans) {
-      if (y > t && y < b) return Math.min(b + pad, maxY);
-    }
-    return y;
-  }
+    // Puntos seguros para cortar: se generan AUTOMÁTICAMENTE
+    function computeSafeStops(root: HTMLElement): number[] {
+      const rootTop = root.getBoundingClientRect().top;
+      const selectors = [
+        // listas y bullets (lo más importante)
+        "li", "[role='listitem']",
+        // párrafos y encabezados dentro de tarjetas/secciones
+        ".plan p", ".plan h3", ".plan .item",
+        ".issues-list .item", ".opportunities-list .item",
+        ".card > *", ".card p", ".card li",
+        ".diagnostico-grid .item",
+        "p", "h2", "h3",
+        // marcas manuales, si algún día quieres usarlas
+        "[data-pdf-stop]"
+      ].join(",");
 
-  // ----------- captura en iframe con cortes inteligentes -----------
+      const stops: number[] = [];
+      Array.from(root.querySelectorAll(selectors)).forEach((el) => {
+        const r = (el as HTMLElement).getBoundingClientRect();
+        const bottom = Math.max(0, r.bottom - rootTop);
+        if (bottom > 0 && Number.isFinite(bottom)) stops.push(Math.round(bottom));
+      });
+
+      // únicos y ordenados
+      return Array.from(new Set(stops)).sort((a, b) => a - b);
+    }
+
+
+  // Captura en iframe con cortes inteligentes
   async function makePdfFromRef(): Promise<PdfAttachment> {
     const src = captureRef?.current;
     if (!src) return null;
@@ -143,7 +158,7 @@ export default function EmailPdfBar({
     idoc.close();
     copyStylesTo(idoc);
 
-    // 2) clonar
+    // 2) clon
     const clone = src.cloneNode(true) as HTMLElement;
     if (applyPdfClass && !clone.classList.contains(pdfClassName)) clone.classList.add(pdfClassName);
     clone.setAttribute("data-pdf", "true");
@@ -151,18 +166,14 @@ export default function EmailPdfBar({
     clone.style.boxSizing = "border-box";
 
     const wrapper = idoc.createElement("div");
-    Object.assign(wrapper.style, {
-      position: "relative", margin: "0", padding: "0", background: "#ffffff"
-    } as CSSStyleDeclaration);
+    Object.assign(wrapper.style, { position: "relative", margin: "0", padding: "0", background: "#ffffff" } as CSSStyleDeclaration);
     wrapper.appendChild(clone);
     idoc.body.appendChild(wrapper);
 
     try {
       // 3) ancho/alto objetivo
       const rect = src.getBoundingClientRect();
-      const targetW = Math.ceil(
-        captureWidthPx ?? Math.max(src.scrollWidth, rect.width, 1280)
-      );
+      const targetW = Math.ceil(captureWidthPx ?? Math.max(src.scrollWidth, rect.width, 1280));
       clone.style.width = `${targetW}px`;
       clone.style.maxWidth = `${targetW}px`;
       clone.style.overflow = "visible";
@@ -170,7 +181,7 @@ export default function EmailPdfBar({
       await waitForReady(idoc, clone, extraWaitMs);
       const targetH = clone.scrollHeight;
 
-      // 4) canvas del clon
+      // 4) canvas
       const canvas = await html2canvas(clone, {
         useCORS: true,
         backgroundColor: "#ffffff",
@@ -184,7 +195,7 @@ export default function EmailPdfBar({
         scrollY: 0,
       });
 
-      // 5) PDF A4 + cortes inteligentes
+      // 5) PDF con cortes inteligentes en px del CANVAS
       const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
@@ -192,35 +203,67 @@ export default function EmailPdfBar({
       const cw = canvas.width;
       const ch = canvas.height;
 
-      const imgW = pageW - marginPt * 2;
-      const scale = imgW / cw;
-      const visiblePerPagePt = pageH - marginPt * 2;
-      const visiblePerPagePx = Math.floor(visiblePerPagePt / scale);
+      // DOM→CANVAS
+      const domToCanvas = cw / (clone.getBoundingClientRect().width || targetW);
 
-      const avoidSpans = computeAvoidRects(clone);
+      const imgW = pageW - marginPt * 2;
+      const canvasPxToPt = imgW / cw; // escala para addImage
+      const visiblePerPagePt = pageH - marginPt * 2;
+      const visiblePerPageCanvasPx = Math.floor(visiblePerPagePt / canvasPxToPt);
+
+      // spans a evitar y paradas seguras (convertidos a px del canvas)
+      const avoidSpansDom = computeAvoidRects(clone);
+      const avoidSpans = avoidSpansDom.map(([t, b]) => [t * domToCanvas, b * domToCanvas] as [number, number]);
+      const safeStopsDom = computeSafeStops(clone);
+      const safeStops = safeStopsDom.map((y) => y * domToCanvas);
+
+      const pad = Math.round(12 * domToCanvas);
+      const minSlice = Math.round(220 * domToCanvas); // no páginas “enanas”
+      const lookAhead = Math.round(80 * domToCanvas); // margen extra para encontrar buen corte
+
+      const insideSpan = (y: number) => avoidSpans.some(([t, b]) => y > t && y < b);
+
       let yPx = 0;
       let first = true;
 
       while (yPx < ch) {
-        // límite “deseado” para esta página
-        let boundary = Math.min(yPx + visiblePerPagePx, ch);
-        // mover a un corte seguro (no partir tarjetas)
-        boundary = findSafeCut(boundary, avoidSpans, ch);
+        // límite deseado
+        const desired = Math.min(yPx + visiblePerPageCanvasPx, ch);
+
+        // candidato: último punto seguro <= desired+lookAhead y >= yPx+minSlice
+        const candidates = safeStops.filter((s) => s >= yPx + minSlice && s <= desired + lookAhead);
+        let boundary = candidates.length ? Math.max(...candidates) : desired;
+
+        // si boundary cae en medio de un span, muévelo al final del span (+pad)
+        if (insideSpan(boundary)) {
+          for (const [t, b] of avoidSpans) {
+            if (boundary > t && boundary < b) {
+              boundary = Math.min(b + pad, ch);
+            }
+          }
+        }
+
+        // fallback por seguridad
+        if (boundary - yPx < minSlice && yPx + minSlice < ch) {
+          boundary = Math.min(yPx + minSlice, ch);
+        }
 
         const sliceH = boundary - yPx;
         const slice = idoc.createElement("canvas");
         slice.width = cw;
         slice.height = sliceH;
+
         const sctx = slice.getContext("2d")!;
         sctx.drawImage(canvas, 0, yPx, cw, sliceH, 0, 0, cw, sliceH);
 
         const img = slice.toDataURL("image/png");
-        const hPt = sliceH * scale;
+        const hPt = sliceH * canvasPxToPt;
+
         if (!first) pdf.addPage();
         first = false;
         pdf.addImage(img, "PNG", marginPt, marginPt, imgW, hPt, undefined, "FAST");
 
-        yPx = boundary; // avanzar al nuevo corte seguro
+        yPx = boundary;
       }
 
       const base64 = pdf.output("datauristring").split(",")[1]!;

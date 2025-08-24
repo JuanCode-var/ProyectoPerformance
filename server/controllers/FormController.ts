@@ -8,6 +8,58 @@ import type { SentMessageInfo } from "nodemailer/lib/smtp-transport";
 import Audit from "../database/esquemaBD.js";
 import { readMetrics, extractOpportunities } from "../../src/utils/lh.js";
 
+// =====================
+// Helpers/consts
+// =====================
+function withAudit(base?: string) {
+  if (!base) return "/audit";
+  const trimmed = String(base).replace(/\/+$/, "");
+  return trimmed.endsWith("/audit") ? trimmed : `${trimmed}/audit`;
+}
+
+const ALL_CATEGORIES = ["performance", "accessibility", "best-practices", "seo"] as const;
+
+const MS_PAGESPEED_URL = process.env.MS_PAGESPEED_URL || "http://localhost:3001";
+const MS_UNLIGHTHOUSE_URL = process.env.MS_UNLIGHTHOUSE_URL || "http://localhost:3002";
+
+// Llama al microservicio pagespeed y devuelve su payload tal cual
+async function runPagespeedViaMicro(url: string, strategy: "mobile" | "desktop") {
+  const endpoint = withAudit(MS_PAGESPEED_URL);
+  // mantenemos compat: pedimos SIEMPRE todas las categorías
+  const payload = { url, strategy, categories: [...ALL_CATEGORIES] };
+  const { data } = await axios.post(endpoint, payload, { timeout: 300000 });
+  return data; // ← lo que tu micro ya devuelve (incluye raw, metrics, categoryScores, etc.)
+}
+
+// Detecta el form factor real desde el LHR almacenado
+function detectFormFactorFromDoc(doc: any): "mobile" | "desktop" | undefined {
+  try {
+    const lhr =
+      doc?.audit?.pagespeed?.raw?.lighthouseResult ||
+      doc?.audit?.pagespeed?.lighthouseResult ||
+      null;
+    const cfg = lhr?.configSettings || {};
+    const emu = cfg.emulatedFormFactor ?? cfg.formFactor;
+    if (emu === "mobile" || emu === "desktop") return emu;
+    if (cfg?.screenEmulation && typeof cfg.screenEmulation.mobile === "boolean") {
+      return cfg.screenEmulation.mobile ? "mobile" : "desktop";
+    }
+  } catch {}
+  return doc?.strategy === "desktop" ? "desktop" : doc?.strategy === "mobile" ? "mobile" : undefined;
+}
+
+// Resuelve performance (misma lógica que ya usabas al guardar)
+function resolvePerformanceFromPagespeed(ps: any): number | null {
+  const catScores = ps?.categoryScores || {};
+  if (typeof catScores?.performance === "number" && !Number.isNaN(catScores.performance))
+    return Math.round(catScores.performance);
+  if (typeof ps?.performance === "number" && !Number.isNaN(ps.performance))
+    return Math.round(ps.performance);
+  const rawScore = ps?.raw?.lighthouseResult?.categories?.performance?.score;
+  return typeof rawScore === "number" ? Math.round(rawScore * 100) : null;
+}
+
+// =====================
 // -------- Ping/Info --------
 export async function auditPing(_req: Request, res: Response) {
   return res.json({
@@ -17,19 +69,13 @@ export async function auditPing(_req: Request, res: Response) {
       "POST /api/audit",
       "GET  /api/audit/:id",
       "GET  /api/audit/history?url=...",
+      "GET  /api/audit/by-url?url=...&strategy=...",
+      "GET  /api/diagnostics/:rawUrl/audit?strategy=...",
       "POST /api/audit/send-diagnostic",
       "POST /api/audit/send-report",
     ],
   });
 }
-
-function withAudit(base?: string) {
-  if (!base) return "/audit";
-  const trimmed = String(base).replace(/\/+$/, "");
-  return trimmed.endsWith("/audit") ? trimmed : `${trimmed}/audit`;
-}
-
-const ALL_CATEGORIES = ["performance", "accessibility", "best-practices", "seo"] as const;
 
 // -------- Crear auditoría --------
 export async function guardarDatos(req: Request, res: Response) {
@@ -54,9 +100,6 @@ export async function guardarDatos(req: Request, res: Response) {
     };
 
     if (!url || !/^https?:\/\//i.test(url)) return fail(400, "URL inválida");
-
-    const MS_PAGESPEED_URL = process.env.MS_PAGESPEED_URL || "http://localhost:3001";
-    const MS_UNLIGHTHOUSE_URL = process.env.MS_UNLIGHTHOUSE_URL || "http://localhost:3002";
 
     const MICROSERVICES: Record<"pagespeed" | "unlighthouse", { endpoint: string }> = {
       pagespeed: { endpoint: withAudit(MS_PAGESPEED_URL) },
@@ -95,7 +138,6 @@ export async function guardarDatos(req: Request, res: Response) {
     // Llamadas a microservicios
     const serviceCall = async (t: "pagespeed" | "unlighthouse") => {
       const endpoint = MICROSERVICES[t].endpoint;
-      // ⬇️ Para pagespeed pedimos SIEMPRE todas las categorías (mantiene compat)
       const payload =
         t === "unlighthouse"
           ? { url }
@@ -125,24 +167,8 @@ export async function guardarDatos(req: Request, res: Response) {
 
     const onlyPagespeedOk = tipos.length === 1 && audit.pagespeed && !audit.pagespeed.error;
 
-    // ⬇️ Resolver performance (top-level) con preferencia a categoryScores.performance
-    const catScores = audit.pagespeed?.categoryScores || {};
-    const perfFromCat =
-      typeof catScores?.performance === "number" && !Number.isNaN(catScores.performance)
-        ? Math.round(catScores.performance)
-        : null;
-
-    const perfResolved =
-      onlyPagespeedOk && perfFromCat != null
-        ? perfFromCat
-        : onlyPagespeedOk &&
-          typeof audit.pagespeed?.performance === "number" &&
-          !Number.isNaN(audit.pagespeed.performance)
-        ? Math.round(audit.pagespeed.performance)
-        : onlyPagespeedOk &&
-          audit.pagespeed?.raw?.lighthouseResult?.categories?.performance?.score != null
-        ? Math.round(audit.pagespeed.raw.lighthouseResult.categories.performance.score * 100)
-        : undefined;
+    // Resolver performance (top-level)
+    const perfResolved = onlyPagespeedOk ? resolvePerformanceFromPagespeed(audit.pagespeed) : undefined;
 
     // Guardar en DB
     try {
@@ -153,7 +179,7 @@ export async function guardarDatos(req: Request, res: Response) {
         name,
         email,
         strategy,
-        audit, // ⬅️ aquí va todo el objeto con categoryScores dentro de pagespeed
+        audit,
         performance: onlyPagespeedOk ? perfResolved : undefined,
         metrics: onlyPagespeedOk ? audit.pagespeed?.metrics : undefined,
         fecha: new Date(),
@@ -184,21 +210,51 @@ export async function guardarDatos(req: Request, res: Response) {
   }
 }
 
-// -------- Obtener auditoría por ID --------
+// -------- Obtener auditoría por ID (con fallback por estrategia) --------
 export async function getAuditById(req: Request, res: Response) {
   try {
     const id = (req.params?.id || "").trim();
     const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(id);
     if (!isValidObjectId) return res.status(400).json({ error: "ID inválido" });
 
+    // estrategia solicitada por el front (default: mobile)
+    const strategy = (String(req.query?.strategy || "mobile") as "mobile" | "desktop");
+
     const doc = await Audit.findById(id);
     if (!doc) return res.status(404).json({ error: "No encontrado" });
 
-    // 🔧 Devolvemos el doc con flags, no el 'out' previo
-    type PagespeedMeta = { audit?: { pagespeed?: { meta?: { source?: string } } } };
-    const docObj = doc.toObject<PagespeedMeta & Record<string, any>>();
+    const docObj: any = doc.toObject();
     docObj.ok = true;
-    docObj.isLocal = docObj.audit?.pagespeed?.meta?.source === "local";
+    docObj.isLocal = docObj?.audit?.pagespeed?.meta?.source === "local";
+
+    // Si lo guardado no coincide con lo solicitado, forzamos un run por URL+strategy
+    const storedFF = detectFormFactorFromDoc(docObj);
+    const same = storedFF ? storedFF === strategy : (docObj.strategy === strategy);
+
+    if (!same && docObj.url) {
+      try {
+        const ps = await runPagespeedViaMicro(docObj.url, strategy);
+        const perfResolved = resolvePerformanceFromPagespeed(ps);
+        const out = {
+          ok: true,
+          url: docObj.url,
+          name: docObj.name,
+          email: docObj.email,
+          strategy,
+          audit: { pagespeed: ps },
+          performance: perfResolved ?? undefined,
+          metrics: ps?.metrics ?? undefined,
+          fecha: new Date().toISOString(),
+          forced: true,
+          note: "Resultado forzado por estrategia solicitada",
+        };
+        return res.json(out);
+      } catch (e: any) {
+        // Si algo falla, devolvemos lo guardado para no romper el front
+        console.warn("⚠️ Fallback pagespeed by URL falló:", e?.message);
+        return res.json(docObj);
+      }
+    }
 
     return res.json(docObj);
   } catch (e: any) {
@@ -280,6 +336,68 @@ export async function getAuditHistory(req: Request, res: Response) {
   } catch (e: any) {
     console.error("❌ getAuditHistory error:", e); // eslint-disable-line no-console
     return res.status(200).json([]); // degradar a vacío para no romper el front
+  }
+}
+
+// -------- (NUEVO) Obtener auditoría por URL + strategy --------
+// - Usado por el front como fallback cuando el doc por ID no coincide en estrategia
+export async function getAuditByUrl(req: Request, res: Response) {
+  try {
+    const rawUrl = String(req.query?.url || "").trim();
+    if (!rawUrl) return res.status(400).json({ error: "Falta parámetro url" });
+    const strategy = (String(req.query?.strategy || "mobile") as "mobile" | "desktop");
+
+    const url = (() => { try { return decodeURIComponent(rawUrl); } catch { return rawUrl; } })();
+
+    const ps = await runPagespeedViaMicro(url, strategy);
+    const perfResolved = resolvePerformanceFromPagespeed(ps);
+
+    const out = {
+      ok: true,
+      url,
+      strategy,
+      audit: { pagespeed: ps },
+      performance: perfResolved ?? undefined,
+      metrics: ps?.metrics ?? undefined,
+      fecha: new Date().toISOString(),
+      forced: true,
+      note: "Generado por /api/audit/by-url",
+    };
+    return res.json(out);
+  } catch (e: any) {
+    console.error("❌ getAuditByUrl error:", e);
+    return res.status(500).json({ error: "Error interno", detail: e?.message });
+  }
+}
+
+// -------- (NUEVO) Obtener auditoría por :rawUrl + strategy --------
+// - Variante con :param que encaja perfecto con el fetch del front
+export async function getDiagnosticsAudit(req: Request, res: Response) {
+  try {
+    const rawUrl = (req.params?.rawUrl || "").trim();
+    if (!rawUrl) return res.status(400).json({ error: "Falta parámetro :rawUrl" });
+    const strategy = (String(req.query?.strategy || "mobile") as "mobile" | "desktop");
+
+    const url = (() => { try { return decodeURIComponent(rawUrl); } catch { return rawUrl; } })();
+
+    const ps = await runPagespeedViaMicro(url, strategy);
+    const perfResolved = resolvePerformanceFromPagespeed(ps);
+
+    const out = {
+      ok: true,
+      url,
+      strategy,
+      audit: { pagespeed: ps },
+      performance: perfResolved ?? undefined,
+      metrics: ps?.metrics ?? undefined,
+      fecha: new Date().toISOString(),
+      forced: true,
+      note: "Generado por /api/diagnostics/:rawUrl/audit",
+    };
+    return res.json(out);
+  } catch (e: any) {
+    console.error("❌ getDiagnosticsAudit error:", e);
+    return res.status(500).json({ error: "Error interno", detail: e?.message });
   }
 }
 
@@ -520,7 +638,6 @@ function normalizeUrlFromParam(rawParam: string) {
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   // Prefijo por base PERO permitiendo que después venga / ? # o fin de string
-  // (cubre https://dominio, https://dominio/..., https://dominio?x=..., etc.)
   const rxBase = new RegExp("^" + esc(base) + "(?:[/?#]|$)", "i");
 
   // Por si quieres matchear por ORIGEN (host) cuando cambia el path
@@ -535,21 +652,15 @@ function normalizeUrlFromParam(rawParam: string) {
 function buildDiagnosticsFilter(decoded: string, base: string, rxBase: RegExp, rxOrigin: RegExp) {
   return {
     $or: [
-      // URL tal cual llegó
       { url: decoded },
-      // base exacta y base con "/"
       { url: base }, { url: base + "/" },
-      // cualquier subruta de base
       { url: { $regex: rxBase } },
-      // por ORIGEN (por si se guardó con rutas diferentes)
       { url: { $regex: rxOrigin } },
 
-      // PSI/local pueden tener finalUrl distinto (redirecciones, saneos…)
       { "audit.pagespeed.meta.finalUrl": decoded },
       { "audit.pagespeed.meta.finalUrl": { $regex: rxBase } },
       { "audit.pagespeed.meta.finalUrl": { $regex: rxOrigin } },
 
-      // Algunas implementaciones guardan url en estos campos
       { "audit.pagespeed.url": decoded },
       { "audit.pagespeed.url": { $regex: rxBase } },
       { "audit.pagespeed.url": { $regex: rxOrigin } },
@@ -563,7 +674,6 @@ function buildDiagnosticsFilter(decoded: string, base: string, rxBase: RegExp, r
 
 // =====================
 // GET /api/diagnostics/:rawUrl
-// Devuelve el último doc en bruto
 // =====================
 export async function getDiagnosticsRaw(req: Request, res: Response) {
   try {
@@ -585,7 +695,6 @@ export async function getDiagnosticsRaw(req: Request, res: Response) {
 
 // =====================
 // GET /api/diagnostics/:rawUrl/processed
-// Devuelve métricas + oportunidades normalizadas
 // =====================
 export async function getDiagnosticsProcessed(req: Request, res: Response) {
   try {
@@ -609,7 +718,6 @@ export async function getDiagnosticsProcessed(req: Request, res: Response) {
 
 // =====================
 // GET /api/diagnostics/by-id/:id/processed
-// Fallback directo por _id (útil si por URL no se encuentra)
 // =====================
 export async function getDiagnosticsProcessedById(req: Request, res: Response) {
   try {

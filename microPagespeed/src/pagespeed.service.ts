@@ -16,7 +16,7 @@ const endpoint = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed";
 const httpAgent = new http.Agent({ keepAlive: true });
 const httpsAgent = new https.Agent({ keepAlive: true });
 
-// Cache simple en memoria (1h) por url+strategy
+// Cache simple en memoria (1h) por url+strategy+categories
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const cache = new Map<string, { time: number; data: any }>();
 
@@ -42,26 +42,9 @@ function sanitizeUrl(raw: string): string {
   }
 }
 
-// Pre-chequeo barato para detectar bloqueo por WAF a Lighthouse
-async function psiLikelyBlocked(url: string): Promise<boolean> {
-  try {
-    const common = {
-      timeout: 10000,
-      maxRedirects: 5,
-      validateStatus: () => true,
-      headers: { "User-Agent": "Chrome-Lighthouse" },
-    };
-    let r = await axios.head(url, common);
-    if (r.status === 405) {
-      r = await axios.get(url, {
-        ...common,
-        headers: { ...common.headers, Range: "bytes=0-0" },
-      });
-    }
-    return r.status === 403 || r.status === 404; // bloqueado o no servido a bots
-  } catch {
-    return true;
-  }
+// (Opcional: lo dejamos por si quieres reactivarlo en el futuro)
+async function psiLikelyBlocked(_url: string): Promise<boolean> {
+  return false;
 }
 
 // ---------- Helpers de extracción ----------
@@ -98,10 +81,8 @@ function localizeLhrInPlace(lhr: any) {
     for (const id of Object.keys(audits)) {
       const a = audits[id] || {};
       if (typeof a.title === "string") a.title = tTitle(a.title);
-      if (typeof a.description === "string")
-        a.description = tRich(a.description);
-      if (typeof a.displayValue === "string")
-        a.displayValue = tSavings(a.displayValue);
+      if (typeof a.description === "string") a.description = tRich(a.description);
+      if (typeof a.displayValue === "string") a.displayValue = tSavings(a.displayValue);
     }
     (lhr as any).__i18n = "es";
   } catch {
@@ -112,8 +93,7 @@ function localizeLhrInPlace(lhr: any) {
 /** 🔵 Plan de acción simple (opportunities + algunos diagnostics) ya en ES */
 function buildPlanChecklistEs(lhr: any) {
   const audits = lhr?.audits || {};
-  const list: Array<{ title: string; recommendation: string; savings: string }> =
-    [];
+  const list: Array<{ title: string; recommendation: string; savings: string }> = [];
 
   for (const id of Object.keys(audits)) {
     const a = audits[id] || {};
@@ -160,9 +140,7 @@ function buildPlanChecklistEs(lhr: any) {
   const md = list
     .map(
       (x) =>
-        `- [ ] ${x.recommendation || x.title}${
-          x.savings ? ` (ahorro: ${x.savings})` : ""
-        }`
+        `- [ ] ${x.recommendation || x.title}${x.savings ? ` (ahorro: ${x.savings})` : ""}`
     )
     .join("\n");
 
@@ -181,12 +159,13 @@ export type RunPageSpeedArgs = {
 export async function runPageSpeed({
   url,
   strategy = "mobile",
-  categories = ["performance"],
+  categories = ["performance", "accessibility", "best-practices", "seo"], // ✅ FULL por defecto
   key,
 }: RunPageSpeedArgs): Promise<any> {
   // 1) Normaliza URL y cache
   const cleanUrl = sanitizeUrl(url);
-  const cacheKey = `${cleanUrl}::${strategy}`;
+  const catsKey = (categories || []).slice().sort().join("|"); // cache por set de categorías
+  const cacheKey = `${cleanUrl}::${strategy}::${catsKey}`;
   const hit = cache.get(cacheKey);
   if (hit && Date.now() - hit.time < CACHE_TTL_MS) {
     console.log("[micro] cache hit → source=%s", hit.data?.meta?.source);
@@ -201,27 +180,20 @@ export async function runPageSpeed({
     effectiveKey ? `****${effectiveKey.slice(-6)}` : "none"
   );
 
-  // 3) Preflight: si WAF bloquea a Lighthouse, evita PSI y usa local
-  if (await psiLikelyBlocked(cleanUrl)) {
-    console.warn("[micro] PSI bloqueado por WAF (preflight). Usando local.");
-    const payload = await runLocalLighthouse({ url: cleanUrl, strategy, categories });
-    cache.set(cacheKey, { time: Date.now(), data: payload });
-    return payload;
-  }
+  // 3) (REMOVIDO) Preflight WAF — siempre intentamos PSI primero
 
-  // 4) Construye URL PSI (ahora con ES)
+  // 4) Construye URL PSI (ES)
   const params = new URLSearchParams();
   params.set("url", cleanUrl);
   params.set("strategy", strategy);
   (categories || []).forEach((c) => params.append("category", c));
   if (effectiveKey) params.set("key", effectiveKey);
-  // 👇 Localización en español (ambos por compatibilidad de versiones)
   params.set("locale", "es");
   params.set("hl", "es");
 
   const full = `${endpoint}?${params.toString()}`;
 
-  // 5) Llama PSI con reintentos (backoff 2s, 5s, 10s)
+  // 5) PSI con reintentos (2s, 5s, 10s)
   for (let attempt = 0; attempt <= 3; attempt++) {
     try {
       console.log("[micro] PSI about to call → url:", cleanUrl);
@@ -235,10 +207,7 @@ export async function runPageSpeed({
       });
       const durationMs = Date.now() - t0;
 
-      // 🔵 Localizamos el LHR de PSI (fallback por si algo quedó en EN)
-      if (data?.lighthouseResult) {
-        localizeLhrInPlace(data.lighthouseResult);
-      }
+      if (data?.lighthouseResult) localizeLhrInPlace(data.lighthouseResult);
 
       console.log("[micro] PSI OK (attempt %d) ms=%d", attempt, durationMs);
       const payload = toPayloadFromPSI(data, durationMs, strategy);
@@ -257,15 +226,11 @@ export async function runPageSpeed({
         await sleep(waitMs);
         continue;
       }
-
-      if (status === 404 || status === 403) {
-        console.warn("[micro] PSI 4xx (posible login/robots/WAF). Fallback a local.");
-      }
       break; // cae a local
     }
   }
 
-  // 6) Fallback: Lighthouse local
+  // 6) Fallback: Lighthouse local (solo si PSI realmente falla)
   const payload = await runLocalLighthouse({ url: cleanUrl, strategy, categories });
   cache.set(cacheKey, { time: Date.now(), data: payload });
   console.log("[micro] source=local ms=%d", payload?.meta?.duration_ms ?? -1);
@@ -310,7 +275,7 @@ function toPayloadFromPSI(data: any, durationMs: number, strategy: string) {
 async function runLocalLighthouse({
   url,
   strategy = "mobile",
-  categories = ["performance"],
+  categories = ["performance", "accessibility", "best-practices", "seo"], // ✅ FULL por defecto
 }: {
   url: string;
   strategy?: "mobile" | "desktop" | (string & {});

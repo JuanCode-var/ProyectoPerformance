@@ -78,7 +78,7 @@ function buildProcessedFromPayload(payload: any, lang: string = "es") {
   // TTFB: server-response-time → sec
   let ttfbSec = toSeconds(audits?.["server-response-time"]?.numericValue ?? null);
   if (ttfbSec == null || ttfbSec === 0) {
-    // Fallback a texto (raro, pero por si acaso)
+    // Fallback a texto
     const a = audits?.["server-response-time"] || audits?.["time-to-first-byte"];
     const txt = a?.displayValue as string | undefined;
     if (txt) {
@@ -89,7 +89,7 @@ function buildProcessedFromPayload(payload: any, lang: string = "es") {
     }
   }
 
-  // Oportunidades + hallazgos (errores/mejoras)
+  // Oportunidades + hallazgos
   const all: Array<{ id: string; raw: any }> = Object.entries(audits).map(
     ([id, a]) => ({ id, raw: a })
   );
@@ -99,11 +99,9 @@ function buildProcessedFromPayload(payload: any, lang: string = "es") {
   const improvements: any[] = [];
 
   for (const { id, raw: a } of all) {
-    // Title + description (posible traducción)
     const title = lang === "es" ? tTitle(a?.title || id) : (a?.title || id);
     const description = lang === "es" ? tRich(a?.description || "") : (a?.description || "");
 
-    // Oportunidades
     const d = a?.details || {};
     const hasOpp =
       d?.type === "opportunity" ||
@@ -125,7 +123,6 @@ function buildProcessedFromPayload(payload: any, lang: string = "es") {
       continue;
     }
 
-    // Hallazgos con score
     const score = typeof a?.score === "number" ? a.score : null;
     if (typeof score === "number") {
       const item = {
@@ -171,7 +168,6 @@ function buildPlanMarkdownEs(proc: ReturnType<typeof buildProcessedFromPayload>)
       recommendation: o.recommendation,
       savings: o.savingsLabel,
     })),
-    // También podríamos incluir improvements con menos prioridad
   ];
 
   for (const it of items) {
@@ -214,37 +210,57 @@ app.get("/api/pagespeed", async (req: Request, res: Response) => {
       | "mobile"
       | "desktop");
 
+    const VALID_CATEGORIES = new Set(["performance", "accessibility", "best-practices", "seo"]);
+    const aliasMap: Record<string, string> = {
+      a11y: "accessibility",
+      bp: "best-practices",
+      bestpractices: "best-practices",
+      all: "all",
+    };
+
+    const q = req.query as any;
+    const rawCats = Array.isArray(q?.categories)
+      ? q.categories
+      : (typeof q?.categories === "string" && q.categories.trim())
+      ? String(q.categories).split(",")
+      : null;
+
+    const normalized = rawCats
+      ? rawCats.map((s: any) => String(s).trim().toLowerCase()).map((c) => aliasMap[c] || c)
+      : null;
+
+    const parsed = normalized
+      ? normalized
+          .filter(Boolean)
+          .filter((c) => c === "all" || VALID_CATEGORIES.has(c))
+          .filter((v, i, a) => a.indexOf(v) === i)
+      : null;
+
+    // ✅ FULL por defecto; opcionalmente ?lite=1 para pedir solo performance
+    const wantsLite =
+      String(q?.lite ?? "").toLowerCase() === "1" || String(q?.lite ?? "").toLowerCase() === "true";
+
     const categories =
-      typeof req.query.categories === "string" && req.query.categories.trim()
-        ? String(req.query.categories)
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
+      parsed && parsed.length && !parsed.includes("all")
+        ? parsed
+        : wantsLite
+        ? ["performance"]
         : ["performance", "accessibility", "best-practices", "seo"];
 
     const lang = (String(req.query.lang || "es").toLowerCase() === "es" ? "es" : "en");
 
-    const payload = await runPageSpeed({
-      url,
-      strategy,
-      categories,
-      // key: opcional si lo pasas por query o usas var de entorno en pagespeed.service.ts
-    });
+    const payload = await runPageSpeed({ url, strategy, categories });
 
     const processed = buildProcessedFromPayload(payload, lang);
     const plan_es = lang === "es" ? buildPlanMarkdownEs(processed) : undefined;
 
-    res.json({
-      ...payload,
-      processed,
-      i18n: { lang },
-      plan_es,
-    });
+    res.json({ ...payload, processed, i18n: { lang }, plan_es });
   } catch (e: any) {
-    console.error("[/api/pagespeed] error:", e?.message || e); // eslint-disable-line no-console
+    console.error("[/api/pagespeed] error:", e?.message || e);
     res.status(500).json({ error: "Error interno" });
   }
 });
+
 
 /**
  * GET /api/pagespeed/processed
@@ -259,12 +275,41 @@ app.get("/api/pagespeed/processed", async (req: Request, res: Response) => {
       | "mobile"
       | "desktop");
 
+    // ✅ MISMA LÓGICA DE CATEGORÍAS QUE /api/pagespeed
+    const VALID_CATEGORIES = new Set(["performance", "accessibility", "best-practices", "seo"]);
+    const aliasMap: Record<string, string> = {
+      a11y: "accessibility",
+      bp: "best-practices",
+      bestpractices: "best-practices",
+      all: "all",
+    };
+
+    const q = req.query as any;
+    const rawCats = Array.isArray(q?.categories)
+      ? q.categories
+      : (typeof q?.categories === "string" && q.categories.trim())
+      ? String(q.categories).split(",")
+      : null;
+
+    const normalized = rawCats
+      ? rawCats.map((s: any) => String(s).trim().toLowerCase()).map((c) => aliasMap[c] || c)
+      : null;
+
+    const parsed = normalized
+      ? normalized
+          .filter(Boolean)
+          .filter((c) => c === "all" || VALID_CATEGORIES.has(c))
+          .filter((v, i, a) => a.indexOf(v) === i)
+      : null;
+
+    const wantsLite =
+      String(q?.lite ?? "").toLowerCase() === "1" || String(q?.lite ?? "").toLowerCase() === "true";
+
     const categories =
-      typeof req.query.categories === "string" && req.query.categories.trim()
-        ? String(req.query.categories)
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
+      parsed && parsed.length && !parsed.includes("all")
+        ? parsed
+        : wantsLite
+        ? ["performance"]
         : ["performance", "accessibility", "best-practices", "seo"];
 
     const lang = (String(req.query.lang || "es").toLowerCase() === "es" ? "es" : "en");
@@ -275,15 +320,14 @@ app.get("/api/pagespeed/processed", async (req: Request, res: Response) => {
 
     res.json({ processed, plan_es, i18n: { lang } });
   } catch (e: any) {
-    console.error("[/api/pagespeed/processed] error:", e?.message || e); // eslint-disable-line no-console
+    console.error("[/api/pagespeed/processed] error:", e?.message || e);
     res.status(500).json({ error: "Error interno" });
   }
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
 
-const PORT = Number(process.env.PORT || 4000);
+const PORT = Number(process.env.PS_PORT || 3001);
 app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
   console.log(`API ready on http://localhost:${PORT}`);
 });

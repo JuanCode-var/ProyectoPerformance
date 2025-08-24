@@ -308,6 +308,55 @@ function buildOpportunities(apiData: any, processed: ProcessedData | null) {
 }
 
 // =================== Desglose por categoría (A11y/BP/SEO) ===================
+// ⚠️ ESTE ES EL COMPONENTE QUE TE FALTABA
+function CategoryBreakdown({
+  label,
+  items,
+}: {
+  label: string;
+  items: CatBreakItem[];
+}) {
+  if (!items.length) return null;
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <h3 style={{ margin: "0 0 12px 0", fontSize: 20, fontWeight: 700, color: "#0f172a" }}>
+        Desglose de {label}
+      </h3>
+      <div className="diagnostico-grid">
+        {items.map((it) => {
+          const isNull = it.scorePct == null;
+          return (
+            <div key={it.id} className="item">
+              <h4
+                className="item-label"
+                title={typeof it.description === "string" ? it.description : ""}
+              >
+                {it.title}
+              </h4>
+              <CircularGauge
+                value={isNull ? 0 : it.scorePct!}
+                max={100}
+                color={isNull ? "#9ca3af" : gaugeColor("performance", it.scorePct)}
+                decimals={0}
+                suffix="%"
+                size={120}
+              />
+              <p className="item-desc">
+                {isNull
+                  ? "—"
+                  : it.savingsLabel
+                  ? `Ahorro: ${it.savingsLabel}`
+                  : it.displayValue || "—"}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Devuelve items de categoría desde el LHR
 function getCategoryBreakdown(
   catKey: "accessibility" | "best-practices" | "seo",
   apiData: any
@@ -369,54 +418,6 @@ function getCategoryBreakdown(
   });
 
   return items.slice(0, 9);
-}
-
-// =================== UI: CategoryBreakdown ===================
-function CategoryBreakdown({
-  label,
-  items,
-}: {
-  label: string;
-  items: CatBreakItem[];
-}) {
-  if (!items.length) return null;
-  return (
-    <div className="card" style={{ marginTop: 16 }}>
-      <h3 style={{ margin: "0 0 12px 0", fontSize: 20, fontWeight: 700, color: "#0f172a" }}>
-        Desglose de {label}
-      </h3>
-      <div className="diagnostico-grid">
-        {items.map((it) => {
-          const isNull = it.scorePct == null;
-          return (
-            <div key={it.id} className="item">
-              <h4
-                className="item-label"
-                title={typeof it.description === "string" ? it.description : ""}
-              >
-                {it.title}
-              </h4>
-              <CircularGauge
-                value={isNull ? 0 : it.scorePct!}
-                max={100}
-                color={isNull ? "#9ca3af" : gaugeColor("performance", it.scorePct)}
-                decimals={0}
-                suffix="%"
-                size={120}
-              />
-              <p className="item-desc">
-                {isNull
-                  ? "—"
-                  : it.savingsLabel
-                  ? `Ahorro: ${it.savingsLabel}`
-                  : it.displayValue || "—"}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 // =================== PerfDial helpers ===================
@@ -1021,7 +1022,7 @@ export default function DiagnosticoView() {
       : ({ id: "ttfb" as MetricId, label: "TTFB", value: ttfbSec } as const),
   ];
 
-  // Desgloses por categoría
+  // Desgloses por categoría (items)
   const accBreak = getCategoryBreakdown("accessibility", apiData);
   const bpBreak  = getCategoryBreakdown("best-practices", apiData);
   const seoBreak = getCategoryBreakdown("seo", apiData);
@@ -1176,7 +1177,7 @@ export default function DiagnosticoView() {
         </h2>
         <div className="date">{new Date(fecha as string).toLocaleString()}</div>
 
-        {/* NUEVO: Tabs de estrategia (Móvil | Ordenador) */}
+        {/* Tabs de estrategia (Móvil | Ordenador) */}
         <div className="tabs" style={{ marginTop: 8 }}>
           <button
             onClick={() => setStrategy("mobile")}
@@ -1194,8 +1195,6 @@ export default function DiagnosticoView() {
             🖥️ Ordenador
           </button>
         </div>
-
-        {/* 🔕 Barra de API (Lighthouse/Unlighthouse) eliminada */}
 
         {/* Grid principal: performance + categorías */}
         <div className="diagnostico-grid">
@@ -1239,17 +1238,15 @@ export default function DiagnosticoView() {
         />
       </div>
 
-    <EmailSendBar
-    captureRef={contenedorReporteRef}
-    url={url as string}
-    subject={`Diagnóstico de ${url}`}
-    includePdf
-    applyPdfClass
-    pdfClassName="pdf-root"
-    /* sin captureWidthPx => autodetecta; pásalo si quieres fijar, ej. 1280 */
-    extraWaitMs={200}
-    endpoint="/api/audit/send-diagnostic"
-  />
+      <EmailSendBar
+        captureRef={contenedorReporteRef as any}
+        url={url as string}
+        email={(auditData as any)?.email || ""}
+        hideEmailInput={true}
+        subject={`Diagnóstico de ${url} (${strategy === "mobile" ? "Móvil" : "Ordenador"})`}
+        endpoint="/api/audit/send-diagnostic"
+        includePdf={true}
+      />
     </div>
   );
 }
