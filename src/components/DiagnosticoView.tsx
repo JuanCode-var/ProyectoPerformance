@@ -5,6 +5,11 @@ import CircularGauge from "./CircularGauge";
 import ActionPlanPanel from "./ActionPlanPanel";
 import EmailSendBar from "./EmailPdfBar";
 
+// shadcn/ui padres
+import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "../shared/ui/tabs"
+import { Button } from "../shared/ui/button";
+
 // i18n (usamos alias para no chocar con funciones locales)
 import {
   tTitle as i18nTitle,
@@ -160,7 +165,7 @@ async function fetchAuditByUrlWithStrategy(url: string, strategy: "mobile" | "de
   const urlSafe = encodeURIComponent(url);
   const headers = { "Cache-Control": "no-cache" };
 
-  // Orden de candidatos: diagnostics → audit/by-url → form (ajusta si tu back ya tiene uno exacto)
+  // Orden de candidatos
   const candidates = [
     `/api/diagnostics/${urlSafe}/audit?strategy=${strategy}&_=${ts}`,
     `/api/audit/by-url?url=${urlSafe}&strategy=${strategy}&_=${ts}`,
@@ -232,11 +237,9 @@ function buildFindings(apiData: any, processed: ProcessedData | null) {
   const auditsObj = pickAudits(apiData);
   const all = Object.entries(auditsObj).map(([id, a]) => ({ id, ...(a as any) }));
 
-  const errors: any[] = [],
-    improvements: any[] = [];
+  const errors: any[] = [], improvements: any[] = [];
   for (const a of all) {
-    if (a?.scoreDisplayMode === "manual" || a?.scoreDisplayMode === "notApplicable")
-      continue;
+    if (a?.scoreDisplayMode === "manual" || a?.scoreDisplayMode === "notApplicable") continue;
     const item = {
       id: (a as any).id,
       title: i18nTitle((a as any).title || (a as any).id),
@@ -308,7 +311,6 @@ function buildOpportunities(apiData: any, processed: ProcessedData | null) {
 }
 
 // =================== Desglose por categoría (A11y/BP/SEO) ===================
-// ⚠️ ESTE ES EL COMPONENTE QUE TE FALTABA
 function CategoryBreakdown({
   label,
   items,
@@ -318,41 +320,43 @@ function CategoryBreakdown({
 }) {
   if (!items.length) return null;
   return (
-    <div className="card" style={{ marginTop: 16 }}>
-      <h3 style={{ margin: "0 0 12px 0", fontSize: 20, fontWeight: 700, color: "#0f172a" }}>
-        Desglose de {label}
-      </h3>
-      <div className="diagnostico-grid">
-        {items.map((it) => {
-          const isNull = it.scorePct == null;
-          return (
-            <div key={it.id} className="item">
-              <h4
-                className="item-label"
-                title={typeof it.description === "string" ? it.description : ""}
-              >
-                {it.title}
-              </h4>
-              <CircularGauge
-                value={isNull ? 0 : it.scorePct!}
-                max={100}
-                color={isNull ? "#9ca3af" : gaugeColor("performance", it.scorePct)}
-                decimals={0}
-                suffix="%"
-                size={120}
-              />
-              <p className="item-desc">
-                {isNull
-                  ? "—"
-                  : it.savingsLabel
-                  ? `Ahorro: ${it.savingsLabel}`
-                  : it.displayValue || "—"}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>Desglose de {label}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="diagnostico-grid">
+          {items.map((it) => {
+            const isNull = it.scorePct == null;
+            return (
+              <div key={it.id} className="item">
+                <h4
+                  className="item-label"
+                  title={typeof it.description === "string" ? it.description : ""}
+                >
+                  {it.title}
+                </h4>
+                <CircularGauge
+                  value={isNull ? 0 : it.scorePct!}
+                  max={100}
+                  color={isNull ? "#9ca3af" : gaugeColor("performance", it.scorePct)}
+                  decimals={0}
+                  suffix="%"
+                  size={120}
+                />
+                <p className="item-desc">
+                  {isNull
+                    ? "—"
+                    : it.savingsLabel
+                    ? `Ahorro: ${it.savingsLabel}`
+                    : it.displayValue || "—"}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -421,20 +425,6 @@ function getCategoryBreakdown(
 }
 
 // =================== PerfDial helpers ===================
-function arcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: number) {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const s = toRad(startDeg);
-  const e = toRad(endDeg);
-  const x1 = cx + r * Math.cos(s);
-  const y1 = cy + r * Math.sin(s);
-  const x2 = cx + r * Math.cos(e);
-  const y2 = cy + r * Math.sin(e);
-  const large = Math.abs(endDeg - startDeg) > 180 ? 1 : 0;
-  const sweep = endDeg > startDeg ? 1 : 0;
-  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} ${sweep} ${x2} ${y2}`;
-}
-
-// PerfDial (REEMPLAZO)
 type DialSeg = { id: MetricId; label: string; value: number | null };
 
 function PerfDial({
@@ -554,52 +544,54 @@ function PerfBreakdownGrid({
 }) {
   if (!items.length) return null;
   return (
-    <div className="card" style={{ marginTop: 16 }}>
-      <h3 style={{ margin: "0 0 12px 0", fontSize: 20, fontWeight: 700, color: "#0f172a" }}>
-        Desglose de Performance
-      </h3>
-      <div className="diagnostico-grid">
-        {items.map((m) => {
-          const isTime = m.id !== "performance" && m.id !== "cls";
-          const isCLS = m.id === "cls";
-          const v = m.value;
-          const subtitle = perfMetricDescriptions[m.id] || "";
-          return (
-            <div key={m.id} className="item">
-              <h4 className="item-label">{m.label}</h4>
-              <CircularGauge
-                value={
-                  v == null
-                    ? 0
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>Desglose de Performance</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="diagnostico-grid">
+          {items.map((m) => {
+            const isTime = m.id !== "performance" && m.id !== "cls";
+            const isCLS = m.id === "cls";
+            const v = m.value;
+            const subtitle = perfMetricDescriptions[m.id] || "";
+            return (
+              <div key={m.id} className="item">
+                <h4 className="item-label">{m.label}</h4>
+                <CircularGauge
+                  value={
+                    v == null
+                      ? 0
+                      : isTime
+                      ? Number(v.toFixed(1))
+                      : isCLS
+                      ? Number((v ?? 0).toFixed(2))
+                      : Number(v)
+                  }
+                  max={isTime ? undefined : isCLS ? undefined : 100}
+                  color={v == null ? "#9ca3af" : gaugeColor(m.id, v)}
+                  decimals={isTime ? 1 : isCLS ? 2 : 0}
+                  suffix={isTime ? "s" : isCLS ? "" : "%"}
+                  size={120}
+                />
+                <p className="item-desc" style={{ marginBottom: 4 }}>
+                  {v == null
+                    ? "—"
                     : isTime
-                    ? Number(v.toFixed(1))
+                    ? `${v.toFixed(1)}s`
                     : isCLS
-                    ? Number((v ?? 0).toFixed(2))
-                    : Number(v)
-                }
-                max={isTime ? undefined : isCLS ? undefined : 100}
-                color={v == null ? "#9ca3af" : gaugeColor(m.id, v)}
-                decimals={isTime ? 1 : isCLS ? 2 : 0}
-                suffix={isTime ? "s" : isCLS ? "" : "%"}
-                size={120}
-              />
-              <p className="item-desc" style={{ marginBottom: 4 }}>
-                {v == null
-                  ? "—"
-                  : isTime
-                  ? `${v.toFixed(1)}s`
-                  : isCLS
-                  ? `${v.toFixed(2)}`
-                  : `${v}%`}
-              </p>
-              <p style={{ margin: 0, fontSize: 12, color: "#64748b", textAlign: "center" }}>
-                {subtitle}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+                    ? `${v.toFixed(2)}`
+                    : `${v}%`}
+                </p>
+                <p style={{ margin: 0, fontSize: 12, color: "#64748b", textAlign: "center" }}>
+                  {subtitle}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -624,99 +616,61 @@ function ScreenshotPreview({ src }: { src: string | null }) {
   if (!src) return null;
 
   return (
-    <div className="card" style={{ marginTop: 16 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 8,
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#0f172a" }}>
-          Vista previa (captura)
-        </h3>
-        <button
-          onClick={() => setOpen(true)}
+    <Card className="mt-4">
+      <CardHeader className="flex-row items-center justify-between">
+        <CardTitle>Vista previa (captura)</CardTitle>
+        <Button variant="outline" onClick={() => setOpen(true)}>Abrir</Button>
+      </CardHeader>
+      <CardContent>
+        <img
+          src={src}
+          alt="Vista previa de la página"
           style={{
-            padding: "8px 12px",
-            borderRadius: 10,
-            border: "1px solid #e5e7eb",
-            background: "#fff",
-            cursor: "pointer",
-            fontWeight: 600,
+            width: 240,
+            height: "auto",
+            borderRadius: 12,
+            display: "block",
+            boxShadow: "0 1px 8px rgba(0,0,0,.06)",
           }}
-        >
-          Abrir
-        </button>
-      </div>
-
-      <img
-        src={src}
-        alt="Vista previa de la página"
-        style={{
-          width: 240,
-          height: "auto",
-          borderRadius: 12,
-          display: "block",
-          boxShadow: "0 1px 8px rgba(0,0,0,.06)",
-        }}
-      />
-
-      {open && (
-        <div
-          onClick={() => setOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: 20,
-          }}
-        >
+        />
+        {open && (
           <div
-            onClick={(e) => e.stopPropagation()}
+            onClick={() => setOpen(false)}
             style={{
-              background: "#fff",
-              borderRadius: 16,
-              padding: 16,
-              maxWidth: "90vw",
-              maxHeight: "90vh",
-              boxShadow: "0 10px 30px rgba(0,0,0,.2)",
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,.6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 1000,
+              padding: 20,
             }}
           >
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-              <button
-                onClick={() => setOpen(false)}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 8,
-                  border: "1px solid #e5e7eb",
-                  background: "#fff",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                }}
-              >
-                Cerrar
-              </button>
-            </div>
-            <img
-              src={src}
-              alt="Vista previa ampliada"
+            <div
+              onClick={(e) => e.stopPropagation()}
               style={{
-                maxWidth: "85vw",
-                maxHeight: "80vh",
-                borderRadius: 12,
-                display: "block",
+                background: "#fff",
+                borderRadius: 16,
+                padding: 16,
+                maxWidth: "90vw",
+                maxHeight: "90vh",
+                boxShadow: "0 10px 30px rgba(0,0,0,.2)",
               }}
-            />
+            >
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+                <Button variant="outline" onClick={() => setOpen(false)}>Cerrar</Button>
+              </div>
+              <img
+                src={src}
+                alt="Vista previa ampliada"
+                style={{ maxWidth: "85vw", maxHeight: "80vh", borderRadius: 12, display: "block" }}
+              />
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -796,14 +750,13 @@ export default function DiagnosticoView() {
           setAuditData(payload);
         }
 
-        // ✅ Verificamos si el LHR coincide con la estrategia solicitada
+        // ✅ Verifica si el LHR coincide con la estrategia solicitada
         try {
           const currentApiKey = apis[0] || "";
           const currentApiData = (payload.audit?.[currentApiKey] || {}) as any;
           const ff = detectFormFactor(currentApiData);
 
           if (payload.url && ff && ff !== strategy) {
-            // Fallback: pedimos por URL+strategy (mismo microservicio, otro endpoint del FormController)
             const forced = await fetchAuditByUrlWithStrategy(payload.url as string, strategy, ts);
             if (forced && mounted) {
               const available2 = Object.keys(forced.audit || {}).filter((k: string) => {
@@ -862,28 +815,35 @@ export default function DiagnosticoView() {
     };
   }, [id, strategy]); // <- cambia todo al alternar móvil/ordenador
 
+  // ======== Estados tempranos con Card padre ========
   if (!id)
     return (
-      <div className="card">
-        <p className="error">Falta el ID del diagnóstico.</p>
-        <Link to="/" className="back-link">← Volver</Link>
-      </div>
+      <Card>
+        <CardContent className="p-6">
+          <p className="error">Falta el ID del diagnóstico.</p>
+          <Link to="/" className="back-link">← Volver</Link>
+        </CardContent>
+      </Card>
     );
 
   if (err)
     return (
-      <div className="card">
-        <p className="error">Error: {err}</p>
-        <Link to="/" className="back-link">← Volver</Link>
-      </div>
+      <Card>
+        <CardContent className="p-6">
+          <p className="error">Error: {err}</p>
+          <Link to="/" className="back-link">← Volver</Link>
+        </CardContent>
+      </Card>
     );
 
   if (!auditData)
     return (
-      <div className="card loading-placeholder">
-        <div className="spinner" />
-        <p>Cargando diagnóstico…</p>
-      </div>
+      <Card>
+        <CardContent className="p-6">
+          <div className="spinner" />
+          <p>Cargando diagnóstico…</p>
+        </CardContent>
+      </Card>
     );
 
   // ======== Datos ========
@@ -893,20 +853,22 @@ export default function DiagnosticoView() {
 
   if (!activeApi || Object.keys(metrics).length === 0) {
     return (
-      <div className="card">
-        <Link to="/" className="back-link">← Nuevo diagnóstico</Link>
-        <Link
-          to={`/historico?url=${encodeURIComponent(url)}`}
-          className="back-link"
-          style={{ marginLeft: "1rem" }}
-        >
-          Ver histórico de esta URL
-        </Link>
-        <h2 className="diagnostico-title">
-          Diagnóstico de <span className="url">{url}</span>
-        </h2>
-        <p className="no-metrics">No se encontraron métricas para la API seleccionada.</p>
-      </div>
+      <Card>
+        <CardContent className="p-6">
+          <Link to="/" className="back-link">← Nuevo diagnóstico</Link>
+          <Link
+            to={`/historico?url=${encodeURIComponent(url)}`}
+            className="back-link"
+            style={{ marginLeft: "1rem" }}
+          >
+            Ver histórico de esta URL
+          </Link>
+          <h2 className="diagnostico-title">
+            Diagnóstico de <span className="url">{url}</span>
+          </h2>
+          <p className="no-metrics">No se encontraron métricas para la API seleccionada.</p>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -1161,92 +1123,90 @@ export default function DiagnosticoView() {
 
   // =================== UI ===================
   return (
-    <div className="card">
-      <div ref={contenedorReporteRef}>
-        <Link to="/" className="back-link">Nuevo diagnóstico</Link>
-        <Link
-          to={`/historico?url=${encodeURIComponent(url as string)}`}
-          className="back-link"
-          style={{ marginLeft: "1rem" }}
-        >
-          Ver histórico de esta URL
-        </Link>
+    <Card>
+      <CardHeader>
+        <CardTitle>Diagnóstico</CardTitle>
+      </CardHeader>
 
-        <h2 className="diagnostico-title">
-          Diagnóstico de <span className="url">{url}</span>
-        </h2>
-        <div className="date">{new Date(fecha as string).toLocaleString()}</div>
+      <CardContent>
+        <div ref={contenedorReporteRef}>
+          <div className="flex items-center gap-4 mb-2">
+            <Link to="/" className="back-link">← Nuevo diagnóstico</Link>
+            <Link
+              to={`/historico?url=${encodeURIComponent(url as string)}`}
+              className="back-link"
+            >
+              Ver histórico de esta URL
+            </Link>
+          </div>
 
-        {/* Tabs de estrategia (Móvil | Ordenador) */}
-        <div className="tabs" style={{ marginTop: 8 }}>
-          <button
-            onClick={() => setStrategy("mobile")}
-            className={`tab-button${strategy === "mobile" ? " active" : ""}`}
-            title="Ejecuta/consulta métricas para móviles"
-          >
-            📱 Móvil
-          </button>
-          <button
-            onClick={() => setStrategy("desktop")}
-            className={`tab-button${strategy === "desktop" ? " active" : ""}`}
-            title="Ejecuta/consulta métricas para ordenadores"
-            style={{ marginLeft: 8 }}
-          >
-            🖥️ Ordenador
-          </button>
+          <h2 className="diagnostico-title">
+            Diagnóstico de <span className="url">{url}</span>
+          </h2>
+          <div className="date">{new Date(fecha as string).toLocaleString()}</div>
+
+          {/* Tabs de estrategia (Móvil | Ordenador) con shadcn */}
+          <div className="mt-2">
+            <Tabs value={strategy} onValueChange={(v) => setStrategy(v as "mobile" | "desktop")}>
+              <TabsList>
+                <TabsTrigger value="mobile">📱 Móvil</TabsTrigger>
+                <TabsTrigger value="desktop">🖥️ Ordenador</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          {/* Grid principal: performance + categorías */}
+          <div className="diagnostico-grid">
+            {renderCard(perfCard)}
+            {categoryCards.map(renderCard)}
+          </div>
+
+          {/* Desglose Performance — tipo SEO */}
+          {showPerfDetails && (
+            <>
+              <PerfBreakdownGrid items={perfBreakItems as any} />
+              <ScreenshotPreview src={getFinalScreenshot(apiData)} />
+            </>
+          )}
+
+          {/* Desglose Accesibilidad / Best Practices / SEO */}
+          {showAccDetails && (
+            <CategoryBreakdown
+              label="Accesibilidad"
+              items={accBreak.length ? accBreak : translateList((apiData as any)?.accessibility?.items)}
+            />
+          )}
+
+          {showBPDetails && (
+            <CategoryBreakdown
+              label="Prácticas recomendadas"
+              items={bpBreak.length ? bpBreak : translateList((apiData as any)?.["best-practices"]?.items)}
+            />
+          )}
+
+          {showSeoDetails && (
+            <CategoryBreakdown
+              label="SEO"
+              items={seoBreak.length ? seoBreak : translateList((apiData as any)?.seo?.items)}
+            />
+          )}
+
+          <ActionPlanPanel
+            opportunities={planItems as any}
+            performance={performance ?? undefined}
+          />
         </div>
 
-        {/* Grid principal: performance + categorías */}
-        <div className="diagnostico-grid">
-          {renderCard(perfCard)}
-          {categoryCards.map(renderCard)}
-        </div>
-
-        {/* Desglose Performance — tipo SEO */}
-        {showPerfDetails && (
-          <>
-            <PerfBreakdownGrid items={perfBreakItems as any} />
-            <ScreenshotPreview src={getFinalScreenshot(apiData)} />
-          </>
-        )}
-
-        {/* Desglose Accesibilidad / Best Practices / SEO */}
-        {showAccDetails && (
-          <CategoryBreakdown
-            label="Accesibilidad"
-            items={accBreak.length ? accBreak : translateList((apiData as any)?.accessibility?.items)}
-          />
-        )}
-
-        {showBPDetails && (
-          <CategoryBreakdown
-            label="Prácticas recomendadas"
-            items={bpBreak.length ? bpBreak : translateList((apiData as any)?.["best-practices"]?.items)}
-          />
-        )}
-
-        {showSeoDetails && (
-          <CategoryBreakdown
-            label="SEO"
-            items={seoBreak.length ? seoBreak : translateList((apiData as any)?.seo?.items)}
-          />
-        )}
-
-        <ActionPlanPanel
-          opportunities={planItems as any}
-          performance={performance ?? undefined}
+        <EmailSendBar
+          captureRef={contenedorReporteRef as any}
+          url={url as string}
+          email={(auditData as any)?.email || ""}
+          hideEmailInput={true}
+          subject={`Diagnóstico de ${url} (${strategy === "mobile" ? "Móvil" : "Ordenador"})`}
+          endpoint="/api/audit/send-diagnostic"
+          includePdf={true}
         />
-      </div>
-
-      <EmailSendBar
-        captureRef={contenedorReporteRef as any}
-        url={url as string}
-        email={(auditData as any)?.email || ""}
-        hideEmailInput={true}
-        subject={`Diagnóstico de ${url} (${strategy === "mobile" ? "Móvil" : "Ordenador"})`}
-        endpoint="/api/audit/send-diagnostic"
-        includePdf={true}
-      />
-    </div>
+      </CardContent>
+    </Card>
   );
 }

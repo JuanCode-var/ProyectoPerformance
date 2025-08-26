@@ -8,3 +8,7 @@
 @import "./styles/action-plan-panel.tw.css";
 @import "./styles/navbar.tw.css";
 @import "./styles/pdf-scope.css";
+
+@layer base {
+  html, body, #root { height: 100%; width: 100%; overflow-x: hidden; }
+}

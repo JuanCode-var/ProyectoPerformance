@@ -1,10 +1,12 @@
 // src/App.tsx
-import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
-import Navbar from './components/Navbar'
-import Formulario from './components/Formulario'
-import DiagnosticoView from './components/DiagnosticoView'
-import DashboardHistorico from './components/HistoricoView'
+import React from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import Navbar from "./components/Navbar";
+
+// Wrappers FSD
+import RunAuditPage from "./pages/run-audit";
+import DiagnosticsPage from "./pages/diagnostics";
+import HistoryPage from "./pages/history";
 
 export default function App() {
   return (
@@ -13,14 +15,17 @@ export default function App() {
       <main className="main">
         <div className="container">
           <Routes>
-            <Route path="/" element={<Formulario />} />
-            <Route path="/diagnostico/:id" element={<DiagnosticoView />} />
-            <Route path="/historico" element={<DashboardHistorico />} />
+            {/* Home = página FSD con shadcn */}
+            <Route path="/" element={<RunAuditPage />} />
+            {/* Detalle del diagnóstico */}
+            <Route path="/diagnostico/:id" element={<DiagnosticsPage />} />
+            {/* Histórico */}
+            <Route path="/historico" element={<HistoryPage />} />
+            {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </main>
     </>
-  )
+  );
 }
-

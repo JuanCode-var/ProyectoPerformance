@@ -1,4 +1,4 @@
-// server/routes/formRoutes.ts
+// server/routes/formRoutes.js
 import { Router } from "express";
 import {
   auditPing,          // GET /api/audit (ping/info)
@@ -16,7 +16,7 @@ router.get("/audit", auditPing);
 
 // Auditoría
 router.post("/audit", guardarDatos);
-router.get("/audit/history", getAuditHistory);
+router.get("/audit/history", getAuditHistory); // <- definir antes que :id
 router.get("/audit/:id", getAuditById);
 
 // Emailing

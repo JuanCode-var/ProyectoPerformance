@@ -3,6 +3,13 @@ import React, { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Globe, Mail, User, ArrowRight, Info, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { z } from 'zod';
+
+// shadcn/ui (asegúrate que existan en src/shared/ui)
+import { Card, CardContent, CardHeader, CardTitle } from '../shared/ui/card';
+import { Input } from '../shared/ui/input';
+import { Button } from '../shared/ui/button';
+import { Checkbox } from '../shared/ui/checkbox';
 
 // --- Animations ---
 const containerVariants = {
@@ -38,13 +45,22 @@ const testInfos: Record<'pagespeed' | 'security', TestInfo> = {
 type Tests = { pagespeed: boolean; unlighthouse: boolean; security: boolean };
 type InfoKeys = keyof Tests;
 type FormData = { url: string; name: string; email: string };
-type FormErrors = Partial<Record<'url' | 'name' | 'email' | 'submit', string>>;
+type FormErrors = Partial<Record<'url' | 'name' | 'email' | 'type' | 'submit', string>>;
 
 type ApiResponse = {
   _id?: string;
   error?: string;
   [k: string]: unknown;
 };
+
+// --- Zod schemas (valida payload antes de enviar) ---
+const TestKeySchema = z.enum(['pagespeed', 'unlighthouse', 'security']);
+const RunAuditFormSchema = z.object({
+  url: z.string().url('URL inválida'),
+  name: z.string().min(1, 'El nombre es requerido'),
+  email: z.string().email('Correo inválido'),
+  type: z.array(TestKeySchema).min(1, 'Selecciona al menos una prueba'),
+});
 
 export default function Formulario() {
   const [formData, setFormData] = useState<FormData>({ url: '', name: '', email: '' });
@@ -69,10 +85,9 @@ export default function Formulario() {
     }
   };
 
-  const handleTestChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, checked } = e.target;
-    const key = name as keyof Tests;
-    setTests(prev => ({ ...prev, [key]: checked }));
+  const handleTestChange = (k: keyof Tests, v: boolean) => {
+    setTests(prev => ({ ...prev, [k]: v }));
+    if (errors.type) setErrors(prev => ({ ...prev, type: '' }));
   };
 
   const toggleInfo = (api: InfoKeys) => {
@@ -98,71 +113,36 @@ export default function Formulario() {
     try {
       const tipos = (Object.keys(tests) as (keyof Tests)[]).filter(key => tests[key]);
 
+      // ✅ Validación con Zod ANTES de enviar
+      const candidate = {
+        url: formData.url,
+        name: formData.name,
+        email: formData.email,
+        type: tipos,
+      };
+
+      const parsed = RunAuditFormSchema.safeParse(candidate);
+      if (!parsed.success) {
+        const zErr: FormErrors = {};
+        for (const issue of parsed.error.issues) {
+          const field = issue.path[0];
+          if (field === 'url' || field === 'name' || field === 'email' || field === 'type') {
+            zErr[field] = issue.message;
+          } else {
+            zErr.submit = issue.message;
+          }
+        }
+        setErrors(zErr);
+        setIsLoading(false);
+        return;
+      }
+
       const response = await fetch('/api/audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url:   formData.url,
-          type:  tipos,
-          name:  formData.name,
-          email: formData.email,
-        }),
+        body: JSON.stringify(parsed.data),
       });
 
-      /* ------------- BLOQUE ORIGINAL PRESERVADO (no ejecutado) -------------
-      // Utilidad: parseo seguro (evita Unexpected end of JSON input)
-      async function safeParse(res) {
-        const text = await res.text();
-        try { return JSON.parse(text || '{}'); }
-        catch { return { _raw: text }; }
-      }
-
-      async function onSubmit(e) {
-        e.preventDefault();
-        setError(null);
-        setLoading(true);
-
-        try {
-          const body = {
-            url,                        // <-- el valor del input URL
-            type: 'pagespeed',          // o lo que uses (pagespeed|unlighthouse|all)
-            strategy: estrategia || 'mobile',
-            name,
-            email,                      // el del formulario
-            nocache: false
-          };
-
-          const res = await fetch('/api/audit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-          });
-
-          const data = await safeParse(res);
-
-          if (!res.ok || data.ok === false) {
-            const msg =
-              data.error ||
-              data.message ||
-              data.detail ||
-              data._raw ||
-              `HTTP ${res.status}`;
-            throw new Error(msg);
-          }
-
-          // ✅ éxito: usa el _id o el objeto como lo hacías antes
-          // por ejemplo:
-          // navigate(`/diagnostico/${data._id}`);
-
-          setLoading(false);
-        } catch (err) {
-          setLoading(false);
-          setError(err.message || 'Error inesperado');
-        }
-      }
-      ---------------------------------------------------------------------- */
-
-      // Leer cuerpo como texto y parsear con control de errores
       const text = await response.text();
       let payload: ApiResponse;
       try {
@@ -186,185 +166,189 @@ export default function Formulario() {
 
   return (
     <motion.div initial="hidden" animate="visible" variants={containerVariants}>
-      <motion.div className="form-card" whileHover={{ scale: 1.02, boxShadow: '0 12px 24px rgba(0,0,0,0.12)' }}>
-        {/* Header */}
-        <motion.div className="form-header" variants={itemVariants}>
-          <motion.div className="logo-container" whileHover={{ rotate: 2, scale: 1.02 }}>
-            <img
-              src="../../public/LogoChoucair.png"
-              alt="Choucair Business Centric Testing"
-              className="logo-img-form"
-            />
-          </motion.div>
-          <motion.h1 className="form-title" variants={itemVariants}>
-            Diagnóstico de Rendimiento
-          </motion.h1>
-          <motion.p className="form-subtitle" variants={itemVariants}>
-            Aplicaciones Web • <span className="brand-highlight">Choucair Testing</span>
-          </motion.p>
-        </motion.div>
-
-        {/* Formulario */}
-        <motion.form className="modern-form" onSubmit={handleSubmit} variants={itemVariants}>
-          {/* URL */}
-          <motion.div className="form-field" variants={itemVariants}>
-            <label className="field-label">URL del Sitio Web</label>
-            <div className="input-container">
-              <Globe className={`input-icon ${focusedField === 'url' ? 'focused' : ''}`} size={20} />
-              <motion.input
-                type="url"
-                name="url"
-                value={formData.url}
-                onChange={handleInputChange}
-                onFocus={() => setFocusedField('url')}
-                onBlur={() => setFocusedField('')}
-                placeholder="https://ejemplo.com"
-                className={`form-input ${focusedField === 'url' ? 'focused' : ''}`}
-                whileFocus={{ borderColor: '#1d4ed8', boxShadow: '0 0 0 3px rgba(59,130,246,0.2)' }}
-              />
-            </div>
-            {errors.url && <span className="field-error">{errors.url}</span>}
-          </motion.div>
-
-          {/* Nombre */}
-          <motion.div className="form-field" variants={itemVariants}>
-            <label className="field-label">Nombre Completo</label>
-            <div className="input-container">
-              <User className={`input-icon ${focusedField === 'name' ? 'focused' : ''}`} size={20} />
-              <motion.input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                onFocus={() => setFocusedField('name')}
-                onBlur={() => setFocusedField('')}
-                placeholder="Tu nombre completo"
-                className={`form-input ${focusedField === 'name' ? 'focused' : ''}`}
-                whileFocus={{ borderColor: '#1d4ed8', boxShadow: '0 0 0 3px rgba(59,130,246,0.2)' }}
-              />
-            </div>
-            {errors.name && <span className="field-error">{errors.name}</span>}
-          </motion.div>
-
-          {/* Email */}
-          <motion.div className="form-field" variants={itemVariants}>
-            <label className="field-label">Correo Electrónico</label>
-            <div className="input-container">
-              <Mail className={`input-icon ${focusedField === 'email' ? 'focused' : ''}`} size={20} />
-              <motion.input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                onFocus={() => setFocusedField('email')}
-                onBlur={() => setFocusedField('')}
-                placeholder="tu@correo.com"
-                className={`form-input ${focusedField === 'email' ? 'focused' : ''}`}
-                whileFocus={{ borderColor: '#1d4ed8', boxShadow: '0 0 0 3px rgba(59,130,246,0.2)' }}
-              />
-            </div>
-            {errors.email && <span className="field-error">{errors.email}</span>}
-          </motion.div>
-
-          {/* Selección de APIs */}
-          <motion.div className="form-field" variants={itemVariants}>
-            <label className="field-label tests-label">¿Qué pruebas quieres ejecutar?</label>
-            <motion.div className="checkbox-group" variants={itemVariants}>
-              {Object.entries(testInfos).map(([key, info], idx) => {
-                const k = key as keyof typeof testInfos; // 'pagespeed' | 'security'
-                return (
-                  <motion.div
-                    key={k}
-                    className={`checkbox-item ${tests[k as keyof Tests] ? 'checked' : ''}`}
-                    variants={itemVariants}
-                    whileHover={{ scale: 1.05, boxShadow: '0 10px 25px rgba(29, 78, 216, 0.15)' }}
-                    whileTap={{ scale: 0.95 }}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.1 }}
-                  >
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        name={k}
-                        checked={!!tests[k as keyof Tests]}
-                        onChange={handleTestChange}
-                      />
-                      <span className="checkbox-custom" />
-                      <div className="checkbox-content">
-                        <div className="checkbox-icon">{info.icon}</div>
-                        <div className="checkbox-title">{info.title}</div>
-                      </div>
-                      <motion.div
-                        className="checkbox-check"
-                        animate={{
-                          scale: tests[k as keyof Tests] ? 1.1 : 1,
-                          backgroundColor: tests[k as keyof Tests] ? '#1d4ed8' : 'rgba(0,0,0,0)',
-                        }}
-                      >
-                        {tests[k as keyof Tests] && <CheckCircle size={16} color="white" />}
-                      </motion.div>
-                    </label>
-                    <motion.button
-                      type="button"
-                      className="info-toggle"
-                      onClick={() => toggleInfo(k as InfoKeys)}
-                      whileHover={{ scale: 1.1 }}
-                      transition={{ type: 'spring', stiffness: 300 }}
-                    >
-                      <Info size={16} />
-                      <span>{infoOpen[k as InfoKeys] ? 'Ocultar' : '¿Qué es?'}</span>
-                    </motion.button>
-                    <AnimatePresence>
-                      {infoOpen[k as InfoKeys] && (
-                        <motion.div
-                          className="api-info"
-                          initial="hidden"
-                          animate="visible"
-                          exit="hidden"
-                          variants={infoVariants}
-                        >
-                          <p>{info.description}</p>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                );
-              })}
-            </motion.div>
-          </motion.div>
-
-          {/* Botón submit */}
-          <motion.button
-            type="submit"
-            className={`submit-button ${isLoading ? 'loading' : ''}`}
-            disabled={isLoading}
-            whileTap={{ scale: 0.98 }}
-          >
-            {isLoading ? (
-              <>
-                <motion.div
-                  className="loading-spinner"
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+      {/* Card padre de shadcn */}
+      <motion.div variants={itemVariants}>
+        <Card className="rounded-2xl shadow-sm form-card">
+          <CardHeader>
+            <div className="form-header">
+              <motion.div className="logo-container" whileHover={{ rotate: 2, scale: 1.02 }}>
+                <img
+                  src="../../public/LogoChoucair.png"
+                  alt="Choucair Business Centric Testing"
+                  className="logo-img-form"
                 />
-                Ejecutando...
-              </>
-            ) : (
-              <>
-                <span>Iniciar Diagnóstico</span>
-                <ArrowRight size={18} />
-              </>
-            )}
-          </motion.button>
-        </motion.form>
+              </motion.div>
+              <CardTitle className="form-title">Diagnóstico de Rendimiento</CardTitle>
+              <p className="form-subtitle">
+                Aplicaciones Web • <span className="brand-highlight">Choucair Testing</span>
+              </p>
+            </div>
+          </CardHeader>
 
-        {/* Mensaje de error */}
-        {errors.submit && (
-          <motion.div className="error-alert" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <strong>Error:</strong> {errors.submit}
-          </motion.div>
-        )}
+          <CardContent>
+            {/* Formulario */}
+            <motion.form className="modern-form" onSubmit={handleSubmit} variants={itemVariants}>
+              {/* URL */}
+              <motion.div className="form-field" variants={itemVariants}>
+                <label className="field-label">URL del Sitio Web</label>
+                <div className="input-container">
+                  <Globe className={`input-icon ${focusedField === 'url' ? 'focused' : ''}`} size={20} />
+                  <Input
+                    type="url"
+                    name="url"
+                    value={formData.url}
+                    onChange={handleInputChange}
+                    onFocus={() => setFocusedField('url')}
+                    onBlur={() => setFocusedField('')}
+                    placeholder="https://ejemplo.com"
+                    className={`form-input ${focusedField === 'url' ? 'focused' : ''}`}
+                  />
+                </div>
+                {errors.url && <span className="field-error">{errors.url}</span>}
+              </motion.div>
+
+              {/* Nombre */}
+              <motion.div className="form-field" variants={itemVariants}>
+                <label className="field-label">Nombre Completo</label>
+                <div className="input-container">
+                  <User className={`input-icon ${focusedField === 'name' ? 'focused' : ''}`} size={20} />
+                  <Input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    onFocus={() => setFocusedField('name')}
+                    onBlur={() => setFocusedField('')}
+                    placeholder="Tu nombre completo"
+                    className={`form-input ${focusedField === 'name' ? 'focused' : ''}`}
+                  />
+                </div>
+                {errors.name && <span className="field-error">{errors.name}</span>}
+              </motion.div>
+
+              {/* Email */}
+              <motion.div className="form-field" variants={itemVariants}>
+                <label className="field-label">Correo Electrónico</label>
+                <div className="input-container">
+                  <Mail className={`input-icon ${focusedField === 'email' ? 'focused' : ''}`} size={20} />
+                  <Input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    onFocus={() => setFocusedField('email')}
+                    onBlur={() => setFocusedField('')}
+                    placeholder="tu@correo.com"
+                    className={`form-input ${focusedField === 'email' ? 'focused' : ''}`}
+                  />
+                </div>
+                {errors.email && <span className="field-error">{errors.email}</span>}
+              </motion.div>
+
+              {/* Selección de APIs (Checkbox de shadcn) */}
+              <motion.div className="form-field" variants={itemVariants}>
+                <label className="field-label tests-label">¿Qué pruebas quieres ejecutar?</label>
+                <motion.div className="checkbox-group" variants={itemVariants}>
+                  {Object.entries(testInfos).map(([key, info], idx) => {
+                    const k = key as keyof typeof testInfos; // 'pagespeed' | 'security'
+                    const checked = !!tests[k as keyof Tests];
+                    return (
+                      <motion.div
+                        key={k}
+                        className={`checkbox-item ${checked ? 'checked' : ''}`}
+                        variants={itemVariants}
+                        whileHover={{ scale: 1.05, boxShadow: '0 10px 25px rgba(29, 78, 216, 0.15)' }}
+                        whileTap={{ scale: 0.95 }}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.1 }}
+                      >
+                        <label className="checkbox-label">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(v) => handleTestChange(k as keyof Tests, Boolean(v))}
+                            aria-label={`Seleccionar ${info.title}`}
+                          />
+                          <div className="checkbox-content">
+                            <div className="checkbox-icon">{info.icon}</div>
+                            <div className="checkbox-title">{info.title}</div>
+                          </div>
+                          <motion.div
+                            className="checkbox-check"
+                            animate={{
+                              scale: checked ? 1.1 : 1,
+                              backgroundColor: checked ? '#1d4ed8' : 'rgba(0,0,0,0)',
+                            }}
+                          >
+                            {checked && <CheckCircle size={16} color="white" />}
+                          </motion.div>
+                        </label>
+
+                        <motion.button
+                          type="button"
+                          className="info-toggle"
+                          onClick={() => toggleInfo(k as InfoKeys)}
+                          whileHover={{ scale: 1.1 }}
+                          transition={{ type: 'spring', stiffness: 300 }}
+                        >
+                          <Info size={16} />
+                          <span>{infoOpen[k as InfoKeys] ? 'Ocultar' : '¿Qué es?'}</span>
+                        </motion.button>
+
+                        <AnimatePresence>
+                          {infoOpen[k as InfoKeys] && (
+                            <motion.div
+                              className="api-info"
+                              initial="hidden"
+                              animate="visible"
+                              exit="hidden"
+                              variants={infoVariants}
+                            >
+                              <p>{info.description}</p>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    );
+                  })}
+                </motion.div>
+                {errors.type && <span className="field-error">{errors.type}</span>}
+              </motion.div>
+
+              {/* Botón submit (Button de shadcn) */}
+              <motion.div whileTap={{ scale: 0.98 }}>
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className={`submit-button ${isLoading ? 'loading' : ''}`}
+                >
+                  {isLoading ? (
+                    <>
+                      <motion.div
+                        className="loading-spinner"
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                      />
+                      Ejecutando...
+                    </>
+                  ) : (
+                    <>
+                      <span>Iniciar Diagnóstico</span>
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </Button>
+              </motion.div>
+            </motion.form>
+
+            {/* Mensaje de error */}
+            {errors.submit && (
+              <motion.div className="error-alert" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <strong>Error:</strong> {errors.submit}
+              </motion.div>
+            )}
+          </CardContent>
+        </Card>
       </motion.div>
     </motion.div>
   );

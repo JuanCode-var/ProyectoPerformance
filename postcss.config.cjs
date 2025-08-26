@@ -1,8 +1,15 @@
 // postcss.config.cjs
-const postcssPresetEnv = require('postcss-preset-env');
+const postcssPresetEnv = require('postcss-preset-env')
+const postcssImport = require('postcss-import')
+const cssnano = require('cssnano')
+
+const isProd = process.env.NODE_ENV === 'production'
 
 module.exports = {
   plugins: [
+    // Permite usar @import en CSS (opcional pero útil)
+    postcssImport(),
+
     // Tailwind v4 preset (incluye nesting + autoprefixer)
     require('@tailwindcss/postcss'),
 
@@ -18,5 +25,8 @@ module.exports = {
         'color-mix-function':    { preserve: false },
       },
     }),
+
+    // Minificación SOLO en build de producción
+    ...(isProd ? [cssnano({ preset: 'default' })] : []),
   ],
-};
+}
