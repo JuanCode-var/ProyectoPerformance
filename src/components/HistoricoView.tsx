@@ -190,10 +190,7 @@ export default function HistoricoView() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Histórico</CardTitle>
-      </CardHeader>
-
+    
       <CardContent>
         <div style={{ marginBottom: '1rem' }}>
           <Link to="/" className="back-link"> Nuevo diagnóstico</Link>
@@ -207,7 +204,7 @@ export default function HistoricoView() {
         </div>
 
         <h2 className="diagnostico-title">Histórico de <span className="url">{url}</span></h2>
-        <div className="metrics-title">Comparación de métricas</div>
+        
 
         <div className="gauges-grid">
           {metricKeys.map((key, row) => {

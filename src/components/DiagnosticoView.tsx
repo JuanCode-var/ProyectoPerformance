@@ -7,7 +7,7 @@ import EmailSendBar from "./EmailPdfBar";
 
 // shadcn/ui padres
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "../shared/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "../shared/ui/tabs";
 import { Button } from "../shared/ui/button";
 
 // i18n (usamos alias para no chocar con funciones locales)
@@ -82,6 +82,28 @@ function gaugeColor(metricId: MetricId, value: number | null | undefined) {
     default:
       return amber;
   }
+}
+
+// ===== Fondos suaves (tarjetas/desgloses y centro del dial) =====
+function softBg(metricId: MetricId, value: number | null | undefined) {
+  const isPct = ["performance", "accessibility", "best-practices", "seo"].includes(metricId);
+  if (!isPct || value == null) return "#ffffff";
+  if (value >= 90) return "rgba(34,197,94,0.08)";
+  if (value >= 50) return "rgba(245,158,11,0.08)";
+  return "rgba(239,68,68,0.08)";
+}
+function softTint(metricId: MetricId, value: number | null | undefined) {
+  if (value == null) return "rgba(148,163,184,0.10)";
+  if (["performance","accessibility","best-practices","seo"].includes(metricId)) {
+    if (value >= 90) return "rgba(34,197,94,0.12)";
+    if (value >= 50) return "rgba(245,158,11,0.12)";
+    return "rgba(239,68,68,0.12)";
+  }
+  const col = gaugeColor(metricId, value);
+  if (col === "#22c55e") return "rgba(34,197,94,0.12)";
+  if (col === "#f59e0b") return "rgba(245,158,11,0.12)";
+  if (col === "#ef4444") return "rgba(239,68,68,0.12)";
+  return "rgba(148,163,184,0.10)";
 }
 
 function pickAudits(apiData: any): Record<string, any> {
@@ -165,7 +187,6 @@ async function fetchAuditByUrlWithStrategy(url: string, strategy: "mobile" | "de
   const urlSafe = encodeURIComponent(url);
   const headers = { "Cache-Control": "no-cache" };
 
-  // Orden de candidatos
   const candidates = [
     `/api/diagnostics/${urlSafe}/audit?strategy=${strategy}&_=${ts}`,
     `/api/audit/by-url?url=${urlSafe}&strategy=${strategy}&_=${ts}`,
@@ -320,7 +341,7 @@ function CategoryBreakdown({
 }) {
   if (!items.length) return null;
   return (
-    <Card className="mt-4">
+    <Card className="mt-4 w-full">
       <CardHeader>
         <CardTitle>Desglose de {label}</CardTitle>
       </CardHeader>
@@ -329,7 +350,7 @@ function CategoryBreakdown({
           {items.map((it) => {
             const isNull = it.scorePct == null;
             return (
-              <div key={it.id} className="item">
+              <div key={it.id} className="item" style={{ background: softBg("performance", it.scorePct) }}>
                 <h4
                   className="item-label"
                   title={typeof it.description === "string" ? it.description : ""}
@@ -341,7 +362,7 @@ function CategoryBreakdown({
                   max={100}
                   color={isNull ? "#9ca3af" : gaugeColor("performance", it.scorePct)}
                   decimals={0}
-                  suffix="%"
+                  suffix="" // sin símbolo
                   size={120}
                 />
                 <p className="item-desc">
@@ -360,7 +381,6 @@ function CategoryBreakdown({
   );
 }
 
-// Devuelve items de categoría desde el LHR
 function getCategoryBreakdown(
   catKey: "accessibility" | "best-practices" | "seo",
   apiData: any
@@ -424,7 +444,7 @@ function getCategoryBreakdown(
   return items.slice(0, 9);
 }
 
-// =================== PerfDial helpers ===================
+// =================== PerfDial (Rendimiento) ===================
 type DialSeg = { id: MetricId; label: string; value: number | null };
 
 function PerfDial({
@@ -436,19 +456,20 @@ function PerfDial({
   segments: DialSeg[];
   size?: number;
 }) {
+  // Lienzo y centro
   const W = size + 28;
   const H = size + 28;
   const cx = W / 2;
   const cy = H / 2 + 2;
 
+  // Geometría
   const strokeW = Math.max(8, Math.round(size * 0.083));
-  const segR = size * 0.42;
-  const innerR = size * 0.34;
+  const segR = size * 0.42;       // radio de los arcos de métricas
+  const innerR = size * 0.42;     // ⬅️ más ancho para cubrir el “hueco” interior
   const numFont = Math.round(size * 0.285);
-  const pctFont = Math.round(numFont * 0.47);
 
   const trackColor = "#e5e7eb";
-  const numberColor = "#334155";
+  const numberColor = "#111827";
 
   const makeArc = (r: number, startDeg: number, endDeg: number) => {
     const toRad = (d: number) => (d * Math.PI) / 180;
@@ -463,6 +484,7 @@ function PerfDial({
     return `M ${x1} ${y1} A ${r} ${r} 0 ${large} ${sweep} ${x2} ${y2}`;
   };
 
+  // Layout fijo para etiquetas
   const layout: Record<string, [number, number, number]> = {
     si:  [-110, -70, -90],
     fcp: [ -40,   0, -20],
@@ -472,10 +494,18 @@ function PerfDial({
   };
   const segs = segments.filter((s) => layout[s.id]);
 
+  // Relleno suave del centro según puntaje
+  // Si ya tienes softTint, úsalo; si no, puedes dejar "#ffffff".
+  const innerFill = typeof softTint === "function"
+    ? softTint("performance", typeof score === "number" ? score : null)
+    : "#ffffff";
+
   return (
     <div style={{ width: "100%", display: "grid", placeItems: "center" }}>
       <svg width={W} height={H}>
+        {/* pista circular del dial */}
         <circle cx={cx} cy={cy} r={segR} fill="none" stroke={trackColor} strokeWidth={strokeW} />
+        {/* segmentos con colores por métrica */}
         {segs.map((s) => {
           const [a1, a2, la] = layout[s.id];
           const col = gaugeColor(s.id, s.value);
@@ -493,14 +523,21 @@ function PerfDial({
                 y={cy + (segR + strokeW * 0.9) * Math.sin((la * Math.PI) / 180)}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                style={{ fontSize: Math.round(size * 0.083), fill: "#111827", fontWeight: 700, fontFamily: "inherit" }}
+                style={{
+                  fontSize: Math.round(size * 0.083),
+                  fill: "#111827",
+                  fontWeight: 700,
+                  fontFamily: "inherit",
+                }}
               >
                 {s.label}
               </text>
             </g>
           );
         })}
-        <circle cx={cx} cy={cy} r={innerR} fill="#ffffff" />
+        {/* fondo interno (más ancho para eliminar el espacio en blanco) */}
+        <circle cx={cx} cy={cy} r={innerR} fill={innerFill} />
+        {/* número central (sin %) */}
         <text
           x={cx}
           y={cy + 4}
@@ -513,16 +550,77 @@ function PerfDial({
             letterSpacing: "0.2px",
           }}
         >
-          {typeof score === "number" ? (
-            <>
-              {score}
-              <tspan style={{ fontSize: pctFont, fontWeight: 700, fontFamily: "inherit" }}>%</tspan>
-            </>
-          ) : (
-            "—"
-          )}
+          {typeof score === "number" ? score : "—"}
         </text>
       </svg>
+    </div>
+  );
+}
+
+
+// ===== Dial reutilizable para ACC/PRÁCTICAS/SEO (sin tocar tu Gauge) =====
+function CategoryDial({
+  metricId,
+  value,
+  size = 120,
+  strokeWidth = 12,
+}: {
+  metricId: MetricId;
+  value: number | null;
+  size?: number;
+  strokeWidth?: number;
+}) {
+  const safe = typeof value === "number" ? value : 0;
+  const tint = softTint(metricId, value);
+
+  // Diámetro interno: igual al diámetro del gauge (size - strokeWidth) con un factor
+  // para dejar margen con el anillo. Ajusta 0.80 si lo quieres un pelín más grande/pequeño.
+  const innerDiameter = Math.max((size - strokeWidth) * 0.90, 0);
+
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <CircularGauge
+        value={safe}
+        max={100}
+        color={gaugeColor(metricId, value)}
+        size={size}
+        strokeWidth={strokeWidth}
+        decimals={0}
+        suffix=""                 // sin “%”
+        textColor="transparent"   // ocultamos el número interno del gauge
+        trackColor="#e5e7eb"
+      />
+      {/* círculo central perfectamente centrado */}
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: innerDiameter,
+          height: innerDiameter,
+          transform: "translate(-50%, -50%)",
+          borderRadius: "50%",
+          background: tint,
+          pointerEvents: "none",
+        }}
+      />
+      {/* número negro */}
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          fontSize: size * 0.28,
+          fontWeight: 800,
+          color: "#111827",
+          lineHeight: 1,
+          fontFamily: "inherit",
+          pointerEvents: "none",
+        }}
+      >
+        {value == null ? "—" : value}
+      </div>
     </div>
   );
 }
@@ -544,7 +642,7 @@ function PerfBreakdownGrid({
 }) {
   if (!items.length) return null;
   return (
-    <Card className="mt-4">
+    <Card className="mt-4 w-full">
       <CardHeader>
         <CardTitle>Desglose de Performance</CardTitle>
       </CardHeader>
@@ -556,7 +654,7 @@ function PerfBreakdownGrid({
             const v = m.value;
             const subtitle = perfMetricDescriptions[m.id] || "";
             return (
-              <div key={m.id} className="item">
+              <div key={m.id} className="item" style={{ background: softBg(m.id, v) }}>
                 <h4 className="item-label">{m.label}</h4>
                 <CircularGauge
                   value={
@@ -571,7 +669,7 @@ function PerfBreakdownGrid({
                   max={isTime ? undefined : isCLS ? undefined : 100}
                   color={v == null ? "#9ca3af" : gaugeColor(m.id, v)}
                   decimals={isTime ? 1 : isCLS ? 2 : 0}
-                  suffix={isTime ? "s" : isCLS ? "" : "%"}
+                  suffix={isTime ? "s" : isCLS ? "" : ""} // sin “%”
                   size={120}
                 />
                 <p className="item-desc" style={{ marginBottom: 4 }}>
@@ -581,7 +679,7 @@ function PerfBreakdownGrid({
                     ? `${v.toFixed(1)}s`
                     : isCLS
                     ? `${v.toFixed(2)}`
-                    : `${v}%`}
+                    : `${v}`}
                 </p>
                 <p style={{ margin: 0, fontSize: 12, color: "#64748b", textAlign: "center" }}>
                   {subtitle}
@@ -616,7 +714,7 @@ function ScreenshotPreview({ src }: { src: string | null }) {
   if (!src) return null;
 
   return (
-    <Card className="mt-4">
+    <Card className="mt-4 w-full">
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle>Vista previa (captura)</CardTitle>
         <Button variant="outline" onClick={() => setOpen(true)}>Abrir</Button>
@@ -727,18 +825,15 @@ export default function DiagnosticoView() {
     let mounted = true;
     (async () => {
       try {
-        // 🔹 Petición por ID con strategy + anticache
         const ts = Date.now();
-        const res = await fetch(`/api/audit/${id}?strategy=${strategy}&_=${ts}`, {
-          headers: { "Cache-Control": "no-cache" },
-        });
-        const payload = await safeParseJSON(res);
-        if (!res.ok)
-          throw new Error(
-            payload.error || payload.message || payload._raw || `HTTP ${res.status}`
-          );
+        const res = await safeParseJSON(
+          await fetch(`/api/audit/${id}?strategy=${strategy}&_=${ts}`, {
+            headers: { "Cache-Control": "no-cache" },
+          })
+        );
+        if ((res as any).error || (res as any).message) throw new Error((res as any).error || (res as any).message);
 
-        // Selecciona API disponible priorizando pagespeed
+        const payload = res;
         const available = Object.keys(payload.audit || {}).filter((k) => {
           const m = (payload.audit?.[k] || {}).metrics || payload.audit?.[k] || {};
           return Object.keys(m).length > 0;
@@ -750,12 +845,10 @@ export default function DiagnosticoView() {
           setAuditData(payload);
         }
 
-        // ✅ Verifica si el LHR coincide con la estrategia solicitada
         try {
           const currentApiKey = apis[0] || "";
           const currentApiData = (payload.audit?.[currentApiKey] || {}) as any;
           const ff = detectFormFactor(currentApiData);
-
           if (payload.url && ff && ff !== strategy) {
             const forced = await fetchAuditByUrlWithStrategy(payload.url as string, strategy, ts);
             if (forced && mounted) {
@@ -770,7 +863,6 @@ export default function DiagnosticoView() {
           }
         } catch {}
 
-        // 🔹 Processed con strategy (solo para tendencias)
         if ((payload.url || (auditData as any)?.url)) {
           const urlForProcessed = (payload.url || (auditData as any)?.url) as string;
           const urlSafe = encodeURIComponent(urlForProcessed);
@@ -779,31 +871,11 @@ export default function DiagnosticoView() {
               `/api/diagnostics/${urlSafe}/processed?strategy=${strategy}&_=${ts}`,
               { headers: { "Cache-Control": "no-cache" } }
             );
-            if (!r.ok) {
-              if (r.status === 404 && (payload as any)?._id) {
-                const r2 = await fetch(
-                  `/api/diagnostics/by-id/${(payload as any)._id}/processed?strategy=${strategy}&_=${ts}`,
-                  { headers: { "Cache-Control": "no-cache" } }
-                );
-                const d2 = await safeParseJSON(r2);
-                if (!r2.ok)
-                  throw new Error(
-                    d2.error || d2.message || d2._raw || `HTTP ${r2.status}`
-                  );
-                if (mounted) setProcessed(d2);
-              } else {
-                const errData = await safeParseJSON(r);
-                throw new Error(
-                  errData.error || errData.message || errData._raw || `HTTP ${r.status}`
-                );
-              }
-            } else {
+            if (r.ok) {
               const d = await safeParseJSON(r);
               if (mounted) setProcessed(d);
             }
-          } catch (e) {
-            console.warn("[diagnostics/processed] fetch error:", e);
-          }
+          } catch {}
         }
       } catch (e: any) {
         if (mounted) setErr(e?.message || String(e));
@@ -813,9 +885,8 @@ export default function DiagnosticoView() {
     return () => {
       mounted = false;
     };
-  }, [id, strategy]); // <- cambia todo al alternar móvil/ordenador
+  }, [id, strategy]);
 
-  // ======== Estados tempranos con Card padre ========
   if (!id)
     return (
       <Card>
@@ -871,21 +942,6 @@ export default function DiagnosticoView() {
       </Card>
     );
   }
-
-  // processed helpers (SOLO para tendencias)
-  const pVal = (k: string): number | null => {
-    const m: any = (processed as any)?.metrics;
-    if (Array.isArray(m)) {
-      const v = m.find((x: any) => x?.key === k)?.raw;
-      return typeof v === "number" && !Number.isNaN(v) ? v : null;
-    } else if (m && typeof m === "object") {
-      const raw = (m as any)[k];
-      const v =
-        typeof raw === "number" ? raw : typeof raw?.raw === "number" ? raw.raw : null;
-      return typeof v === "number" && !Number.isNaN(v) ? v : null;
-    }
-    return null;
-  };
 
   const pTrend = (k: string): Trend | undefined => {
     const m: any = (processed as any)?.metrics;
@@ -950,7 +1006,7 @@ export default function DiagnosticoView() {
     id: "performance" as MetricId,
     label: "RENDIMIENTO",
     value: performance,
-    desc: `Porcentaje de rendimiento según ${API_LABELS[activeApi]} (${strategy === "mobile" ? "Móvil" : "Ordenador"}).`,
+    desc: `Puntaje de rendimiento según ${API_LABELS[activeApi]} (${strategy === "mobile" ? "Móvil" : "Ordenador"}).`,
   };
   const categoryCards = [
     {
@@ -1046,9 +1102,8 @@ export default function DiagnosticoView() {
         : item.id === "seo"
         ? { onClick: () => setShowSeoDetails((v) => !v), style: { cursor: "pointer" } }
         : {};
-
     return (
-      <div key={item.id} className="item" {...(clickProps as any)}>
+      <div key={item.id} className="item" style={{ background: "#ffffff" }} {...(clickProps as any)}>
         <h3 className="item-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {item.label}
           {trendByKey[item.id] && (
@@ -1080,38 +1135,48 @@ export default function DiagnosticoView() {
 
         {item.id === "performance" ? (
           <>
-            <PerfDial
-              score={item.value ?? null}
-              segments={[
-                { id: "si",  label: "SI",  value: siSec },
-                { id: "fcp", label: "FCP", value: fcpSec },
-                { id: "lcp", label: "LCP", value: lcpSec },
-                { id: "cls", label: "CLS", value: clsVal },
-                { id: "tbt", label: "TBT", value: tbtSec },
-              ].filter(Boolean) as DialSeg[]}
-              size={130}
-            />
+            <div className="w-full flex flex-col items-center justify-center gap-4">
+              <PerfDial
+                score={item.value ?? null}
+                segments={[
+                  { id: "si",  label: "SI",  value: siSec },
+                  { id: "fcp", label: "FCP", value: fcpSec },
+                  { id: "lcp", label: "LCP", value: lcpSec },
+                  { id: "cls", label: "CLS", value: clsVal },
+                  { id: "tbt", label: "TBT", value: tbtSec },
+                ].filter(Boolean) as DialSeg[]}
+                size={130}
+              />
+              {/* Leyenda centrada */}
+              <div className="flex items-center justify-center gap-6 flex-wrap">
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <span className="inline-block w-3 h-3 rounded-full" style={{ background: "#ef4444" }} />
+                  <span>0–49 Bajo</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <span className="inline-block w-3 h-3 rounded-full" style={{ background: "#f59e0b" }} />
+                  <span>50–89 Aceptable</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <span className="inline-block w-3 h-3 rounded-full" style={{ background: "#22c55e" }} />
+                  <span>90–100 Excelente</span>
+                </div>
+              </div>
+            </div>
             <p className="item-desc">
-              {item.value == null ? "N/A" : `${item.value}%`} — {item.desc}
+              {item.value == null ? "N/A" : `${item.value}`} — {item.desc}
             </p>
           </>
         ) : (
           <>
             <div className="w-full min-h-[160px] flex items-center justify-center">
-              <CircularGauge
-                value={item.value ?? 0}
-                max={isPct ? 100 : undefined}
-                color={gaugeColor(item.id, item.value)}
-                decimals={isPct ? 0 : 1}
-                suffix={isPct ? "%" : "s"}
-                size={120}
-              />
+              <CategoryDial metricId={item.id} value={item.value} size={110} strokeWidth={10} />
             </div>
             <p className="item-desc">
               {item.value == null
                 ? "N/A"
                 : isPct
-                ? `${item.value}%`
+                ? `${item.value}`
                 : `${(item.value as number).toFixed(1)}s`}{" "}
               — {item.desc}
             </p>
@@ -1124,14 +1189,10 @@ export default function DiagnosticoView() {
   // =================== UI ===================
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Diagnóstico</CardTitle>
-      </CardHeader>
-
       <CardContent>
-        <div ref={contenedorReporteRef}>
+        <div ref={contenedorReporteRef} className="w-full" style={{ overflowX: "hidden" }}>
           <div className="flex items-center gap-4 mb-2">
-            <Link to="/" className="back-link">← Nuevo diagnóstico</Link>
+            <Link to="/" className="back-link">Nuevo diagnóstico</Link>
             <Link
               to={`/historico?url=${encodeURIComponent(url as string)}`}
               className="back-link"
@@ -1145,10 +1206,10 @@ export default function DiagnosticoView() {
           </h2>
           <div className="date">{new Date(fecha as string).toLocaleString()}</div>
 
-          {/* Tabs de estrategia (Móvil | Ordenador) con shadcn */}
-          <div className="mt-2">
+          {/* Tabs centrados */}
+          <div className="mt-4 flex justify-center w-full">
             <Tabs value={strategy} onValueChange={(v) => setStrategy(v as "mobile" | "desktop")}>
-              <TabsList>
+              <TabsList className="mx-auto">
                 <TabsTrigger value="mobile">📱 Móvil</TabsTrigger>
                 <TabsTrigger value="desktop">🖥️ Ordenador</TabsTrigger>
               </TabsList>
@@ -1156,7 +1217,7 @@ export default function DiagnosticoView() {
           </div>
 
           {/* Grid principal: performance + categorías */}
-          <div className="diagnostico-grid">
+          <div className="diagnostico-grid w-full">
             {renderCard(perfCard)}
             {categoryCards.map(renderCard)}
           </div>
