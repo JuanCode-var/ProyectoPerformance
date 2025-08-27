@@ -277,3 +277,30 @@
   .pdf-msg.is-ok    { @apply text-emerald-600; }
 }
 
+@layer components {
+  /* contenedor */
+  .strategy-tabs {
+    @apply w-full mt-4 flex justify-center;
+  }
+
+  /* “pastilla” que agrupa los 2 botones */
+  .strategy-list {
+    @apply inline-flex gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm;
+  }
+
+  /* botón base */
+  .strategy-trigger {
+    @apply px-5 py-2 rounded-xl text-sm font-medium text-slate-600 transition
+           data-[state=inactive]:bg-transparent;
+  }
+
+  /* hover cuando NO está activo */
+  .strategy-trigger:hover:not([data-state="active"]) {
+    @apply bg-blue-50 text-blue-700;
+  }
+
+  /* estado ACTIVO (lo pone shadcn con data-state="active") */
+  .strategy-trigger[data-state="active"] {
+    @apply text-white bg-gradient-to-r from-blue-500 to-blue-700 shadow;
+  }
+}

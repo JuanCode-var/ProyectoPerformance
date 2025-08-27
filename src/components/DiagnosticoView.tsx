@@ -557,7 +557,6 @@ function PerfDial({
   );
 }
 
-
 // ===== Dial reutilizable para ACC/PRÁCTICAS/SEO (sin tocar tu Gauge) =====
 function CategoryDial({
   metricId,
@@ -1206,15 +1205,15 @@ export default function DiagnosticoView() {
           </h2>
           <div className="date">{new Date(fecha as string).toLocaleString()}</div>
 
-          {/* Tabs centrados */}
-          <div className="mt-4 flex justify-center w-full">
-            <Tabs value={strategy} onValueChange={(v) => setStrategy(v as "mobile" | "desktop")}>
-              <TabsList className="mx-auto">
-                <TabsTrigger value="mobile">📱 Móvil</TabsTrigger>
-                <TabsTrigger value="desktop">🖥️ Ordenador</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
+      {/* Tabs centrados (shadcn) con estilo activo en azul */}
+      <div className="strategy-tabs">
+        <Tabs value={strategy} onValueChange={(v) => setStrategy(v as "mobile" | "desktop")}>
+          <TabsList className="strategy-list">
+            <TabsTrigger value="mobile"  className="strategy-trigger">📱 Móvil</TabsTrigger>
+            <TabsTrigger value="desktop" className="strategy-trigger">🖥️ Ordenador</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
 
           {/* Grid principal: performance + categorías */}
           <div className="diagnostico-grid w-full">

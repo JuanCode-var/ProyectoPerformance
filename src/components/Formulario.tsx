@@ -86,6 +86,8 @@ export default function Formulario() {
   };
 
   const handleTestChange = (k: keyof Tests, v: boolean) => {
+    // 🚫 Bloqueamos "security" (no disponible)
+    if (k === 'security') return;
     setTests(prev => ({ ...prev, [k]: v }));
     if (errors.type) setErrors(prev => ({ ...prev, type: '' }));
   };
@@ -252,51 +254,70 @@ export default function Formulario() {
                   {Object.entries(testInfos).map(([key, info], idx) => {
                     const k = key as keyof typeof testInfos; // 'pagespeed' | 'security'
                     const checked = !!tests[k as keyof Tests];
+
+                    const isSecurity = k === 'security';
+                    const disabled = isSecurity; // ← deshabilitamos Seguridad
+
                     return (
                       <motion.div
                         key={k}
-                        className={`checkbox-item ${checked ? 'checked' : ''}`}
+                        className={`checkbox-item ${checked ? 'checked' : ''} ${
+                          disabled ? 'opacity-60 grayscale cursor-not-allowed' : ''
+                        }`}
                         variants={itemVariants}
-                        whileHover={{ scale: 1.05, boxShadow: '0 10px 25px rgba(29, 78, 216, 0.15)' }}
-                        whileTap={{ scale: 0.95 }}
+                        whileHover={disabled ? {} : { scale: 1.05, boxShadow: '0 10px 25px rgba(29, 78, 216, 0.15)' }}
+                        whileTap={disabled ? {} : { scale: 0.95 }}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: idx * 0.1 }}
+                        aria-disabled={disabled}
                       >
                         <label className="checkbox-label">
                           <Checkbox
-                            checked={checked}
-                            onCheckedChange={(v) => handleTestChange(k as keyof Tests, Boolean(v))}
+                            checked={disabled ? false : checked}
+                            disabled={disabled}
+                            onCheckedChange={(v) => {
+                              if (disabled) return; // bloquea cambios
+                              handleTestChange(k as keyof Tests, Boolean(v));
+                            }}
                             aria-label={`Seleccionar ${info.title}`}
                           />
                           <div className="checkbox-content">
                             <div className="checkbox-icon">{info.icon}</div>
-                            <div className="checkbox-title">{info.title}</div>
+                            <div className="checkbox-title">
+                              {info.title}
+                              {disabled && (
+                                <span className="ml-3 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
+                                  Versión disponible más adelante
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <motion.div
                             className="checkbox-check"
                             animate={{
-                              scale: checked ? 1.1 : 1,
-                              backgroundColor: checked ? '#1d4ed8' : 'rgba(0,0,0,0)',
+                              scale: checked && !disabled ? 1.1 : 1,
+                              backgroundColor: checked && !disabled ? '#1d4ed8' : 'rgba(0,0,0,0)',
                             }}
                           >
-                            {checked && <CheckCircle size={16} color="white" />}
+                            {checked && !disabled && <CheckCircle size={16} color="white" />}
                           </motion.div>
                         </label>
 
                         <motion.button
                           type="button"
-                          className="info-toggle"
-                          onClick={() => toggleInfo(k as InfoKeys)}
-                          whileHover={{ scale: 1.1 }}
+                          className={`info-toggle ${disabled ? 'cursor-not-allowed' : ''}`}
+                          onClick={() => (disabled ? null : toggleInfo(k as InfoKeys))}
+                          whileHover={disabled ? {} : { scale: 1.1 }}
                           transition={{ type: 'spring', stiffness: 300 }}
+                          disabled={disabled}
                         >
                           <Info size={16} />
                           <span>{infoOpen[k as InfoKeys] ? 'Ocultar' : '¿Qué es?'}</span>
                         </motion.button>
 
                         <AnimatePresence>
-                          {infoOpen[k as InfoKeys] && (
+                          {infoOpen[k as InfoKeys] && !disabled && (
                             <motion.div
                               className="api-info"
                               initial="hidden"

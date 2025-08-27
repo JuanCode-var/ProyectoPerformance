@@ -1,434 +1,386 @@
 /* ======================================================
-   src/styles/formulario.tw.css
-   – Formulario con inputs/checkboxes refinados (Tailwind)
+   src/styles/formulario.tw.css - VERSIÓN COMPACTA OPTIMIZADA
+   – Formulario moderno con sección de pruebas simplificada
    ====================================================== */
 
-/* 1) BASE: fondo y tipografía */
+/* 1) BASE: fondo animado y tipografía refinada */
 @layer base {
   body {
     @apply min-h-screen overflow-x-hidden font-sans text-slate-900;
     background:
-      radial-gradient(circle at 25% 25%, rgba(59,130,246,.15) 0%, transparent 50%),
-      radial-gradient(circle at 75% 75%, rgba(139,92,246,.12) 0%, transparent 50%),
-      radial-gradient(circle at 50% 50%, rgba(20,184,166,.08) 0%, transparent 50%),
-      linear-gradient(135deg, rgba(255,255,255,.95) 0%, rgba(240,248,255,.85) 50%, rgba(255,255,255,.9) 100%);
+      radial-gradient(circle at 20% 30%, rgba(59,130,246,.12) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(139,92,246,.10) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(20,184,166,.06) 0%, transparent 50%),
+      linear-gradient(135deg, rgba(255,255,255,.98) 0%, rgba(248,250,252,.92) 50%, rgba(255,255,255,.95) 100%);
     background-attachment: fixed;
-    line-height: 1.6;
+    line-height: 1.65;
     margin: 0;
   }
 
-  body::before,
-  body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: -1; }
-
   body::before {
+    content: "";
+    @apply fixed inset-0 pointer-events-none z-[-1];
     background:
-      radial-gradient(circle at 25% 25%, rgba(59,130,246,.15) 0%, transparent 50%),
-      radial-gradient(circle at 75% 75%, rgba(139,92,246,.12) 0%, transparent 50%),
-      radial-gradient(circle at 50% 50%, rgba(20,184,166,.08) 0%, transparent 50%);
-    animation: floatingOrbs 25s ease-in-out infinite;
+      radial-gradient(circle at 25% 25%, rgba(59,130,246,.08) 0%, transparent 60%),
+      radial-gradient(circle at 75% 75%, rgba(139,92,246,.06) 0%, transparent 60%);
+    animation: floatingOrbs 30s ease-in-out infinite;
   }
+
   body::after {
+    content: "";
+    @apply fixed inset-0 pointer-events-none z-[-1];
     background:
-      linear-gradient(45deg, transparent 30%, rgba(255,255,255,.1) 50%, transparent 70%),
-      linear-gradient(-45deg, transparent 30%, rgba(59,130,246,.05) 50%, transparent 70%);
-    animation: shimmerOverlay 30s linear infinite;
+      linear-gradient(45deg, transparent 40%, rgba(255,255,255,.15) 50%, transparent 60%),
+      linear-gradient(-45deg, transparent 40%, rgba(59,130,246,.03) 50%, transparent 60%);
+    animation: shimmerOverlay 40s linear infinite;
   }
 }
 
-/* 2) COMPONENTES */
+/* 2) COMPONENTES PROFESIONALES */
 @layer components {
-  /* --- Card contenedora --- */
+  /* --- Card contenedora profesional --- */
   .form-card {
-    @apply relative mx-auto my-12 max-w-[680px] overflow-hidden rounded-2xl
-           border border-white/40 bg-white/70 p-12 shadow-2xl backdrop-blur-2xl sm:p-10;
-  }
-  .form-card::before {
-    content: "";
-    @apply absolute left-0 right-0 top-0 h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-teal-500;
-    background-size: 200% 100%;
-    animation: gradientShift 3s ease-in-out infinite;
+    @apply relative mx-auto my-12 max-w-[700px] overflow-hidden rounded-2xl
+           border border-white/70 bg-white/90 p-12 shadow-xl backdrop-blur-2xl
+           sm:p-10 md:p-11;
   }
 
-  /* --- Encabezado --- */
-  .form-header { @apply relative mb-12 text-center; }
-  .logo-container { @apply relative mb-8 inline-block; }
-  .logo-img-form { @apply max-h-16 w-auto drop-shadow-lg transition-transform duration-300 ease-out; }
-  .logo-img-form:hover { @apply scale-[1.05] drop-shadow-xl; }
-
-  .form-title {
-    @apply relative mb-3 text-4xl font-extrabold tracking-tight
-           text-transparent bg-clip-text bg-gradient-to-b from-black to-black/80 leading-tight;
+  /* --- Encabezado profesional compacto --- */
+  .form-header { 
+    @apply relative mb-10 text-center z-10; 
   }
-  .form-title::after {
-    content: "";
-    @apply absolute -bottom-3 left-1/2 h-1 w-24 -translate-x-1/2 rounded bg-gradient-to-r from-blue-500 to-purple-500;
-    animation: titleUnderline 2.5s ease-in-out infinite;
+  
+  .logo-container { 
+    @apply relative mb-6 inline-block;
+    filter: drop-shadow(0 4px 16px rgba(59,130,246,0.12));
+  }
+  
+  .logo-img-form { 
+    @apply max-h-16 w-auto transition-all duration-300 ease-out;
+    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.08));
+  }
+  .logo-img-form:hover { 
+    @apply scale-105;
+    filter: drop-shadow(0 4px 12px rgba(59,130,246,0.15));
+    transform: scale(1.02) translateY(-1px);
   }
 
-  .form-subtitle { @apply mt-6 text-lg font-medium text-black/90 leading-relaxed; }
-  .brand-highlight { @apply bg-gradient-to-br from-blue-500 to-purple-500 bg-clip-text font-bold text-transparent; }
+/* Título del formulario — Profesional y compacto */
+.form-title{
+  position: relative;
+  margin-bottom: 0.5rem;
+  font-weight: 800;
+  line-height: 1.2;
+  display: inline-block;
+  font-size: clamp(22px, 3vw, 32px);
+  color: #0f172a;
+  text-shadow: 0 1px 2px rgba(0,0,0,.04);
+}
 
-  /* --- Layout de campos --- */
-  .modern-form { @apply flex flex-col gap-8; }
-  .form-row { @apply grid gap-6; }           /* opcional: fila de grid */
-  .form-row.two-col { @apply md:grid-cols-2; }
+/* Gradiente recortado al texto SOLO cuando está soportado */
+@supports (-webkit-background-clip:text) or (background-clip:text){
+  .form-title{
+    background-image: linear-gradient(135deg, #1e293b 0%, #334155 50%, #1e293b 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    text-shadow: none;
+  }
+}
+
+  .form-subtitle { 
+    @apply mt-4 text-base font-medium text-slate-600 leading-relaxed; 
+  }
+  .brand-highlight { 
+    @apply bg-gradient-to-r from-blue-600 via-purple-600 to-teal-600 bg-clip-text 
+           font-bold text-transparent; 
+  }
+
+  /* --- Layout optimizado y compacto --- */
+  .modern-form { @apply flex flex-col gap-6 relative z-10; }
+  .form-row { @apply grid gap-6; }
+  .form-row.two-col { @apply lg:grid-cols-2; }
   .form-field { @apply relative space-y-2; }
-  .form-field.full { @apply md:col-span-2; }
+  .form-field.full { @apply lg:col-span-2; }
 
-  /* --- Labels --- */
-  .field-label { @apply mb-0 block text-[0.95rem] font-semibold text-slate-800; }
-  .tests-label { @apply mb-6 inline-block text-xl font-bold text-slate-900 relative; }
-  .tests-label::after {
-    content: ""; @apply absolute -bottom-1 left-0 h-0.5 w-full rounded bg-gradient-to-r from-blue-500 to-transparent;
+  /* --- Labels mejorados --- */
+  .field-label { 
+    @apply block text-base font-bold text-slate-800 tracking-wide;
+    letter-spacing: 0.025em;
+  }
+  
+  /* Label de pruebas profesional */
+  .tests-label { 
+    @apply mb-4 text-base font-semibold text-slate-800;
+    letter-spacing: 0.01em;
   }
 
-  /* --- Inputs con icono --- */
-  .input-container { @apply relative; }
-  .input-icon { @apply pointer-events-none absolute left-4 z-10 text-[1.05rem] text-slate-400 transition-transform duration-200; }
-  .peer:focus ~ .input-icon { @apply scale-110 text-blue-500; }
+  /* --- Inputs con iconos perfeccionados --- */
+  .input-container { 
+    @apply relative flex items-center; 
+  }
+  
+  .input-icon {
+    @apply absolute top-1/2 -translate-y-1/2 text-slate-400 z-20 pointer-events-none;
+    left: 1.125rem;
+    font-size: 1.25rem;
+    transition: all 0.3s ease;
+  }
 
   .form-input {
-    @apply w-full rounded-xl border bg-white/80 pl-12 pr-4 py-4 text-[0.975rem]
-           font-medium text-slate-900 shadow-sm backdrop-blur
-           transition-all duration-200 placeholder:text-slate-400
-           border-slate-200 hover:border-slate-300
-           focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10;
+    @apply w-full h-14 rounded-xl border-2 bg-white/95 text-base font-medium 
+           text-slate-900 shadow-md backdrop-blur-sm transition-all duration-300
+           placeholder:text-slate-400 placeholder:font-normal
+           border-slate-200/90 hover:border-slate-300
+           focus:outline-none focus:border-blue-500 focus:ring-3 focus:ring-blue-500/15;
+    padding-left: 4rem !important;
+    padding-right: 1.25rem;
     transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.9);
   }
-  .form-input:focus { transform: translateY(-1px); }
-
-  /* Estados de input */
-  .form-input[disabled],
-  .form-input:disabled {
-    @apply cursor-not-allowed bg-slate-100 text-slate-500 border-slate-200 shadow-none;
+  
+  .form-input:focus { 
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(59,130,246,0.12), inset 0 1px 0 rgba(255,255,255,0.95);
   }
-  .form-input[aria-invalid="true"] {                   /* error accesible */
-    @apply border-red-500 focus:border-red-500 focus:ring-red-500/10;
-  }
-  .form-input[data-state="valid"],
-  .form-input.valid {
-    @apply border-emerald-500 focus:border-emerald-500 focus:ring-emerald-500/10;
+  
+  .form-input:focus ~ .input-icon { 
+    @apply scale-110 text-blue-500 rotate-3; 
   }
 
-  .field-hint  { @apply text-[0.825rem] text-slate-500; }
-  .field-error { @apply mt-1 flex items-center gap-2 text-[0.875rem] font-semibold text-red-600; }
-  .field-error::before { content: "⚠"; @apply text-base; }
+  /* Estados avanzados */
+  .form-input[disabled] {
+    @apply cursor-not-allowed bg-slate-50 text-slate-500 border-slate-100 shadow-none;
+  }
+  .form-input[aria-invalid="true"] {
+    @apply border-red-400 focus:border-red-500 focus:ring-red-500/20;
+  }
+  .form-input[data-state="valid"] {
+    @apply border-emerald-400 focus:border-emerald-500 focus:ring-emerald-500/20;
+  }
 
-  /* --- Checkboxes tipo “card” --- */
-  .checkbox-group { @apply grid gap-5; }
+  /* --- Checkboxes COMPACTOS --- */
+  .checkbox-group { 
+    @apply flex flex-col gap-4; 
+  }
 
+  /* Checkbox item compacto - una sola línea horizontal */
   .checkbox-item {
-    @apply relative cursor-pointer overflow-hidden rounded-2xl border-2 border-slate-100
-           bg-white/70 p-6 shadow-sm backdrop-blur-lg transition-all duration-200;
+    @apply relative cursor-pointer overflow-hidden rounded-2xl border-2 
+           bg-white/90 px-6 py-4 shadow-lg backdrop-blur-sm transition-all duration-300
+           border-slate-200/60 hover:border-blue-400/50 hover:shadow-xl;
+    background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.9) 100%);
   }
-  .checkbox-item:hover { @apply -translate-y-[2px] shadow-lg border-blue-400/60; }
-  .checkbox-item::before {
-    content: ""; @apply absolute inset-y-0 left-[-100%] w-full bg-gradient-to-r from-transparent via-blue-500/10 to-transparent;
-    transition: left .6s ease;
+  
+  .checkbox-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 25px rgba(59,130,246,0.12);
   }
-  .checkbox-item:hover::before { left: 100%; }
-  .checkbox-item:focus-within { @apply ring-2 ring-offset-2 ring-blue-500/30 ring-offset-white; }
+  
+  .checkbox-item:focus-within { 
+    @apply ring-2 ring-blue-500/30 border-blue-500/60; 
+  }
 
-  .checkbox-label { @apply relative z-10 flex w-full items-center justify-between gap-4; }
-  .checkbox-label input[type="checkbox"] { @apply sr-only; }
+  /* Label horizontal compacto */
+  .checkbox-label { 
+    @apply relative z-10 flex items-center justify-between gap-4 w-full; 
+  }
+  .checkbox-label input[type="checkbox"] { 
+    @apply sr-only; 
+  }
 
-  .checkbox-content { @apply flex flex-1 items-center gap-4; }
+  /* Contenido del checkbox en una línea */
+  .checkbox-content { 
+    @apply flex items-center gap-4 flex-1; 
+  }
+  
+  /* Icono más pequeño */
   .checkbox-icon {
-    @apply flex h-12 w-12 items-center justify-center rounded-full
-           bg-gradient-to-br from-blue-500 to-purple-500 text-white
-           shadow-md transition-transform duration-200;
+    @apply flex h-12 w-12 items-center justify-center rounded-xl text-white
+           shadow-lg transition-all duration-300 text-lg flex-shrink-0;
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #14b8a6 100%);
+    box-shadow: 0 4px 12px rgba(59,130,246,0.25);
   }
-  .checkbox-title { @apply text-[1rem] font-bold leading-snug text-slate-900; }
-  .checkbox-hint  { @apply text-[0.85rem] text-slate-500; } /* opcional */
+  
+  /* Textos más compactos */
+  .checkbox-text-content {
+    @apply flex-1 min-w-0;
+  }
+  
+  .checkbox-title { 
+    @apply text-base font-bold leading-tight text-slate-900; 
+    letter-spacing: 0.01em;
+  }
+  
+  .checkbox-hint { 
+    @apply text-xs text-slate-500 mt-0.5 font-medium leading-tight; 
+  }
 
+  /* Checkbox visual más pequeño */
   .checkbox-check {
-    @apply relative flex h-9 w-9 items-center justify-center overflow-hidden
-           rounded-full border-4 border-slate-200 bg-white/80 text-slate-400
-           transition-all duration-200;
+    @apply relative flex h-8 w-8 items-center justify-center overflow-hidden
+           rounded-lg border-2 bg-white/90 text-slate-400 shadow-md
+           transition-all duration-300 border-slate-300 flex-shrink-0;
+    backdrop-filter: blur(4px);
   }
 
-  /* Estado seleccionado (vía clase .checked que ya tienes) */
+  /* Estados de selección simplificados */
   .checkbox-item.checked {
-    @apply border-blue-500 bg-gradient-to-br from-blue-500/10 to-purple-500/5 shadow-xl;
+    @apply border-blue-500/70 bg-blue-50/50;
+    box-shadow: 0 6px 20px rgba(59,130,246,0.15);
   }
-  .checkbox-item.checked .checkbox-icon { @apply scale-110 rotate-3 shadow-lg; }
+  
+  .checkbox-item.checked .checkbox-icon { 
+    @apply scale-105;
+    box-shadow: 0 6px 18px rgba(59,130,246,0.35);
+  }
+  
   .checkbox-item.checked .checkbox-check {
-    @apply scale-110 border-blue-500 bg-blue-500 text-white;
+    @apply border-blue-500 bg-blue-500 text-white scale-105;
+    box-shadow: 0 4px 12px rgba(59,130,246,0.4);
   }
+  
   .checkbox-item.checked .checkbox-check::after {
-    content: "✓"; @apply text-sm font-bold;
-    animation: checkPop .25s ease-out;
+    content: "✓";
+    @apply text-sm font-black;
+    animation: checkPop 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
 
-  /* Alternativa sin JS: si el input es hermano dentro del label */
-  .checkbox-label input[type="checkbox"]:checked ~ .checkbox-check {
-    @apply scale-110 border-blue-500 bg-blue-500 text-white;
-  }
-  .checkbox-label input[type="checkbox"]:checked ~ .checkbox-content .checkbox-icon {
-    @apply scale-110 rotate-3;
-  }
-
-  /* --- Botones secundarios & alertas --- */
+  /* --- Botones informativos compactos --- */
   .info-toggle {
-    @apply inline-flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/10
-           px-3 py-2 text-[0.9rem] font-semibold text-blue-600 transition;
+    @apply inline-flex items-center gap-2 rounded-lg border border-blue-500/30 
+           bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-700 
+           transition-all duration-300 hover:border-blue-500 
+           hover:bg-blue-500/20 backdrop-blur-sm;
   }
-  .info-toggle:hover { @apply -translate-y-[1px] border-blue-500 bg-blue-500/15 shadow-sm; }
 
   .api-info {
-    @apply relative mt-4 overflow-hidden rounded-xl border-l-4 border-blue-500
-           bg-gradient-to-br from-slate-50 to-slate-200 p-6 text-slate-600 shadow-sm;
+    @apply relative mt-3 overflow-hidden rounded-xl border-l-4 border-blue-500
+           p-4 text-slate-700 shadow-md backdrop-blur-sm;
+    background: linear-gradient(135deg, rgb(248 250 252) 0%, rgb(241 245 249) 100%);
   }
-  .api-info::before { content: ""; @apply absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-blue-500 to-purple-500; }
-  .api-info p { @apply m-0 font-medium leading-relaxed; }
-
-  .error-alert {
-    @apply mt-6 flex items-center gap-3 rounded-xl border border-red-200 border-l-4 border-l-red-500
-           bg-gradient-to-br from-red-50 to-red-100 p-5 font-semibold text-red-900 shadow-sm;
+  .api-info::before { 
+    content: "";
+    @apply absolute left-0 top-0 h-full w-1;
+    background: linear-gradient(to bottom, #3b82f6, #8b5cf6);
   }
-  .error-alert::before { content: "🚨"; @apply text-xl; }
+  .api-info p { 
+    @apply m-0 font-medium leading-relaxed text-sm; 
+  }
 
-  /* --- Submit --- */
+/* Submit button profesional */
   .submit-button {
-    @apply relative mt-2 box-border flex min-h-14 w-full items-center justify-center gap-3 overflow-hidden
-           rounded-xl border-0 bg-gradient-to-br from-slate-900 to-slate-800 px-8 py-4
-           text-lg font-bold text-white shadow-lg transition;
+    @apply relative mt-4 box-border flex min-h-14 w-full items-center justify-center 
+           gap-3 overflow-hidden rounded-xl border-0 px-8 py-4 text-lg font-bold 
+           text-white shadow-lg transition-all duration-300 cursor-pointer;
+    background: linear-gradient(135deg, rgb(15 23 42) 0%, rgb(51 65 85) 50%, rgb(15 23 42) 100%);
+    box-shadow: 0 6px 20px rgba(15,23,42,0.25);
   }
-  .submit-button:hover { @apply -translate-y-[2px] shadow-xl from-blue-600 to-purple-600; }
-  .submit-button.loading { @apply cursor-not-allowed from-slate-400 to-slate-300 shadow-sm translate-y-0; }
+  .submit-button:hover { 
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px rgba(59,130,246,0.3);
+    background: linear-gradient(135deg, #2563eb 0%, #2563eb 50%, #2563eb 50%);
+  }
+  .submit-button.loading { 
+    @apply cursor-not-allowed;
+    background: linear-gradient(135deg, rgb(148 163 184), rgb(203 213 225));
+    box-shadow: 0 4px 12px rgba(148,163,184,0.3);
+    transform: translateY(0);
+  }
   .submit-button::before {
-    content: ""; @apply absolute inset-y-0 left-[-100%] w-full bg-gradient-to-r from-transparent via-white/20 to-transparent;
-    transition: left .6s ease;
+    content: "";
+    @apply absolute inset-y-0 left-[-100%] w-full;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+    transition: left 0.8s ease;
   }
   .submit-button:hover::before { left: 100%; }
 
-  .loading-spinner { @apply h-5 w-5 flex-shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white; }
+  .loading-spinner { 
+    @apply h-6 w-6 flex-shrink-0 animate-spin rounded-full border-3 border-white/30 border-t-white; 
+  }
+
+  .submit-button::before {
+    content: "";
+    @apply absolute inset-y-0 left-[-100%] w-full;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+    transition: left 0.8s ease;
+  }
+  .submit-button:hover::before { left: 100%; }
+
+  .loading-spinner { 
+    @apply h-6 w-6 flex-shrink-0 animate-spin rounded-full border-3 border-white/30 border-t-white; 
+  }
 }
 
-/* 3) RESPONSIVO */
+/* 3) RESPONSIVO MEJORADO */
 @layer components {
+  @media (max-width: 1024px) {
+    .form-card { @apply max-w-[650px] p-10; }
+    .form-title { font-size: clamp(20px, 3vw, 28px); }
+    .checkbox-icon { @apply h-10 w-10 text-base; }
+    .checkbox-check { @apply h-7 w-7; }
+  }
+
   @media (max-width: 768px) {
     .form-card { @apply my-8 mx-4 rounded-xl p-8; }
-    .form-title { @apply text-3xl; }
-    .form-input { @apply py-3 pl-11 text-[0.95rem]; }
-    .checkbox-item { @apply p-5; }
-    .checkbox-icon { @apply h-11 w-11; }
-    .checkbox-check { @apply h-8 w-8; }
-  }
-  @media (max-width: 480px) {
-    .form-card { @apply m-4 p-6; }
-    .form-title { @apply text-2xl; }
+    .form-title { font-size: clamp(18px, 3vw, 24px); }
+    .form-input { @apply h-12 text-sm; padding-left: 3.5rem !important; }
+    .checkbox-item { @apply px-4 py-3; }
+    .checkbox-icon { @apply h-9 w-9 text-sm; }
+    .checkbox-check { @apply h-6 w-6; }
     .checkbox-content { @apply gap-3; }
-    .checkbox-title { @apply text-[0.95rem]; }
-    .submit-button { @apply min-h-12 px-6 py-3 text-base; }
+    .checkbox-title { @apply text-sm; }
+    .checkbox-hint { @apply text-xs; }
+    .submit-button { @apply min-h-12 text-base; }
+  }
+
+  @media (max-width: 480px) {
+    .form-card { @apply m-3 p-6; }
+    .form-title { font-size: clamp(16px, 4vw, 20px); }
+    .form-input { padding-left: 3.25rem !important; }
+    .checkbox-item { @apply px-3 py-2.5 rounded-lg; }
+    .checkbox-content { @apply gap-2.5; }
+    .checkbox-icon { @apply h-8 w-8 text-sm; }
+    .checkbox-check { @apply h-5 w-5; }
+    .checkbox-title { @apply text-xs; }
+    .checkbox-hint { @apply text-xs leading-tight; }
+    .submit-button { @apply min-h-11 px-6 py-3 text-sm; }
   }
 }
 
-/* 4) ANIMACIONES */
+/* 4) ANIMACIONES AVANZADAS
 @layer utilities {
   @keyframes floatingOrbs {
-    0%,100% { opacity:.6; transform: translateY(0) rotate(0deg); }
-    33%    { opacity:.8; transform: translateY(-10px) rotate(120deg); }
-    66%    { opacity:.7; transform: translateY(5px) rotate(240deg); }
+    0%, 100% { opacity: 0.4; transform: translateY(0px) rotate(0deg) scale(1); }
+    25% { opacity: 0.6; transform: translateY(-15px) rotate(90deg) scale(1.05); }
+    50% { opacity: 0.5; transform: translateY(-5px) rotate(180deg) scale(0.95); }
+    75% { opacity: 0.7; transform: translateY(-20px) rotate(270deg) scale(1.1); }
   }
+
   @keyframes shimmerOverlay {
-    0% { transform: translateX(-100%) translateY(-100%); }
-    100% { transform: translateX(100%) translateY(100%); }
+    0% { transform: translateX(-150%) translateY(-150%) rotate(45deg); }
+    100% { transform: translateX(150%) translateY(150%) rotate(45deg); }
   }
+
   @keyframes gradientShift {
-    0%,100% { background-position: 0% 50%; }
-    50%     { background-position: 100% 50%; }
+    0%, 100% { background-position: 0% 50%; }
+    33% { background-position: 100% 50%; }
+    66% { background-position: 50% 100%; }
   }
-  @keyframes titleUnderline {
-    0%,100% { opacity:.7; transform: translateX(-50%) scaleX(1); }
-    50%     { opacity:1; transform: translateX(-50%) scaleX(1.1); }
-  }
+
   @keyframes checkPop {
-    0% { transform: scale(0) rotate(180deg); opacity:0; }
-    100% { transform: scale(1) rotate(0deg); opacity:1; }
-  }
-  @keyframes errorSlide {
-    from { opacity:0; transform: translateY(-10px); }
-    to   { opacity:1; transform: translateY(0); }
-  }
-}
-
-@layer components {
-  /* Ritmo vertical un pelín más compacto */
-  .modern-form { @apply gap-6; }
-  .form-field  { @apply space-y-2; }
-  .field-label { @apply mb-0; }
-
-  /* Inputs: altura uniforme, foco sin glow exagerado, icono centrado */
-  .input-container { @apply relative flex items-center; }
-  .input-icon      { @apply absolute left-4 z-10 text-[1.125rem] text-slate-400; }
-
-  .form-input {
-    @apply h-12 w-full rounded-xl
-           border border-slate-300 bg-white/80
-           pl-11 pr-4 text-[15px] font-medium text-slate-900
-           placeholder:text-slate-400
-           shadow-sm backdrop-blur
-           outline-none transition;
-  }
-  .form-input:focus {
-    @apply border-blue-500 ring-2 ring-blue-500/20 shadow-md;
-    transform: translateY(-1px);
+    0% { transform: scale(0) rotate(180deg); opacity: 0; }
+    50% { transform: scale(1.2) rotate(90deg); opacity: 0.8; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
   }
 
-  /* Card/option del checkbox: contraste y feedback sutil */
-  .checkbox-item {
-    @apply rounded-2xl border-2 border-slate-200 bg-white/70 p-6
-           shadow-sm backdrop-blur
-           transition hover:-translate-y-0.5 hover:border-blue-500/60 hover:shadow-lg;
-  }
-  .checkbox-item.checked {
-    @apply border-blue-500/70 bg-gradient-to-br from-blue-500/10 to-purple-500/5 shadow-xl;
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
-  /* Contenido interior y título un poco más compacto */
-  .checkbox-content { @apply flex flex-1 items-center gap-4; }
-  .checkbox-title   { @apply text-[15px] font-bold leading-snug text-slate-900; }
-
-  /* Icono principal a la izquierda */
-  .checkbox-icon { @apply h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 text-white shadow-md
-                           flex items-center justify-center transition-transform duration-300; }
-  .checkbox-item:hover .checkbox-icon { @apply scale-110 rotate-3; }
-
-  /* Badge/ícono a la derecha (el círculo azul con check) */
-  .checkbox-right-badge { @apply inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-md; }
-  .checkbox-item.checked .checkbox-right-badge { @apply bg-blue-700; }
-
-  /* Botón “¿Qué es?” un poco más discreto */
-  .info-toggle { @apply mt-3 inline-flex items-center gap-1.5 rounded-lg border border-blue-500/20
-                         bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-600
-                         transition hover:-translate-y-0.5 hover:border-blue-500 hover:bg-blue-500/15; }
-
-  /* Card contenedor: respira un poco más y se centra mejor en desktop */
-  .form-card { @apply max-w-[720px] p-12 sm:p-10; }
-}
-
-/* Si usas el “badge” derecho en el JSX, esto te ayuda a alinear */
-@layer utilities {
-  .form-row        { @apply flex items-center justify-between gap-3; }
-  .form-row-center { @apply flex items-center gap-4; }
-}
-
-/* ===== Fix: iconos dentro de los inputs ===== */
-@layer components {
-  /* Asegura contenedor relativo */
-  .input-container { @apply relative; }
-
-  /* Coloca el icono centrado vertical y con pointer-events:none */
-  .input-container .input-icon {
-    @apply absolute left-3 top-1/2 -translate-y-1/2 z-10 text-slate-400;
-    pointer-events: none;
-    font-size: 1.125rem; /* 18px */
-    line-height: 1;
+  .animate-fade-in-up {
+    animation: fadeInUp 0.6s ease-out;
   }
-
-  /* Empuja el texto del input a la derecha para que no se cruce con el icono */
-  .input-container > .form-input {
-    @apply pl-12; /* 3rem ≈ icono + margen */
-  }
-
-  /* Si usas inputs muy grandes, puedes aumentar un poco en pantallas medianas+ */
-  @media (min-width: 768px) {
-    .input-container > .form-input { @apply pl-14; } /* opcional: 3.5rem */
-  }
-}
-
-/* ==== FIX DEFINITIVO: icono y texto sin solaparse ==== */
-@layer components {
-  /* El wrapper debe ser relativo para posicionar bien el icono */
-  .input-container { @apply relative; }
-
-  /* Icono centrado vertical y sin capturar clics */
-  .input-container .input-icon {
-    @apply absolute top-1/2 -translate-y-1/2 text-slate-400 z-10;
-    left: 0.875rem;            /* left-3 */
-    width: 1.25rem;            /* 20px, para reservar bien el ancho */
-    pointer-events: none;
-    line-height: 1;
-  }
-
-  /* Aumentamos la especificidad y el padding izquierdo (4rem) */
-  .input-container input.form-input,
-  .input-container input[type="text"],
-  .input-container input[type="email"],
-  .input-container input[type="url"],
-  .input-container input[type="search"],
-  .input-container input[type="password"] {
-    @apply pl-16;              /* 4rem = 64px, suficiente para icono + margen */
-  }
-
-  /* Si en móviles quieres un poco menos, baja a 3.5rem */
-  @media (max-width: 480px) {
-    .input-container input.form-input,
-    .input-container input[type="text"],
-    .input-container input[type="email"],
-    .input-container input[type="url"],
-    .input-container input[type="search"],
-    .input-container input[type="password"] {
-      @apply pl-14;            /* 3.5rem = 56px */
-    }
-  }
-}
-/* ===== FIX: inputs con iconos (sin solaparse) ===== */
-@layer components {
-  /* El wrapper debe ser el relativo */
-  .input-container { position: relative; }
-
-  /* Icono: mismo alto/centrado, sin capturar clics */
-  .input-container .input-icon {
-    position: absolute;
-    left: 0.875rem;                  /* ~14px */
-    top: 50%;
-    transform: translateY(-50%);
-    width: 1.25rem;                  /* 20px */
-    height: 1.25rem;
-    line-height: 1;
-    color: rgb(148 163 184);         /* slate-400 */
-    pointer-events: none;
-    z-index: 10;
-  }
-
-  /* Asegura espacio a la izquierda del texto */
-  /* 1) selector normal (debería bastar) */
-  .input-container .form-input {
-    padding-left: 3.75rem !important; /* 60px aprox: icono + margen */
-  }
-
-  /* 2) si tu build genera reglas muy específicas, refuerzo extra */
-  .input-container input.form-input,
-  .input-container input[type="text"].form-input,
-  .input-container input[type="email"].form-input,
-  .input-container input[type="url"].form-input,
-  .input-container input[type="search"].form-input,
-  .input-container input[type="password"].form-input {
-    padding-left: 3.75rem !important;
-  }
-
-  /* 3) bonus: si el navegador soporta :has, todavía más robusto */
-  .input-container:has(.input-icon) .form-input { padding-left: 3.75rem !important; }
-
-  /* Ajuste en móviles (un poco menos de padding si lo prefieres) */
-  @media (max-width: 480px) {
-    .input-container .form-input { padding-left: 3.5rem !important; }
-  }
-}
-/* ===== Ajuste fino: bajar un poco los iconos de los inputs ===== */
-@layer components {
-  /* Baja ~3px respecto al centro óptico */
-  .input-container .input-icon {
-    top: calc(80% + 3px) !important;   /* sube/baja cambiando el 3 */
-    transform: translateY(-50%);
-  }
-
-  /* En móviles, un pelín menos de desplazamiento */
-  @media (max-width: 480px) {
-    .input-container .input-icon {
-      top: calc(10% + 2px) !important;
-    }
-  }
-}
+} */
