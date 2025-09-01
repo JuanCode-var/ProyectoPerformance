@@ -247,3 +247,83 @@
 .pdf-root .card.plan {
   overflow: visible !important;
 }
+
+/* === ANTI-CORTE DE TARJETAS/SECCIONES ENTRE PÁGINAS EN PDF === */
+.pdf-root .diagnostico-grid,
+.pdf-root .cards-wrapper,
+.pdf-root .metric-section,
+.pdf-root .metric-card,
+.pdf-root .item,
+.pdf-root .card {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+  /* Opcional: fuerza salto después de cada tarjeta si lo necesitas */
+  /* page-break-after: auto; */
+}
+
+/* Si usas grid, refuerza también el grid container */
+.pdf-root .diagnostico-grid {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}
+
+/* Si tienes secciones grandes, evita que se corten */
+.pdf-root .section,
+.pdf-root .pdf-section {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}
+
+/* Refuerzo para listas de recomendaciones o bloques de texto */
+.pdf-root ul,
+.pdf-root ol,
+.pdf-root li {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}
+
+/* Ajuste: margen inferior grande para evitar cortes de la última fila en PDF */
+.pdf-root .diagnostico-grid {
+  margin-bottom: 80px !important;
+}
+
+/* Ajuste: reduce el alto mínimo de las tarjetas para que quepan más por página */
+.pdf-root .diagnostico-grid .item .w-full {
+  min-height: 120px !important;
+}
+
+/* Refuerzo: grid de métricas perfectamente alineada y centrada */
+.pdf-root .diagnostico-grid {
+  align-items: center !important;
+  justify-items: center !important;
+  margin-bottom: 80px !important;
+  padding-bottom: 0 !important;
+}
+
+.pdf-root .diagnostico-grid .item {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  min-height: 180px !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.pdf-root .diagnostico-grid .item .item-label {
+  margin-bottom: 8px !important;
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+  text-align: center !important;
+  width: 100%;
+}
+
+.pdf-root .diagnostico-grid .item .w-full {
+  min-height: 120px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+}

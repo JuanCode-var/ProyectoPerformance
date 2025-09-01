@@ -124,10 +124,12 @@ export default function CircularGauge({
           x="50%"
           y="50%"
           textAnchor="middle"
+          alignmentBaseline="middle"
+          dominantBaseline="middle"
           fontSize={size * 0.25}
           fontWeight={700}
           fill={textColor}
-          dy="0.35em"
+          dy="0"
         >
           {display}
           {suffix ? (
