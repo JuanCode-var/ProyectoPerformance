@@ -115,7 +115,7 @@ export default function Formulario() {
     try {
       const tipos = (Object.keys(tests) as (keyof Tests)[]).filter(key => tests[key]);
 
-      // ✅ Validación con Zod ANTES de enviar
+      // Validación con Zod ANTES de enviar
       const candidate = {
         url: formData.url,
         name: formData.name,
@@ -139,25 +139,51 @@ export default function Formulario() {
         return;
       }
 
-      const response = await fetch('/api/audit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(parsed.data),
-      });
+      // Construir payload compatible con backend
+      const strategy = 'mobile';
+      const categories = ['performance'];
+      const payload = {
+        url: parsed.data.url,
+        strategy,
+        categories,
+        name: parsed.data.name,
+        email: parsed.data.email,
+        type: parsed.data.type,
+      };
+
+      // Debug: log payload y endpoint
+      console.log('[DEBUG][FRONTEND] Enviando payload a /api/audit:', payload);
+
+      let response: Response;
+      try {
+        response = await fetch('/api/audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } catch (fetchErr) {
+        console.error('[DEBUG][FRONTEND] Error de red al hacer fetch:', fetchErr);
+        throw new Error('No se pudo conectar con el backend (/api/audit)');
+      }
+
+      console.log('[DEBUG][FRONTEND] Status de respuesta:', response.status);
 
       const text = await response.text();
-      let payload: ApiResponse;
+      let apiPayload: ApiResponse;
       try {
-        payload = text ? (JSON.parse(text) as ApiResponse) : {};
+        apiPayload = text ? (JSON.parse(text) as ApiResponse) : {};
       } catch {
+        console.error('[DEBUG][FRONTEND] Respuesta no válida del servidor:', text);
         throw new Error('Respuesta no válida del servidor');
       }
 
       if (!response.ok) {
-        throw new Error((payload && (payload.error as string)) || `Error ${response.status}`);
+        console.error('[DEBUG][FRONTEND] Error en respuesta:', apiPayload);
+        throw new Error((apiPayload && (apiPayload.error as string)) || `Error ${response.status}`);
       }
 
-      navigate(`/diagnostico/${payload._id}`);
+      console.log('[DEBUG][FRONTEND] Navegando a /diagnostico/' + apiPayload._id);
+      navigate(`/diagnostico/${apiPayload._id}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido';
       setErrors({ submit: msg });

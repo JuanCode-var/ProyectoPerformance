@@ -7,7 +7,7 @@ import type { SentMessageInfo } from "nodemailer/lib/smtp-transport"; // 👈 ti
 
 // Importa tu modelo y utils reales (NodeNext/ESM ⇒ termina en .js)
 import Audit from "../database/esquemaBD.js";
-import { readMetrics, extractOpportunities } from "../../src/utils/lh.js";
+import { readMetrics, extractOpportunities } from "../utils/lh.js";
 
 /** PDF adjunto opcional que puede venir desde el front */
 type PdfAttachment = {

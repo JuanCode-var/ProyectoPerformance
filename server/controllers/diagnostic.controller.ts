@@ -4,9 +4,10 @@ import Audit from "../database/esquemaBD.js";
 import {
   readMetrics,
   extractOpportunities,
-  packMetrics,
+  // packMetrics,
   THRESHOLDS,
-} from "../../src/utils/lh.js";
+} from "../utils/lh.js";
+
 
 // ---------------- Types mínimos para no romper contratos ----------------
 type Opportunity = {
@@ -122,21 +123,21 @@ export async function getProcessedByUrl(req: Request, res: Response) {
     const currMetrics = readMetrics(current);
     const prevMetrics = previous ? readMetrics(previous) : null;
 
-    const metrics = packMetrics(currMetrics, prevMetrics);
+    // const metrics = packMetrics(currMetrics, prevMetrics);
 
     // 1) Intenta extraer desde el LHR
     let opportunities = extractOpportunities(current);
 
     // 2) Si viene vacío, genera fallback por umbrales
     if (!opportunities || opportunities.length === 0) {
-      opportunities = buildThresholdOpps(currMetrics);
+      // opportunities = buildThresholdOpps(currMetrics);
     }
 
     res.json({
       url,
       currentDate: current.fecha || null,
       previousDate: previous?.fecha || null,
-      metrics,
+      // metrics,
       opportunities,
     });
   } catch (e) {

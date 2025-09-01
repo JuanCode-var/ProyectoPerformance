@@ -585,41 +585,13 @@ function CategoryDial({
         size={size}
         strokeWidth={strokeWidth}
         decimals={0}
-        suffix=""                 // sin “%”
-        textColor="transparent"   // ocultamos el número interno del gauge
+        suffix=""
+        textColor="#111827" // Mostramos el número centrado en el SVG
         trackColor="#e5e7eb"
+        showValue={true}
+        centerFill={tint}
+        centerRadiusPct={0.90}
       />
-      {/* círculo central perfectamente centrado */}
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          width: innerDiameter,
-          height: innerDiameter,
-          transform: "translate(-50%, -50%)",
-          borderRadius: "50%",
-          background: tint,
-          pointerEvents: "none",
-        }}
-      />
-      {/* número negro */}
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          transform: "translate(-50%, -50%)",
-          fontSize: size * 0.28,
-          fontWeight: 800,
-          color: "#111827",
-          lineHeight: 1,
-          fontFamily: "inherit",
-          pointerEvents: "none",
-        }}
-      >
-        {value == null ? "—" : value}
-      </div>
     </div>
   );
 }
@@ -777,6 +749,7 @@ export default function DiagnosticoView() {
   const location = useLocation();
   const id: string | null =
     (params as any)?.id || new URLSearchParams(location.search).get("id");
+
 
   // NUEVO: estrategia (Móvil/Ordenador)
   const qs = new URLSearchParams(location.search);
@@ -1206,14 +1179,23 @@ export default function DiagnosticoView() {
           <div className="date">{new Date(fecha as string).toLocaleString()}</div>
 
       {/* Tabs centrados (shadcn) con estilo activo en azul */}
-      <div className="strategy-tabs">
-        <Tabs value={strategy} onValueChange={(v) => setStrategy(v as "mobile" | "desktop")}>
-          <TabsList className="strategy-list">
-            <TabsTrigger value="mobile"  className="strategy-trigger">📱 Móvil</TabsTrigger>
-            <TabsTrigger value="desktop" className="strategy-trigger">🖥️ Ordenador</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+        <div className="tabs" style={{ marginTop: 8 }}>
+          <button
+            onClick={() => setStrategy("mobile")}
+            className={`tab-button${strategy === "mobile" ? " active" : ""}`}
+            title="Ejecuta/consulta métricas para móviles"
+          >
+            📱 Móvil
+          </button>
+          <button
+            onClick={() => setStrategy("desktop")}
+            className={`tab-button${strategy === "desktop" ? " active" : ""}`}
+            title="Ejecuta/consulta métricas para ordenadores"
+            style={{ marginLeft: 8 }}
+          >
+            🖥️ Ordenador
+          </button>
+        </div>
 
           {/* Grid principal: performance + categorías */}
           <div className="diagnostico-grid w-full">
@@ -1265,6 +1247,7 @@ export default function DiagnosticoView() {
           subject={`Diagnóstico de ${url} (${strategy === "mobile" ? "Móvil" : "Ordenador"})`}
           endpoint="/api/audit/send-diagnostic"
           includePdf={true}
+          captureWidthPx={1200} // Forzar ancho igual al CSS PDF
         />
       </CardContent>
     </Card>

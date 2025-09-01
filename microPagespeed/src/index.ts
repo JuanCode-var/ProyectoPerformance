@@ -1,3 +1,17 @@
+
+
+// Endpoint POST /audit para compatibilidad con gateway
+// (debe ir después de la declaración de 'app')
+
+// ...existing code...
+
+// Inserta el endpoint justo después de la declaración de 'app'
+
+
+// Carga variables de entorno desde .env (asegura PSI_API_KEY disponible)
+import dotenv from "dotenv";
+dotenv.config();
+
 // src/index.ts
 import express from "express";
 import cors from "cors";
@@ -182,10 +196,24 @@ function buildPlanMarkdownEs(proc: ReturnType<typeof buildProcessedFromPayload>)
 // Express app
 // ───────────────────────────────────────────────────────────────────────────────
 
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("tiny"));
+
+// Endpoint POST /audit para compatibilidad con gateway
+app.post("/audit", async (req: Request, res: Response) => {
+  try {
+    const { url, strategy = "mobile", categories = ["performance"] } = req.body;
+    if (!url) return res.status(400).json({ error: "url is required" });
+
+    const payload = await runPageSpeed({ url, strategy, categories });
+    res.json(payload);
+  } catch (e: any) {
+    res.status(500).json({ error: "Internal error", detail: e?.message || String(e) });
+  }
+});
 
 // Health
 app.get("/api/health", (_req, res) => {
@@ -226,14 +254,14 @@ app.get("/api/pagespeed", async (req: Request, res: Response) => {
       : null;
 
     const normalized = rawCats
-      ? rawCats.map((s: any) => String(s).trim().toLowerCase()).map((c) => aliasMap[c] || c)
+      ? rawCats.map((s: any) => String(s).trim().toLowerCase()).map((c: string) => aliasMap[c] || c)
       : null;
 
     const parsed = normalized
       ? normalized
           .filter(Boolean)
-          .filter((c) => c === "all" || VALID_CATEGORIES.has(c))
-          .filter((v, i, a) => a.indexOf(v) === i)
+          .filter((c: string) => c === "all" || VALID_CATEGORIES.has(c))
+          .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i)
       : null;
 
     // ✅ FULL por defecto; opcionalmente ?lite=1 para pedir solo performance
@@ -292,14 +320,14 @@ app.get("/api/pagespeed/processed", async (req: Request, res: Response) => {
       : null;
 
     const normalized = rawCats
-      ? rawCats.map((s: any) => String(s).trim().toLowerCase()).map((c) => aliasMap[c] || c)
+      ? rawCats.map((s: any) => String(s).trim().toLowerCase()).map((c: string) => aliasMap[c] || c)
       : null;
 
     const parsed = normalized
       ? normalized
           .filter(Boolean)
-          .filter((c) => c === "all" || VALID_CATEGORIES.has(c))
-          .filter((v, i, a) => a.indexOf(v) === i)
+          .filter((c: string) => c === "all" || VALID_CATEGORIES.has(c))
+          .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i)
       : null;
 
     const wantsLite =

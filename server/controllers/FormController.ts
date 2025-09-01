@@ -6,7 +6,7 @@ import Mail from "nodemailer/lib/mailer";
 import type { SentMessageInfo } from "nodemailer/lib/smtp-transport";
 
 import Audit from "../database/esquemaBD.js";
-import { readMetrics, extractOpportunities } from "../../src/utils/lh.js";
+import { readMetrics, extractOpportunities } from "../utils/lh.js";
 
 // =====================
 // Helpers/consts
@@ -82,6 +82,9 @@ export async function guardarDatos(req: Request, res: Response) {
   const fail = (status: number, msg: string, extra: Record<string, unknown> = {}) =>
     res.status(status).json({ ok: false, error: msg, ...extra });
 
+  // Log para depuración: mostrar la URL real que usará el backend para el microservicio
+  console.log("[DEBUG] MS_PAGESPEED_URL:", process.env.MS_PAGESPEED_URL);
+
   try {
     const {
       url,
@@ -105,6 +108,8 @@ export async function guardarDatos(req: Request, res: Response) {
       pagespeed: { endpoint: withAudit(MS_PAGESPEED_URL) },
       unlighthouse: { endpoint: withAudit(MS_UNLIGHTHOUSE_URL) },
     };
+    // Log para depuración: mostrar el endpoint real que usará el backend
+    console.log("[DEBUG] Endpoint pagespeed:", MICROSERVICES.pagespeed.endpoint);
 
     const tipos = Array.isArray(type)
       ? (type as string[])
@@ -191,9 +196,12 @@ export async function guardarDatos(req: Request, res: Response) {
     } catch (e: any) {
       console.error("❌ Error guardando en DB:", e?.message); // eslint-disable-line no-console
       // devolvemos resultado sin persistir
+      // Generar un _id temporal (por compatibilidad front) si no existe
+      const tempId = `temp_${Date.now()}_${Math.floor(Math.random()*1e6)}`;
       return res.status(200).json({
         ok: true,
         persisted: false,
+        _id: tempId,
         url,
         strategy,
         name,

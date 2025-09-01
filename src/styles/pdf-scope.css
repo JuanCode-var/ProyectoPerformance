@@ -1,3 +1,31 @@
+/* Centrado vertical forzado para el valor del gauge en PDF */
+.pdf-root .diagnostico-grid .item svg text {
+  dominant-baseline: middle !important;
+  alignment-baseline: middle !important;
+  text-anchor: middle !important;
+  /* Refuerzo para centrar absolutamente el texto en SVG */
+  x: 50% !important;
+  y: 50% !important;
+  /* fallback para navegadores viejos o html2canvas */
+  transform: translate(0, 0) !important;
+}
+
+/* Refuerzo: centra el texto SVG de los gauges, incluso si el componente no lo hace */
+.pdf-root .diagnostico-grid .item svg text.gauge-value, /* si usan una clase específica */
+.pdf-root .diagnostico-grid .item svg text {
+  dominant-baseline: middle !important;
+  alignment-baseline: middle !important;
+  text-anchor: middle !important;
+  x: 50% !important;
+  y: 50% !important;
+}
+
+/* Fuerza 4 columnas fijas en la grid principal SOLO en PDF */
+.pdf-root .diagnostico-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 24px !important;
+}
 /* Burbuja de estilos SOLO para el área a exportar */
 .pdf-root {
   /* ancho fijo = coincide con el captureWidthPx del EmailPdfBar */

@@ -1,42 +1,42 @@
 // src/queue.ts
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import Queue, { type Job, type JobOptions, type Queue as QueueType } from 'bull';
+import { REDIS_ENABLED } from './redisClient.js';
 
+// Tipos: se extraen solo como tipos (no afectan runtime)
+export type Job = import('bull').Job;
+export type JobOptions = import('bull').JobOptions;
+export type QueueType = import('bull').Queue;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname  = path.dirname(__filename);
+// Instancia única perezosa
+let pagespeedQueue: QueueType | null = null;
 
-// Carga variables del server/.env
-dotenv.config({ path: path.join(__dirname, './server/.env') });
+/**
+ * Devuelve la cola de pagespeed si Redis está habilitado; en caso contrario, `null`.
+ * Usa import dinámico para no cargar `bull`/`ioredis` cuando no hace falta.
+ */
+export async function getPagespeedQueue(): Promise<QueueType | null> {
+  if (!REDIS_ENABLED) return null;
+  if (pagespeedQueue) return pagespeedQueue;
 
-if (!process.env.REDIS_URL) {
-  throw new Error('⚠️ Falta REDIS_URL en .env');
+  // Carga perezosa de bull (CJS) desde ESM
+  const { default: Bull } = await import('bull'); // interop CJS ←→ ESM
+  pagespeedQueue = new Bull('pagespeed', process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
+
+  return pagespeedQueue;
 }
 
-export type AuditJobData = {
-  url: string;
-  strategy?: 'mobile' | 'desktop' | (string & {});
-  categories?: string[];
-};
-
-export const auditQueue: QueueType<AuditJobData> = new Queue<AuditJobData>(
-  'auditQueue',
-  process.env.REDIS_URL!,
-  {
-    defaultJobOptions: {
-      removeOnComplete: true,
-      removeOnFail: true,
-      attempts: 1,
-      timeout: 300000, // 5 minutos
-    },
-    limiter: { max: 2, duration: 1000 },
-    settings: { stalledInterval: 30000 },
+/**
+ * Cierre opcional y elegante de la cola (p. ej. en SIGINT/SIGTERM).
+ */
+export async function closePagespeedQueue(): Promise<void> {
+  if (pagespeedQueue) {
+    try {
+      await pagespeedQueue.close();
+    } catch (e) {
+      console.warn('[queue] Error al cerrar pagespeedQueue:', (e as Error).message);
+    } finally {
+      pagespeedQueue = null;
+    }
   }
-);
-
-// Helper opcional para encolar con nombre 'run'
-export function enqueueRun(data: AuditJobData, opts: JobOptions = {}) {
-  return auditQueue.add('run', data, opts);
 }
+// Al final de src/queue.ts
+export { getPagespeedQueue as auditQueue };

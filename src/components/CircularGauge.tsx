@@ -123,11 +123,11 @@ export default function CircularGauge({
         <text
           x="50%"
           y="50%"
-          dominantBaseline="central"
           textAnchor="middle"
           fontSize={size * 0.25}
           fontWeight={700}
           fill={textColor}
+          dy="0.35em"
         >
           {display}
           {suffix ? (
