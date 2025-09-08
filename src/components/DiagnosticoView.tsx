@@ -4,7 +4,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import CircularGauge from "./CircularGauge";
 import ActionPlanPanel from "./ActionPlanPanel";
 import EmailSendBar from "./EmailPdfBar";
-// import SecurityScoreWidget from "./SecurityScoreWidget"; // removed unused import
+import SecurityScoreWidget from "./SecurityScoreWidget"; // show gauge also in main view
 import SecurityDiagnosticoPanel from "./SecurityDiagnosticoPanel";
 
 // shadcn/ui padres
@@ -24,6 +24,21 @@ const API_LABELS: Record<string, string> = {
   pagespeed: "Lighthouse",
   unlighthouse: "Unlighthouse",
 };
+
+// Pequeno separador visual reutilizable
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="w-full my-6" role="separator" aria-label={label}>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
+        <div className="text-[11px] sm:text-xs uppercase tracking-wider text-slate-500 select-none px-2 py-1 rounded-md bg-slate-50 border border-slate-200">
+          {label}
+        </div>
+        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
+      </div>
+    </div>
+  );
+}
 
 // =================== Utils ===================
 async function safeParseJSON(res: Response): Promise<any> {
@@ -1021,6 +1036,27 @@ export default function DiagnosticoView() {
     return () => { mounted = false; };
   }, [id, strategy, activeDiag]);
 
+  // Cargar historial de seguridad si tenemos URL
+  const [securityHistory, setSecurityHistory] = useState<Array<{ fecha: string; score: number | null }>>([]);
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        const u = (auditData as any)?.url;
+        if (!u) return;
+        const ts = Date.now();
+        const r = await fetch(`/api/security/history?url=${encodeURIComponent(u)}&_=${ts}`, { headers: { 'Cache-Control': 'no-cache' } });
+        if (!r.ok) return;
+        const data = await safeParseJSON(r);
+        if (mounted && Array.isArray(data)) {
+          setSecurityHistory(data.map((d: any) => ({ fecha: d.fecha, score: typeof d.score === 'number' ? d.score : null })));
+        }
+      } catch {}
+    };
+    run();
+    return () => { mounted = false; };
+  }, [auditData?.url]);
+
   // Limpia datos al cambiar vista activa para evitar información cruzada
   useEffect(() => {
     // Mantenemos auditData para conservar la URL al cambiar a Seguridad
@@ -1343,12 +1379,14 @@ export default function DiagnosticoView() {
         <div ref={contenedorReporteRef} className="w-full" style={{ overflowX: "hidden" }}>
           <div className="flex items-center gap-4 mb-2">
             <Link to="/" className="back-link">Nuevo diagnóstico</Link>
-            <Link
-              to={`/historico?url=${encodeURIComponent(url as string)}`}
-              className="back-link"
-            >
-              Ver histórico de esta URL
-            </Link>
+            {activeDiag === 'performance' && (
+              <Link
+                to={`/historico?url=${encodeURIComponent(url as string)}`}
+                className="back-link"
+              >
+                Ver histórico de esta URL
+              </Link>
+            )}
           </div>
 
           {/* UI Buttons for diagnostics (centrado arriba del título) */}
@@ -1458,11 +1496,60 @@ export default function DiagnosticoView() {
                 </div>
               )}
               <div className={perfLoading ? 'opacity-60 transition-opacity' : ''}>
+                {/* Seguridad: calificación rápida */}
+                {(audit as any)?.security && (
+                  <>
+                    <SectionDivider label="Seguridad" />
+                    <Card className="mt-2 w-full">
+                      <CardHeader className="flex-row items-center justify-between">
+                        <CardTitle>Resumen de Seguridad</CardTitle>
+                        {/* Botón "Ver detalle" solo aparece en la vista de performance */}
+                        <Button variant="outline" onClick={() => setActiveDiag('security')}>Ver detalle</Button>
+                      </CardHeader>
+                      <CardContent>
+                        <SecurityScoreWidget
+                          score={(audit as any)?.security?.score}
+                          grade={(audit as any)?.security?.grade}
+                          history={securityHistory}
+                          topFindings={((audit as any)?.security?.findings || []).filter((f: any) => f?.severity === 'critical' || f?.severity === 'warning').slice(0, 3)}
+                        />
+                        {/* Quick facts if present */}
+                        {Boolean((audit as any)?.security) && (
+                          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-700">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block w-2 h-2 rounded-full" style={{ background: (audit as any)?.security?.https ? '#16a34a' : '#ef4444' }} />
+                              <span>HTTPS activo: {(audit as any)?.security?.https ? 'Sí' : 'No'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block w-2 h-2 rounded-full" style={{ background: (audit as any)?.security?.httpsEnforced ? '#16a34a' : '#f59e0b' }} />
+                              <span>Redirección a HTTPS: {(audit as any)?.security?.httpsEnforced ? 'Sí' : 'No clara'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block w-2 h-2 rounded-full" style={{ background: (audit as any)?.security?.checks?.['hsts']?.ok ? '#16a34a' : '#ef4444' }} />
+                              <span>HSTS: {(audit as any)?.security?.checks?.['hsts']?.ok ? 'OK' : 'Falta o débil'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block w-2 h-2 rounded-full bg-slate-400" />
+                              <span>Entorno: {(audit as any)?.security?.environment?.kind || '—'}</span>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+
+                <SectionDivider label="Resumen" />
                 {/* Grid principal: performance + categorías */}
                 <div className="diagnostico-grid w-full">
                   {renderCard(perfCard)}
                   {categoryCards.map(renderCard)}
                 </div>
+
+                {/* Desgloses y captura */}
+                {(showPerfDetails || showAccDetails || showBPDetails || showSeoDetails) && (
+                  <SectionDivider label="Desgloses y capturas" />
+                )}
 
                 {/* Desglose Performance — tipo SEO */}
                 {showPerfDetails && (
@@ -1494,11 +1581,13 @@ export default function DiagnosticoView() {
                   />
                 )}
 
+                <SectionDivider label="Plan de acción" />
                 <ActionPlanPanel
                   opportunities={planItems}
                   performance={performance}
                 />
 
+                <SectionDivider label="Compartir / Exportar" />
                 <EmailSendBar
                   captureRef={contenedorReporteRef as any}
                   url={url as string}

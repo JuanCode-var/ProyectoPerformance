@@ -368,13 +368,17 @@ export async function getAuditById(req: Request, res: Response) {
           name: docObj.name,
           email: docObj.email,
           strategy,
-          audit: { pagespeed: ps },
+          // Mantener seguridad previamente almacenada para no perderla en la UI
+          audit: {
+            pagespeed: ps,
+            security: docObj?.audit?.security ?? docObj?.security ?? undefined,
+          },
           performance: perfResolved ?? undefined,
           metrics: ps?.metrics ?? undefined,
           fecha: new Date().toISOString(),
           forced: true,
           note: "Resultado forzado por estrategia solicitada",
-        };
+        } as any;
         return res.json(out);
       } catch (e: any) {
         // Si algo falla, devolvemos lo guardado para no romper el front
@@ -746,6 +750,57 @@ export async function sendDiagnostic(req: Request, res: Response) {
   } catch (e: any) {
     console.error("❌ Error en sendDiagnostic:", e); // eslint-disable-line no-console
     return res.status(500).json({ error: "Error al enviar el diagnóstico", detail: e.message });
+  }
+}
+
+// -------- Historial de Seguridad por URL --------
+export async function getSecurityHistory(req: Request, res: Response) {
+  try {
+    const rawParam = (req.query?.url ?? "").toString().trim();
+    if (!rawParam) return res.status(400).json({ error: "Falta el parámetro url" });
+
+    let decoded = rawParam;
+    try { decoded = decodeURIComponent(rawParam); } catch {}
+
+    const stripHash = (u: string) => u.split("#")[0];
+    const stripQuery = (u: string) => u.split("?")[0];
+    const stripSlash = (u: string) => (u.endsWith("/") ? u.slice(0, -1) : u);
+    const base = stripSlash(stripQuery(stripHash(decoded)));
+
+    const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const rxBase = new RegExp("^" + esc(base) + "/?$", "i");
+
+    const filter = {
+      $or: [{ url: decoded }, { url: base }, { url: base + "/" }, { url: { $regex: rxBase } }],
+    } as any;
+
+    // Security es el modelo de la colección 'security'
+    const rows = await (await import("../database/securitySchema.js")).default
+      .find(filter)
+      .sort({ fecha: 1 })
+      .lean();
+
+    const out = (rows || []).map((r: any) => {
+      const findings = Array.isArray(r.findings) ? r.findings : [];
+      const criticals = findings.filter((f: any) => f?.severity === "critical").length;
+      const warnings = findings.filter((f: any) => f?.severity === "warning").length;
+      const infos = findings.filter((f: any) => f?.severity === "info").length;
+      return {
+        _id: r._id,
+        url: r.url,
+        fecha: r.fecha,
+        score: typeof r.score === "number" ? Math.round(r.score) : null,
+        grade: r.grade || null,
+        criticals,
+        warnings,
+        infos,
+      };
+    });
+
+    return res.json(out);
+  } catch (e: any) {
+    console.error("❌ getSecurityHistory error:", e); // eslint-disable-line no-console
+    return res.status(200).json([]);
   }
 }
 

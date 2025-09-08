@@ -173,13 +173,18 @@
     background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.9) 100%);
   }
   
+  /* --- Botones de pruebas: desactivar efectos hover excesivos --- */
   .checkbox-item:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 25px rgba(59,130,246,0.12);
+    transform: none !important;
+    /* Mantener el mismo borde y sombra del estado base */
+    border-color: rgba(226, 232, 240, 0.6) !important; /* ~ border-slate-200/60 */
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1) !important; /* similar a shadow-lg base */
   }
-  
-  .checkbox-item:focus-within { 
-    @apply ring-2 ring-blue-500/30 border-blue-500/60; 
+
+  /* Quitar realce adicional en el botón de info al hacer hover */
+  .info-toggle:hover {
+    border-color: rgba(59, 130, 246, 0.3) !important; /* mismo que estado base */
+    background: rgba(59, 130, 246, 0.10) !important;   /* mismo que estado base */
   }
 
   /* Label horizontal compacto */
@@ -310,6 +315,37 @@
 
   .loading-spinner { 
     @apply h-6 w-6 flex-shrink-0 animate-spin rounded-full border-3 border-white/30 border-t-white; 
+  }
+
+  /* --- Mensajes y estados de error (rojo) --- */
+  .field-error {
+    /* was: @apply mt-2 block text-sm font-semibold text-red-600; */
+    margin-top: 0.5rem;
+    display: block;
+    font-size: 0.875rem; /* 14px */
+    font-weight: 600;
+    color: #dc2626; /* red-600 */
+  }
+  .error-alert {
+    /* was: @apply mt-4 rounded-xl border border-red-300 bg-red-50 p-4 text-red-700 shadow-sm; */
+    margin-top: 1rem;
+    border-radius: 0.75rem; /* rounded-xl */
+    border: 1px solid #fca5a5; /* red-300 */
+    background: #fef2f2; /* red-50 */
+    padding: 1rem; /* p-4 */
+    color: #b91c1c; /* red-700 */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* shadow-sm */
+  }
+  .field-hint {
+    /* was: @apply mt-2 text-sm font-medium text-slate-500; */
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #64748b; /* slate-500 */
+  }
+  .field-hint--danger {
+    /* was: @apply text-red-600; */
+    color: #dc2626;
   }
 }
 

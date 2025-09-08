@@ -64,7 +64,7 @@ const RunAuditFormSchema = z.object({
 
 export default function Formulario() {
   const [formData, setFormData] = useState<FormData>({ url: '', name: '', email: '' });
-  const [tests, setTests] = useState<Tests>({ pagespeed: true, unlighthouse: false, security: false });
+  const [tests, setTests] = useState<Tests>({ pagespeed: false, unlighthouse: false, security: false });
   const [infoOpen, setInfoOpen] = useState<Record<InfoKeys, boolean>>({
     pagespeed: false,
     unlighthouse: false,
@@ -75,6 +75,9 @@ export default function Formulario() {
   const [errors, setErrors] = useState<FormErrors>({});
 
   const navigate = useNavigate();
+
+  // Al menos una prueba seleccionada
+  const hasAnySelected = Object.values(tests).some(Boolean);
 
   // --- Handlers ---
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -300,8 +303,6 @@ export default function Formulario() {
                           ''
                         }`}
                         variants={itemVariants}
-                        whileHover={disabled ? {} : { scale: 1.05, boxShadow: '0 10px 25px rgba(29, 78, 216, 0.15)' }}
-                        whileTap={disabled ? {} : { scale: 0.95 }}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: idx * 0.1 }}
@@ -325,7 +326,6 @@ export default function Formulario() {
                           type="button"
                           className="info-toggle"
                           onClick={() => toggleInfo(k as InfoKeys)}
-                          whileHover={disabled ? {} : { scale: 1.1 }}
                           transition={{ type: 'spring', stiffness: 300 }}
                           disabled={false}
                         >
@@ -350,6 +350,11 @@ export default function Formulario() {
                     );
                   })}
                 </motion.div>
+                {!hasAnySelected && (
+                  <div className="field-hint field-hint--danger">
+                    Selecciona al menos una prueba para continuar.
+                  </div>
+                )}
                 {errors.type && <span className="field-error">{errors.type}</span>}
               </motion.div>
 
@@ -357,7 +362,7 @@ export default function Formulario() {
               <motion.div whileTap={{ scale: 0.98 }}>
                 <Button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || !hasAnySelected}
                   className={`submit-button ${isLoading ? 'loading' : ''}`}
                 >
                   {isLoading ? (
