@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 
 import { connectDB } from './database/mongo.js';      // 👈 mantén .js (NodeNext)
 import formRoutes from './routes/formRoutes.js';      // 👈 mantén .js (NodeNext)
+import securityRoutes from './routes/securityRoutes.js'; // 👈 mantén .js (NodeNext)
 
 import redisClient, {
   connectRedisIfEnabled,
@@ -44,6 +45,7 @@ app.use((req, _res, next) => {
 
 // Rutas
 app.use('/api', formRoutes);
+app.use('/api', securityRoutes);
 app.get('/api/diagnostics/:rawUrl',               getDiagnosticsRaw as any);
 app.get('/api/diagnostics/:rawUrl/processed',     getDiagnosticsProcessed as any);
 app.get('/api/diagnostics/by-id/:id/processed',   getDiagnosticsProcessedById as any);

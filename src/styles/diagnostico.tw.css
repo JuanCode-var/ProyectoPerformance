@@ -304,3 +304,15 @@
     @apply text-white bg-gradient-to-r from-blue-500 to-blue-700 shadow;
   }
 }
+
+@layer components {
+  /* Grupo de botones de diagnóstico (más visibles) */
+  .diagnostico-btn-group {
+    @apply flex gap-4 mb-6 mt-2;
+    justify-content: flex-start;
+  }
+  .diagnostico-btn-group .btn-primary {
+    @apply text-lg px-6 py-3 font-bold shadow-lg;
+    box-shadow: 0 4px 16px 0 rgba(59,130,246,0.10);
+  }
+}

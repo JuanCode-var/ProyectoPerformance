@@ -6,7 +6,7 @@ const MetricSchema = new mongoose.Schema(
   {
     fcp: Number,
     lcp: Number,
-    // cls: Number,
+    cls: Number, // Cumulative Layout Shift
     tbt: Number,
     si: Number,
     ttfb: Number,
@@ -18,6 +18,7 @@ const MetricSchema = new mongoose.Schema(
 export interface Metric {
   fcp?: number | null;
   lcp?: number | null;
+  cls?: number | null;
   tbt?: number | null;
   si?: number | null;
   ttfb?: number | null;
@@ -25,7 +26,7 @@ export interface Metric {
 
 export interface AuditDoc extends mongoose.Document {
   url: string;
-  type: "pagespeed" | "unlighthouse" | (string & {});
+  type: "pagespeed" | "unlighthouse" | "security" | (string & {});
   strategy: "mobile" | "desktop" | (string & {});
   name?: string;
   email?: string;
@@ -33,6 +34,8 @@ export interface AuditDoc extends mongoose.Document {
   metrics?: Metric | null;
   raw?: unknown;
   audit?: unknown;
+  tipos?: string[];
+  security?: unknown;
   fecha: Date;
 }
 
@@ -40,7 +43,7 @@ export interface AuditDoc extends mongoose.Document {
 const AuditSchema = new mongoose.Schema<AuditDoc>(
   {
     url: { type: String, required: true, index: true },
-    type: { type: String, enum: ["pagespeed", "unlighthouse"], required: true },
+    type: { type: String, enum: ["pagespeed", "unlighthouse", "security"], required: true },
     strategy: { type: String, enum: ["mobile", "desktop"], default: "mobile" },
     name: { type: String },
     email: { type: String },
@@ -48,6 +51,8 @@ const AuditSchema = new mongoose.Schema<AuditDoc>(
     metrics: MetricSchema,
     raw: Object,
     audit: Object,
+    tipos: { type: [String], default: [] },
+    security: Object,
     fecha: { type: Date, default: Date.now },
   },
   { collection: "audits" }

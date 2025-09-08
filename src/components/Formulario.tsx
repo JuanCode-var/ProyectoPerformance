@@ -37,7 +37,7 @@ const testInfos: Record<'pagespeed' | 'security', TestInfo> = {
   },
   security: {
     title: 'Seguridad',
-    description: 'La API de seguridad detecta vulnerabilidades y analiza cabeceras seguras.',
+    description: 'Analiza cabeceras HTTP y cookies para detectar configuraciones inseguras; no realiza escaneos intrusivos de vulnerabilidades.',
     icon: '🛡️',
   },
 };
@@ -86,8 +86,6 @@ export default function Formulario() {
   };
 
   const handleTestChange = (k: keyof Tests, v: boolean) => {
-    // 🚫 Bloqueamos "security" (no disponible)
-    if (k === 'security') return;
     setTests(prev => ({ ...prev, [k]: v }));
     if (errors.type) setErrors(prev => ({ ...prev, type: '' }));
   };
@@ -182,8 +180,19 @@ export default function Formulario() {
         throw new Error((apiPayload && (apiPayload.error as string)) || `Error ${response.status}`);
       }
 
+      if (apiPayload._id?.startsWith("temp_")) {
+        throw new Error("El diagnóstico no pudo ser persistido. Por favor, inténtalo nuevamente más tarde.");
+      }
+
       console.log('[DEBUG][FRONTEND] Navegando a /diagnostico/' + apiPayload._id);
-      navigate(`/diagnostico/${apiPayload._id}`);
+      // Determinar tipo de diagnóstico para mostrar
+      const types = parsed.data.type;
+      const initType = types.includes('pagespeed') && types.includes('security')
+        ? 'both'
+        : types.includes('security')
+        ? 'security'
+        : 'performance';
+      navigate(`/diagnostico/${apiPayload._id}?type=${initType}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido';
       setErrors({ submit: msg });
@@ -281,14 +290,14 @@ export default function Formulario() {
                     const k = key as keyof typeof testInfos; // 'pagespeed' | 'security'
                     const checked = !!tests[k as keyof Tests];
 
-                    const isSecurity = k === 'security';
-                    const disabled = isSecurity; // ← deshabilitamos Seguridad
+                    // Habilitar opción de seguridad
+                    const disabled = false;
 
                     return (
                       <motion.div
                         key={k}
                         className={`checkbox-item ${checked ? 'checked' : ''} ${
-                          disabled ? 'opacity-60 grayscale cursor-not-allowed' : ''
+                          ''
                         }`}
                         variants={itemVariants}
                         whileHover={disabled ? {} : { scale: 1.05, boxShadow: '0 10px 25px rgba(29, 78, 216, 0.15)' }}
@@ -300,50 +309,32 @@ export default function Formulario() {
                       >
                         <label className="checkbox-label">
                           <Checkbox
-                            checked={disabled ? false : checked}
-                            disabled={disabled}
-                            onCheckedChange={(v) => {
-                              if (disabled) return; // bloquea cambios
-                              handleTestChange(k as keyof Tests, Boolean(v));
-                            }}
+                            checked={checked}
+                            onCheckedChange={(v) => handleTestChange(k as keyof Tests, Boolean(v))}
                             aria-label={`Seleccionar ${info.title}`}
                           />
                           <div className="checkbox-content">
                             <div className="checkbox-icon">{info.icon}</div>
                             <div className="checkbox-title">
                               {info.title}
-                              {disabled && (
-                                <span className="ml-3 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
-                                  Versión disponible más adelante
-                                </span>
-                              )}
                             </div>
                           </div>
-                          <motion.div
-                            className="checkbox-check"
-                            animate={{
-                              scale: checked && !disabled ? 1.1 : 1,
-                              backgroundColor: checked && !disabled ? '#1d4ed8' : 'rgba(0,0,0,0)',
-                            }}
-                          >
-                            {checked && !disabled && <CheckCircle size={16} color="white" />}
-                          </motion.div>
                         </label>
 
                         <motion.button
                           type="button"
-                          className={`info-toggle ${disabled ? 'cursor-not-allowed' : ''}`}
-                          onClick={() => (disabled ? null : toggleInfo(k as InfoKeys))}
+                          className="info-toggle"
+                          onClick={() => toggleInfo(k as InfoKeys)}
                           whileHover={disabled ? {} : { scale: 1.1 }}
                           transition={{ type: 'spring', stiffness: 300 }}
-                          disabled={disabled}
+                          disabled={false}
                         >
                           <Info size={16} />
                           <span>{infoOpen[k as InfoKeys] ? 'Ocultar' : '¿Qué es?'}</span>
                         </motion.button>
 
                         <AnimatePresence>
-                          {infoOpen[k as InfoKeys] && !disabled && (
+                          {infoOpen[k as InfoKeys] && (
                             <motion.div
                               className="api-info"
                               initial="hidden"

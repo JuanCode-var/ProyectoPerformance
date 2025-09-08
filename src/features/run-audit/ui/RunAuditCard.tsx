@@ -3,16 +3,49 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../shared/ui/car
 import { Input } from '../../../shared/ui/input'
 import { Button } from '../../../shared/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../shared/ui/select'
+import { Checkbox } from '../../../shared/ui/checkbox'
 import { useRunAudit } from '../model/useRunAudit'
+import { CheckedState } from '@radix-ui/react-checkbox'
 
 export function RunAuditCard() {
   const [url, setUrl] = useState('')
   const [strategy, setStrategy] = useState<'mobile' | 'desktop'>('mobile')
+  const [runPerformance, setRunPerformance] = useState<boolean>(true)
+  const [runSecurity, setRunSecurity] = useState<boolean>(false)
   const { loading, error, result, submit } = useRunAudit()
+
+  const handleCheckboxChange = (setter: React.Dispatch<React.SetStateAction<boolean>>) => (checked: CheckedState) => {
+    setter(checked === true) // Convertir el estado "CheckedState" a booleano
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
-    await submit({ url, strategy })
+
+    const results: any[] = []
+
+    if (runPerformance) {
+      try {
+        const performancePayload: { url: string; strategy: 'mobile' | 'desktop'; type: 'performance' } = { url, strategy, type: 'performance' }
+        console.log('Enviando payload de rendimiento:', performancePayload)
+        const performanceResult = await submit(performancePayload)
+        results.push({ type: 'performance', data: performanceResult })
+      } catch (error) {
+        console.error('Error en la auditoría de rendimiento:', error)
+      }
+    }
+
+    if (runSecurity) {
+      try {
+        const securityPayload: { url: string; strategy: 'mobile' | 'desktop'; type: 'security' } = { url, strategy, type: 'security' }
+        console.log('Enviando payload de seguridad:', securityPayload)
+        const securityResult = await submit(securityPayload)
+        results.push({ type: 'security', data: securityResult })
+      } catch (error) {
+        console.error('Error en la auditoría de seguridad:', error)
+      }
+    }
+
+    console.log('Resultados:', results)
   }
 
   return (
@@ -35,6 +68,13 @@ export function RunAuditCard() {
                 <SelectItem value="desktop">Desktop</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="grid gap-2">
+            <label className="text-sm">Opciones de auditoría</label>
+            <div className="flex items-center gap-4">
+              <Checkbox checked={runPerformance} onCheckedChange={handleCheckboxChange(setRunPerformance)} /> Rendimiento
+              <Checkbox checked={runSecurity} onCheckedChange={handleCheckboxChange(setRunSecurity)} /> Seguridad
+            </div>
           </div>
           <Button type="submit" disabled={loading} className="md:ml-2">
             {loading ? 'Ejecutando…' : 'Auditar'}

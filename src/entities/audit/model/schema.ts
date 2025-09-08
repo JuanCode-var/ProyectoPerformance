@@ -5,6 +5,7 @@ export const StrategySchema = z.enum(['mobile', 'desktop'])
 export const RunAuditPayloadSchema = z.object({
   url: z.string().url(),
   strategy: StrategySchema,
+  type: z.enum(['performance', 'security']), // Agregado para soportar tipos de auditoría
 })
 
 export const AuditResultMetricSchema = z.object({

@@ -4,6 +4,8 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import CircularGauge from "./CircularGauge";
 import ActionPlanPanel from "./ActionPlanPanel";
 import EmailSendBar from "./EmailPdfBar";
+// import SecurityScoreWidget from "./SecurityScoreWidget"; // removed unused import
+import SecurityDiagnosticoPanel from "./SecurityDiagnosticoPanel";
 
 // shadcn/ui padres
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
@@ -743,6 +745,119 @@ function ScreenshotPreview({ src }: { src: string | null }) {
   );
 }
 
+// Agregar gráficos circulares para mostrar el impacto de los encabezados
+function SecurityImpactDial({ scoreImpact }: { scoreImpact: number }) {
+  const size = 120;
+  const strokeWidth = 12;
+  const safeScore = Math.max(0, Math.min(100, scoreImpact));
+  const color = safeScore >= 80 ? "#22c55e" : safeScore >= 50 ? "#f59e0b" : "#ef4444";
+
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100">
+      <circle
+        cx="50"
+        cy="50"
+        r="45"
+        stroke="#e5e7eb"
+        strokeWidth={strokeWidth}
+        fill="none"
+      />
+      <circle
+        cx="50"
+        cy="50"
+        r="45"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        fill="none"
+        strokeDasharray={`${safeScore} ${100 - safeScore}`}
+        strokeDashoffset="25"
+        transform="rotate(-90 50 50)"
+      />
+      <text
+        x="50"
+        y="50"
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="18"
+        fill="#111827"
+      >
+        {safeScore}%
+      </text>
+    </svg>
+  );
+}
+
+// Actualizar el panel de encabezados para incluir gráficos y recomendaciones
+function HeadersPanel({ headers }: { headers: Record<string, string> }) {
+  return (
+    <Card className="mt-4 w-full">
+      <CardHeader>
+        <CardTitle>Encabezados</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-4">
+          {Object.entries(headers).map(([key, value]) => {
+            const info = HEADER_INFO[key.toLowerCase()] || {};
+            return (
+              <div key={key} className="flex flex-col p-2 border rounded-md">
+                <span className="font-bold text-gray-700">{info.title || key}</span>
+                <span className="text-gray-500">{info.description || "Sin descripción."}</span>
+                {info.scoreImpact != null && (
+                  <SecurityImpactDial scoreImpact={info.scoreImpact} />
+                )}
+                {info.recommendation && (
+                  <span className="text-blue-600">{info.recommendation}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Tipos y metadatos para encabezados de seguridad usados en la UI
+type HeaderMeta = {
+  title?: string;
+  description?: string;
+  recommendation?: string;
+  learnMore?: string;
+  why?: string;
+  scoreImpact?: number;
+};
+
+const HEADER_INFO: Record<string, HeaderMeta> = {
+  "content-security-policy": {
+    title: "Content-Security-Policy (CSP)",
+    description: "Controla qué recursos puede cargar la página para mitigar XSS.",
+    recommendation: "Defina una política CSP restrictiva (evite 'unsafe-inline').",
+    learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP",
+    why: "Sin CSP, aplicaciones son más vulnerables a inyección de scripts.",
+  },
+  "strict-transport-security": {
+    title: "Strict-Transport-Security (HSTS)",
+    description: "Forza el uso de HTTPS para evitar ataques de downgrade.",
+    recommendation: "Habilite HSTS con un max-age elevado y includeSubDomains si aplica.",
+    learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security",
+    why: "Sin HSTS, usuarios pueden ser forzados a usar HTTP en ciertos ataques.",
+  },
+  "x-frame-options": {
+    title: "X-Frame-Options",
+    description: "Evita que la página sea embebida en iframes (clickjacking).",
+    recommendation: "Use DENY o SAMEORIGIN según el caso.",
+    learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options",
+    why: "Protege contra ataques de clickjacking.",
+  },
+  date: {
+    title: "Date",
+    description: "Encabezado de fecha del servidor.",
+    recommendation: "Asegúrese que el reloj del servidor esté sincronizado (NTP).",
+    learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Date",
+    why: "Diferencias de tiempo pueden afectar caches y firmas.",
+  },
+};
+
 // =================== Componente principal ===================
 export default function DiagnosticoView() {
   const params = useParams();
@@ -757,10 +872,23 @@ export default function DiagnosticoView() {
     (qs.get("strategy") === "desktop" ? "desktop" : "mobile") as "mobile" | "desktop";
   const [strategy, setStrategy] = useState<"mobile" | "desktop">(initialStrategy);
 
+  // Vista activa: solo 'performance' o 'security' (inicializada desde ?type=)
+  const typeParam = (qs.get("type") || "").toLowerCase();
+  const initialDiag = (typeParam === "security" ? "security" : "performance") as
+    | "performance"
+    | "security";
+  const [activeDiag, setActiveDiag] = useState<"performance" | "security">(initialDiag);
+
+  // NEW: mostrar botones de tabs (Performance/Security) solo cuando se pidieron ambas pruebas
+  const [bothMode, setBothMode] = useState<boolean>(typeParam === "both");
+
   const [auditData, setAuditData] = useState<AuditEnvelope | null>(null);
   const [err, setErr] = useState<string>("");
   const [activeApi, setActiveApi] = useState<string>("");
   const [processed, setProcessed] = useState<ProcessedData | null>(null);
+  
+  // Indicador de carga para métricas de performance (cuando cambia la estrategia)
+  const [perfLoading, setPerfLoading] = useState(false);
 
   // toggles de desgloses
   const [showPerfDetails, setShowPerfDetails] = useState(true);
@@ -770,7 +898,8 @@ export default function DiagnosticoView() {
 
   const contenedorReporteRef = useRef<HTMLDivElement | null>(null);
 
-  // Sincroniza la URL con la estrategia seleccionada (para poder compartir el link)
+  // =================== Sincronización y carga inicial ===================
+  // Sincroniza estrategia en URL (histórico de strategy)
   useEffect(() => {
     const p = new URLSearchParams(location.search);
     p.set("strategy", strategy);
@@ -778,23 +907,19 @@ export default function DiagnosticoView() {
     window.history.replaceState(null, "", newUrl);
   }, [strategy, location.pathname, location.search]);
 
+  // NUEVO: sincroniza type en la URL al cambiar de vista
   useEffect(() => {
-    setAuditData(null);
-    setErr("");
-    setActiveApi("");
-    setProcessed(null);
-    setShowAccDetails(false);
-    setShowBPDetails(false);
-    setShowSeoDetails(false);
+    const p = new URLSearchParams(location.search);
+    p.set("type", activeDiag);
+    const newUrl = `${location.pathname}?${p.toString()}`;
+    window.history.replaceState(null, "", newUrl);
+  }, [activeDiag, location.pathname, location.search]);
 
-    if (!id) return;
-    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(String(id).trim());
-    if (!isValidObjectId) {
-      setErr("ID inválido");
-      return;
-    }
-
+  // Effect to fetch performance data when in performance view
+  useEffect(() => {
+    if (activeDiag !== 'performance') return;
     let mounted = true;
+    setPerfLoading(true);
     (async () => {
       try {
         const ts = Date.now();
@@ -815,6 +940,12 @@ export default function DiagnosticoView() {
         if (mounted) {
           setActiveApi(apis[0] || "");
           setAuditData(payload);
+          // Activar modo "ambos" si detectamos datos de seguridad y de performance
+          setBothMode((prev) => prev || (!!(payload as any)?.audit?.security && apis.length > 0));
+          // Si no hay datos de rendimiento pero sí de seguridad, cambia automáticamente a la pestaña de Seguridad
+          if (!apis.length && (payload as any)?.audit?.security) {
+            setActiveDiag('security');
+          }
         }
 
         try {
@@ -851,13 +982,56 @@ export default function DiagnosticoView() {
         }
       } catch (e: any) {
         if (mounted) setErr(e?.message || String(e));
+      } finally {
+        if (mounted) setPerfLoading(false);
       }
     })();
 
-    return () => {
-      mounted = false;
-    };
-  }, [id, strategy]);
+    return () => { mounted = false; };
+  }, [id, strategy, activeDiag]);
+
+  // NEW: When landing directly on Security view, fetch the envelope to get URL and persisted security data
+  useEffect(() => {
+    if (activeDiag !== 'security') return;
+    if (auditData?.url) return; // already have it
+    let mounted = true;
+    (async () => {
+      try {
+        const ts = Date.now();
+        const res = await safeParseJSON(
+          await fetch(`/api/audit/${id}?strategy=${strategy}&_=${ts}`, {
+            headers: { "Cache-Control": "no-cache" },
+          })
+        );
+        if (!(res as any).error && mounted) {
+          setAuditData(res);
+          // Si detectamos que existen datos de performance y seguridad, habilitar los tabs
+          const available = Object.keys((res as any)?.audit || {}).filter((k: string) => {
+            const m = ((res as any)?.audit?.[k] || {}).metrics || (res as any)?.audit?.[k] || {};
+            return Object.keys(m).length > 0;
+          });
+          const ORDER = ["pagespeed", "unlighthouse"] as const;
+          const hasPerf = ORDER.some((k) => available.includes(k));
+          setBothMode((prev) => prev || (hasPerf && !!(res as any)?.audit?.security));
+        }
+      } catch (e: any) {
+        if (mounted) setErr(e?.message || String(e));
+      }
+    })();
+    return () => { mounted = false; };
+  }, [id, strategy, activeDiag]);
+
+  // Limpia datos al cambiar vista activa para evitar información cruzada
+  useEffect(() => {
+    // Mantenemos auditData para conservar la URL al cambiar a Seguridad
+    // Esto permite que el SecurityDiagnosticoPanel auto-ejecute con la URL.
+    if (activeDiag === 'performance') {
+      // No-op
+    }
+    if (activeDiag === 'security') {
+      // No limpiar auditData ni err
+    }
+  }, [activeDiag]);
 
   if (!id)
     return (
@@ -879,7 +1053,7 @@ export default function DiagnosticoView() {
       </Card>
     );
 
-  if (!auditData)
+  if (!auditData && activeDiag === 'performance')
     return (
       <Card>
         <CardContent className="p-6">
@@ -890,26 +1064,34 @@ export default function DiagnosticoView() {
     );
 
   // ======== Datos ========
-  const { url, fecha, audit = {} } = auditData as any;
+  const { url, fecha, audit = {} } = ((auditData as any) || {}) as any;
   const apiData = (audit as Record<string, any>)[activeApi] || {};
   const metrics = apiData.metrics || apiData;
 
-  if (!activeApi || Object.keys(metrics).length === 0) {
+  // Mostrar mensaje de "sin métricas" solo para la vista de Performance
+  if (activeDiag === 'performance' && (!activeApi || Object.keys(metrics).length === 0)) {
     return (
       <Card>
         <CardContent className="p-6">
           <Link to="/" className="back-link">← Nuevo diagnóstico</Link>
-          <Link
-            to={`/historico?url=${encodeURIComponent(url)}`}
-            className="back-link"
-            style={{ marginLeft: "1rem" }}
-          >
-            Ver histórico de esta URL
-          </Link>
+          {url && (
+            <Link
+              to={`/historico?url=${encodeURIComponent(url as string)}`}
+              className="back-link"
+              style={{ marginLeft: "1rem" }}
+            >
+              Ver histórico de esta URL
+            </Link>
+          )}
           <h2 className="diagnostico-title">
             Diagnóstico de <span className="url">{url}</span>
           </h2>
           <p className="no-metrics">No se encontraron métricas para la API seleccionada.</p>
+          {(audit as any)?.security && (
+            <div style={{ marginTop: 12 }}>
+              <Button variant="outline" onClick={() => setActiveDiag('security')}>Ver diagnóstico de Seguridad</Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     );
@@ -1012,7 +1194,7 @@ export default function DiagnosticoView() {
       : ({ id: "ttfb" as MetricId, label: "TTFB", value: ttfbSec } as const),
   ];
 
-  // Desgloses por categoría (items)
+  // Desglose por categoría (items)
   const accBreak = getCategoryBreakdown("accessibility", apiData);
   const bpBreak  = getCategoryBreakdown("best-practices", apiData);
   const seoBreak = getCategoryBreakdown("seo", apiData);
@@ -1034,28 +1216,24 @@ export default function DiagnosticoView() {
       }
 
       return {
-        id: e.id || `finding-${kind}-${i}`,
-        title: i18nTitle(e.title || e.id || "Hallazgo"),
-        recommendation: i18nRich(e.description || e.displayValue || ""),
+        id: e.id || `finding-${i}`,
+        title: e.title || e.id,
+        recommendation: e.recommendation || e.message || e.description || "",
+        severity: e.severity || "info",
         savingsLabel,
+        impactScore: 100,
         type: kind,
-        severity: kind === "error" ? "critical" : "info",
-        impactScore: kind === "error" ? 2000 : typeof e.impactScore === "number" ? e.impactScore : 100,
       };
     });
 
-  const planItems = [
-    ...opportunities.map((o) => ({
-      type: "improvement" as const,
-      severity: "info" as const,
-      impactScore: 100,
-      ...o,
-      title: i18nTitle(o.title || o.id),
-      recommendation: i18nRich(o.recommendation || ""),
-    })),
+  // Corregir referencia circular de planItems
+  const derivedPlanItems = [
+    ...mapFindingToOpp(opportunities, "improvement"),
     ...mapFindingToOpp(detectedErrors, "error"),
     ...mapFindingToOpp(improvements, "improvement"),
   ];
+
+  const planItems = derivedPlanItems;
 
   const renderCard = (item: {
     id: MetricId;
@@ -1173,82 +1351,169 @@ export default function DiagnosticoView() {
             </Link>
           </div>
 
+          {/* UI Buttons for diagnostics (centrado arriba del título) */}
+          {bothMode && (
+          <div className="diagnostico-btn-group justify-center text-center">
+            <Button 
+              style={{
+                background: activeDiag === 'performance' ? 'linear-gradient(to right, #3b82f6, #2563eb)' : '#ffffff',
+                color: activeDiag === 'performance' ? '#ffffff' : '#2563eb',
+                border: 'none',
+                transition: 'all 0.3s ease',
+                padding: '10px 20px',
+                borderRadius: '6px',
+                fontWeight: 500
+              }}
+              onClick={() => {
+                setActiveDiag('performance');
+              }} 
+              variant="outline"
+            >
+              Ver diagnóstico Performance
+            </Button>
+            <Button 
+              style={{
+                background: activeDiag === 'security' ? 'linear-gradient(to right, #3b82f6, #2563eb)' : '#ffffff',
+                color: activeDiag === 'security' ? '#ffffff' : '#2563eb',
+                border: 'none',
+                transition: 'all 0.3s ease',
+                padding: '10px 20px',
+                borderRadius: '6px',
+                fontWeight: 500
+              }}
+              onClick={() => {
+                setActiveDiag('security');
+              }} 
+              variant="outline"
+            >
+              Ver diagnóstico de Seguridad
+            </Button>
+          </div>
+          )}
+
           <h2 className="diagnostico-title">
             Diagnóstico de <span className="url">{url}</span>
           </h2>
-          <div className="date">{new Date(fecha as string).toLocaleString()}</div>
 
-      {/* Tabs centrados (shadcn) con estilo activo en azul */}
-        <div className="tabs" style={{ marginTop: 8 }}>
-          <button
-            onClick={() => setStrategy("mobile")}
-            className={`tab-button${strategy === "mobile" ? " active" : ""}`}
-            title="Ejecuta/consulta métricas para móviles"
-          >
-            📱 Móvil
-          </button>
-          <button
-            onClick={() => setStrategy("desktop")}
-            className={`tab-button${strategy === "desktop" ? " active" : ""}`}
-            title="Ejecuta/consulta métricas para ordenadores"
-            style={{ marginLeft: 8 }}
-          >
-            🖥️ Ordenador
-          </button>
+          {/* Show strategy tabs only for performance */}
+          {activeDiag === 'performance' && (
+            <div className="w-full flex justify-center mb-2">
+              <Tabs value={strategy} onValueChange={(v)=>{ setPerfLoading(true); setStrategy((v as 'mobile'|'desktop')); }}>
+                <TabsList className="bg-[#e9eefb] rounded-xl p-1">
+                  <TabsTrigger
+                    value="mobile"
+                    className="w-40 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                    disabled={perfLoading}
+                  >
+                    <span role="img" aria-label="mobile" className="mr-2">📱</span>
+                    Móvil
+                    {perfLoading && strategy === 'mobile' && (
+                      <span className="ml-2 text-xs opacity-80">Cargando…</span>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="desktop"
+                    className="w-40 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                    disabled={perfLoading}
+                  >
+                    <span role="img" aria-label="desktop" className="mr-2">🖥</span>
+                    Ordenador
+                    {perfLoading && strategy === 'desktop' && (
+                      <span className="ml-2 text-xs opacity-80">Cargando…</span>
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          )}
+
+          {/* Indicador de carga bajo las tabs cuando se están obteniendo métricas */}
+          {activeDiag === 'performance' && perfLoading && (
+            <div className="w-full flex justify-center my-3">
+              <div className="flex items-center gap-3 text-slate-600">
+                <div className="spinner" />
+                <span>Cargando métricas {strategy === 'desktop' ? 'de Ordenador' : 'Móvil'}…</span>
+              </div>
+            </div>
+          )}
+
+          {/* Security content */}
+          {activeDiag === 'security' && url && (
+            <SecurityDiagnosticoPanel
+              url={url as string}
+              initialResult={(audit as any)?.security}
+              autoRunOnMount={!((audit as any)?.security)}
+            />
+          )}
+
+          {/* Main performance content */}
+          {activeDiag === 'performance' && (
+            <div className="relative">
+              {perfLoading && (
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+                  <div className="flex items-center gap-3 text-slate-700">
+                    <div className="spinner" />
+                    <span>Actualizando métricas…</span>
+                  </div>
+                </div>
+              )}
+              <div className={perfLoading ? 'opacity-60 transition-opacity' : ''}>
+                {/* Grid principal: performance + categorías */}
+                <div className="diagnostico-grid w-full">
+                  {renderCard(perfCard)}
+                  {categoryCards.map(renderCard)}
+                </div>
+
+                {/* Desglose Performance — tipo SEO */}
+                {showPerfDetails && (
+                  <>
+                    <PerfBreakdownGrid items={perfBreakItems as any} />
+                    <ScreenshotPreview src={getFinalScreenshot(apiData)} />
+                  </>
+                )}
+
+                {/* Desglose Accesibilidad / Best Practices / SEO */}
+                {showAccDetails && (
+                  <CategoryBreakdown
+                    label="Accesibilidad"
+                    items={accBreak.length ? accBreak : translateList((apiData as any)?.accessibility?.items)}
+                  />
+                )}
+
+                {showBPDetails && (
+                  <CategoryBreakdown
+                    label="Prácticas recomendadas"
+                    items={bpBreak.length ? bpBreak : translateList((apiData as any)?.["best-practices"]?.items)}
+                  />
+                )}
+
+                {showSeoDetails && (
+                  <CategoryBreakdown
+                    label="SEO"
+                    items={seoBreak.length ? seoBreak : translateList((apiData as any)?.seo?.items)}
+                  />
+                )}
+
+                <ActionPlanPanel
+                  opportunities={planItems}
+                  performance={performance}
+                />
+
+                <EmailSendBar
+                  captureRef={contenedorReporteRef as any}
+                  url={url as string}
+                  email={(auditData as any)?.email || ""}
+                  hideEmailInput={true}
+                  subject={`Diagnóstico de ${url} (${strategy === "mobile" ? "Móvil" : "Ordenador"})`}
+                  endpoint="/api/audit/send-diagnostic"
+                  includePdf={true}
+                  captureWidthPx={1200}
+                />
+              </div>
+            </div>
+          )}
+          {/* ...existing code... */}
         </div>
-
-          {/* Grid principal: performance + categorías */}
-          <div className="diagnostico-grid w-full">
-            {renderCard(perfCard)}
-            {categoryCards.map(renderCard)}
-          </div>
-
-          {/* Desglose Performance — tipo SEO */}
-          {showPerfDetails && (
-            <>
-              <PerfBreakdownGrid items={perfBreakItems as any} />
-              <ScreenshotPreview src={getFinalScreenshot(apiData)} />
-            </>
-          )}
-
-          {/* Desglose Accesibilidad / Best Practices / SEO */}
-          {showAccDetails && (
-            <CategoryBreakdown
-              label="Accesibilidad"
-              items={accBreak.length ? accBreak : translateList((apiData as any)?.accessibility?.items)}
-            />
-          )}
-
-          {showBPDetails && (
-            <CategoryBreakdown
-              label="Prácticas recomendadas"
-              items={bpBreak.length ? bpBreak : translateList((apiData as any)?.["best-practices"]?.items)}
-            />
-          )}
-
-          {showSeoDetails && (
-            <CategoryBreakdown
-              label="SEO"
-              items={seoBreak.length ? seoBreak : translateList((apiData as any)?.seo?.items)}
-            />
-          )}
-
-          <ActionPlanPanel
-            opportunities={planItems as any}
-            performance={performance ?? undefined}
-          />
-        </div>
-
-        <EmailSendBar
-          captureRef={contenedorReporteRef as any}
-          url={url as string}
-          email={(auditData as any)?.email || ""}
-          hideEmailInput={true}
-          subject={`Diagnóstico de ${url} (${strategy === "mobile" ? "Móvil" : "Ordenador"})`}
-          endpoint="/api/audit/send-diagnostic"
-          includePdf={true}
-          captureWidthPx={1200} // Forzar ancho igual al CSS PDF
-        />
       </CardContent>
     </Card>
   );

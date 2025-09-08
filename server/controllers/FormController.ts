@@ -6,6 +6,7 @@ import Mail from "nodemailer/lib/mailer";
 import type { SentMessageInfo } from "nodemailer/lib/smtp-transport";
 
 import Audit from "../database/esquemaBD.js";
+import Security from "../database/securitySchema";
 import { readMetrics, extractOpportunities } from "../utils/lh.js";
 
 // =====================
@@ -20,14 +21,60 @@ function withAudit(base?: string) {
 const ALL_CATEGORIES = ["performance", "accessibility", "best-practices", "seo"] as const;
 
 const MS_PAGESPEED_URL = process.env.MS_PAGESPEED_URL || "http://localhost:3001";
-const MS_UNLIGHTHOUSE_URL = process.env.MS_UNLIGHTHOUSE_URL || "http://localhost:3002";
+const MS_SECURITY_URL = process.env.MS_SECURITY_URL || "http://localhost:3002";
+
+// New: configurable timeouts and execution strategy
+const PAGESPEED_TIMEOUT_MS = Number.parseInt(process.env.PAGESPEED_TIMEOUT_MS || "300000", 10);
+const SECURITY_TIMEOUT_MS = Number.parseInt(process.env.SECURITY_TIMEOUT_MS || "120000", 10);
+const RUN_MICROS_IN_SERIES = /^(1|true|yes)$/i.test(process.env.RUN_MICROS_IN_SERIES || "");
+const SECURITY_RETRIES = Math.max(0, Number.parseInt(process.env.SECURITY_RETRIES || "2", 10));
+const SECURITY_RETRY_BACKOFF_MS = Math.max(0, Number.parseInt(process.env.SECURITY_RETRY_BACKOFF_MS || "1000", 10));
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableSecurityError(err: any): boolean {
+  const status: number | undefined = err?.response?.status;
+  const code = (err?.code || err?.errno || "").toString();
+  // Retry network/timeout/transient server errors
+  if (code === "ECONNABORTED" || code === "ETIMEDOUT" || code === "ECONNRESET") return true;
+  if (status && [408, 429, 500, 502, 503, 504].includes(status)) return true;
+  // No response at all (network error)
+  if (!err?.response) return true;
+  return false;
+}
+
+async function callWithRetry<T>(fn: () => Promise<T>, opts?: { retries?: number; backoffMs?: number; label?: string }) {
+  const retries = Math.max(0, opts?.retries ?? SECURITY_RETRIES);
+  const base = Math.max(0, opts?.backoffMs ?? SECURITY_RETRY_BACKOFF_MS);
+  const label = opts?.label || "call";
+  let lastErr: any = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 0) {
+        const delay = base * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 200);
+        // eslint-disable-next-line no-console
+        console.warn(`[Retry] ${label} intento ${attempt}/${retries} tras ${delay}ms`);
+        await sleep(delay);
+      }
+      return await fn();
+    } catch (err: any) {
+      lastErr = err;
+      if (!isRetryableSecurityError(err) || attempt === retries) {
+        throw err;
+      }
+    }
+  }
+  throw lastErr;
+}
 
 // Llama al microservicio pagespeed y devuelve su payload tal cual
 async function runPagespeedViaMicro(url: string, strategy: "mobile" | "desktop") {
   const endpoint = withAudit(MS_PAGESPEED_URL);
   // mantenemos compat: pedimos SIEMPRE todas las categorías
   const payload = { url, strategy, categories: [...ALL_CATEGORIES] };
-  const { data } = await axios.post(endpoint, payload, { timeout: 300000 });
+  const { data } = await axios.post(endpoint, payload, { timeout: PAGESPEED_TIMEOUT_MS });
   return data; // ← lo que tu micro ya devuelve (incluye raw, metrics, categoryScores, etc.)
 }
 
@@ -104,12 +151,13 @@ export async function guardarDatos(req: Request, res: Response) {
 
     if (!url || !/^https?:\/\//i.test(url)) return fail(400, "URL inválida");
 
-    const MICROSERVICES: Record<"pagespeed" | "unlighthouse", { endpoint: string }> = {
+    const MICROSERVICES: Record<"pagespeed" | "security", { endpoint: string }> = {
       pagespeed: { endpoint: withAudit(MS_PAGESPEED_URL) },
-      unlighthouse: { endpoint: withAudit(MS_UNLIGHTHOUSE_URL) },
+      security: { endpoint: MS_SECURITY_URL },
     };
     // Log para depuración: mostrar el endpoint real que usará el backend
     console.log("[DEBUG] Endpoint pagespeed:", MICROSERVICES.pagespeed.endpoint);
+    console.log("[DEBUG] Endpoint security:", MICROSERVICES.security.endpoint);
 
     const tipos = Array.isArray(type)
       ? (type as string[])
@@ -141,15 +189,39 @@ export async function guardarDatos(req: Request, res: Response) {
     }
 
     // Llamadas a microservicios
-    const serviceCall = async (t: "pagespeed" | "unlighthouse") => {
-      const endpoint = MICROSERVICES[t].endpoint;
-      const payload =
-        t === "unlighthouse"
-          ? { url }
-          : { url, strategy: strategy as string, categories: [...ALL_CATEGORIES] };
+    const serviceCall = async (t: "pagespeed" | "security") => {
+      if (t === "pagespeed") {
+        try {
+          const r = await axios.post(
+            MICROSERVICES.pagespeed.endpoint,
+            { url, strategy: strategy as string, categories: [...ALL_CATEGORIES] },
+            { timeout: PAGESPEED_TIMEOUT_MS }
+          );
+          return { [t]: r.data } as Record<string, unknown>;
+        } catch (err: any) {
+          const msg =
+            err?.response?.data?.detail ||
+            err?.response?.data?.error ||
+            err?.code ||
+            err?.message ||
+            "error";
+          const status = err?.response?.status ?? null;
+          return { [t]: { error: msg, status } } as Record<string, unknown>;
+        }
+      }
+      // security
       try {
-        const r = await axios.post(endpoint, payload, { timeout: 300000 });
-        return { [t]: r.data } as Record<string, unknown>;
+        const base = String(MICROSERVICES.security.endpoint || "").replace(/\/+$/, "");
+        const endpoint = /\/api\//.test(base) ? base : `${base}/api/analyze`;
+
+        const r = await callWithRetry(
+          async () => axios.post(endpoint, { url }, { timeout: SECURITY_TIMEOUT_MS }),
+          { label: "security analyze", retries: SECURITY_RETRIES, backoffMs: SECURITY_RETRY_BACKOFF_MS }
+        );
+
+        // Devolver el payload completo del micro de seguridad para no perder campos (headers, cookies, summary, etc.)
+        const securityData = (r as any).data;
+        return { [t]: securityData };
       } catch (err: any) {
         const msg =
           err?.response?.data?.detail ||
@@ -158,19 +230,33 @@ export async function guardarDatos(req: Request, res: Response) {
           err?.message ||
           "error";
         const status = err?.response?.status ?? null;
-        return { [t]: { error: msg, status } } as Record<string, unknown>;
+        console.error("❌ Error en llamada al microservicio de seguridad:", err);
+        console.error("❌ Detalles del error:", err?.response?.data || err?.message || err);
+        return { [t]: { error: msg, status } };
       }
     };
 
-    const partials = await Promise.all(
-      (tipos as Array<"pagespeed" | "unlighthouse">).map(serviceCall)
-    );
+    // Ejecutar en paralelo o en serie según configuración
+    const tiposNormalized = (tipos as Array<"pagespeed" | "security">).filter((t): t is "pagespeed" | "security" => t === "pagespeed" || t === "security");
+    const shouldRunInSeries = RUN_MICROS_IN_SERIES && tiposNormalized.length > 1 && tiposNormalized.includes("security");
+
+    let partials: Record<string, any>[] = [];
+    if (shouldRunInSeries) {
+      console.log("[INFO] Ejecutando microservicios en serie por configuración RUN_MICROS_IN_SERIES=true");
+      for (const t of tiposNormalized) {
+        const part = await serviceCall(t);
+        partials.push(part);
+      }
+    } else {
+      partials = await Promise.all(tiposNormalized.map(serviceCall));
+    }
+
     const audit = partials.reduce<Record<string, any>>((acc, cur) => ({ ...acc, ...cur }), {});
 
     const allFailed = (tipos as string[]).every((t) => audit[t] && audit[t].error);
     if (allFailed) return fail(502, "Ningún microservicio respondió correctamente", { details: audit });
 
-    const onlyPagespeedOk = tipos.length === 1 && audit.pagespeed && !audit.pagespeed.error;
+    const onlyPagespeedOk = tiposNormalized.length === 1 && audit.pagespeed && !audit.pagespeed.error;
 
     // Resolver performance (top-level)
     const perfResolved = onlyPagespeedOk ? resolvePerformanceFromPagespeed(audit.pagespeed) : undefined;
@@ -187,34 +273,57 @@ export async function guardarDatos(req: Request, res: Response) {
         audit,
         performance: onlyPagespeedOk ? perfResolved : undefined,
         metrics: onlyPagespeedOk ? audit.pagespeed?.metrics : undefined,
+        security: tipos.includes("security") ? audit.security : undefined,
         fecha: new Date(),
       });
+
+      // Si hay seguridad, guardarla en su colección dedicada (sin bloquear el flujo)
+      if (tipos.includes("security") && audit.security && !audit.security.error) {
+        try {
+          await Security.create({
+            url,
+            score: audit.security.score ?? null,
+            grade: audit.security.grade ?? null,
+            findings: audit.security.findings ?? [],
+            checks: audit.security.checks ?? [],
+            meta: audit.security.meta ?? {},
+            fecha: new Date(),
+          });
+          console.log("✅ Datos de seguridad guardados en la colección 'security'");
+        } catch (e: any) {
+          console.error("❌ Error guardando datos de seguridad:", e?.message);
+        }
+      }
+
       const docObj: any = doc.toObject();
       docObj.ok = true;
       docObj.isLocal = docObj?.audit?.pagespeed?.meta?.source === "local";
       return res.status(201).json(docObj);
     } catch (e: any) {
       console.error("❌ Error guardando en DB:", e?.message); // eslint-disable-line no-console
-      // devolvemos resultado sin persistir
-      // Generar un _id temporal (por compatibilidad front) si no existe
-      const tempId = `temp_${Date.now()}_${Math.floor(Math.random()*1e6)}`;
-      return res.status(200).json({
-        ok: true,
-        persisted: false,
-        _id: tempId,
-        url,
-        strategy,
-        name,
-        email,
-        audit,
-        performance: onlyPagespeedOk ? perfResolved : undefined,
-        metrics: onlyPagespeedOk ? audit.pagespeed?.metrics : undefined,
-        fecha: new Date().toISOString(),
-      });
+
+      // Intento no-bloqueante de guardar seguridad en su colección incluso si el doc principal falla
+      if (tipos.includes("security") && audit.security && !audit.security.error) {
+        try {
+          await Security.create({
+            url,
+            score: audit.security.score ?? null,
+            grade: audit.security.grade ?? null,
+            findings: audit.security.findings ?? [],
+            checks: audit.security.checks ?? [],
+            meta: audit.security.meta ?? {},
+            fecha: new Date(),
+          });
+          console.log("✅ Datos de seguridad guardados en la colección 'security' (fallback)");
+        } catch (se: any) {
+          console.error("❌ Error guardando datos de seguridad (fallback):", se?.message);
+        }
+      }
+      return fail(500, "No se pudo guardar el diagnóstico");
     }
   } catch (e: any) {
-    console.error("❌ Error inesperado en /api/audit:", e); // eslint-disable-line no-console
-    return res.status(500).json({ error: "Error al procesar la auditoría", detail: e?.message });
+    console.error("❌ Error inesperado en guardarDatos:", e?.message);
+    return fail(500, e?.message || "Error interno");
   }
 }
 
@@ -222,6 +331,16 @@ export async function guardarDatos(req: Request, res: Response) {
 export async function getAuditById(req: Request, res: Response) {
   try {
     const id = (req.params?.id || "").trim();
+
+    // Manejo de IDs temporales
+    if (id.startsWith("temp_")) {
+      console.warn("⚠️ Se recibió un ID temporal:", id);
+      return res.status(400).json({
+        error: "ID temporal no válido para consulta",
+        detail: "El ID proporcionado es temporal y no está persistido en la base de datos."
+      });
+    }
+
     const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(id);
     if (!isValidObjectId) return res.status(400).json({ error: "ID inválido" });
 
@@ -730,8 +849,16 @@ export async function getDiagnosticsProcessed(req: Request, res: Response) {
 export async function getDiagnosticsProcessedById(req: Request, res: Response) {
   try {
     const id = (req.params?.id || "").trim();
+    if (!id) {
+      console.error("❌ ID no proporcionado:", id);
+      return res.status(400).json({ error: "ID no proporcionado" });
+    }
+
     const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(id);
-    if (!isValidObjectId) return res.status(400).json({ error: "ID inválido" });
+    if (!isValidObjectId) {
+      console.error("❌ ID inválido:", id);
+      return res.status(400).json({ error: "ID inválido" });
+    }
 
     const doc = await Audit.findById(id).lean();
     if (!doc) return res.status(404).json({ error: "No encontrado" });
@@ -743,4 +870,12 @@ export async function getDiagnosticsProcessedById(req: Request, res: Response) {
     console.error("❌ getDiagnosticsProcessedById error:", e);
     return res.status(500).json({ error: "Error interno" });
   }
+}
+
+// -------- (NUEVO) Llamar al microservicio de seguridad --------
+async function runSecurityMicro(url: string) {
+  const endpoint = `${MS_SECURITY_URL}/api/analyze`;
+  const payload = { url };
+  const { data } = await axios.post(endpoint, payload, { timeout: 120000 });
+  return data;
 }
