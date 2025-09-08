@@ -7,6 +7,7 @@ import Navbar from "./components/Navbar";
 import RunAuditPage from "./pages/run-audit";
 import DiagnosticsPage from "./pages/diagnostics";
 import HistoryPage from "./pages/history";
+import SecurityHistoryPage from "./pages/security-history";
 
 export default function App() {
   return (
@@ -21,6 +22,8 @@ export default function App() {
             <Route path="/diagnostico/:id" element={<DiagnosticsPage />} />
             {/* Histórico */}
             <Route path="/historico" element={<HistoryPage />} />
+            {/* Histórico de Seguridad */}
+            <Route path="/security-history" element={<SecurityHistoryPage />} />
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -1379,9 +1379,17 @@ export default function DiagnosticoView() {
         <div ref={contenedorReporteRef} className="w-full" style={{ overflowX: "hidden" }}>
           <div className="flex items-center gap-4 mb-2">
             <Link to="/" className="back-link">Nuevo diagnóstico</Link>
-            {activeDiag === 'performance' && (
+            {!!url && activeDiag === 'performance' && (
               <Link
                 to={`/historico?url=${encodeURIComponent(url as string)}`}
+                className="back-link"
+              >
+                Ver histórico de esta URL
+              </Link>
+            )}
+            {!!url && activeDiag === 'security' && (
+              <Link
+                to={`/security-history?url=${encodeURIComponent(url as string)}`}
                 className="back-link"
               >
                 Ver histórico de esta URL

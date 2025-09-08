@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
 import { Button } from "../shared/ui/button";
 import SecurityScoreWidget from "./SecurityScoreWidget";
+import EmailPdfBar from "./EmailPdfBar";
+import { Link, useNavigate } from "react-router-dom";
 
 // Pequeño separador visual reutilizable (igual que en DiagnosticoView)
 function SectionDivider({ label }: { label: string }) {
@@ -306,10 +308,12 @@ export default function SecurityDiagnosticoPanel({
   url,
   autoRunOnMount = true,
   initialResult,
+  showInlineHistoryLink = false,
 }: {
   url: string;
   autoRunOnMount?: boolean;
   initialResult?: any;
+  showInlineHistoryLink?: boolean;
 }) {
   const [securityLoading, setSecurityLoading] = useState(false);
   const [securityError, setSecurityError] = useState("");
@@ -321,6 +325,9 @@ export default function SecurityDiagnosticoPanel({
   const [expandedHeaders, setExpandedHeaders] = useState<Record<string, boolean>>({});
   const [showOnlyMissing, setShowOnlyMissing] = useState(false);
   const hasRunRef = useRef(false);
+  // NEW: reference to capture this panel as PDF
+  const captureRef = useRef<HTMLDivElement | null>(null);
+  const navigate = useNavigate();
 
   const fetchHistory = async (theUrl: string) => {
     try {
@@ -393,7 +400,7 @@ export default function SecurityDiagnosticoPanel({
       const res2 = await fetch("/api/audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, type: "security", nocache: true }),
+        body: JSON.stringify({ url, type: "security", nocache: true })
       });
       const data2 = await safeParseJSON(res2);
       if (!res2.ok || data2?.error) throw new Error(data2?.error || "Error en el análisis de seguridad");
@@ -448,7 +455,8 @@ export default function SecurityDiagnosticoPanel({
           </div>
         )}
         {securityResult && (
-          <div className="flex flex-col gap-6">
+          // Wrap all visible result to capture into PDF
+          <div ref={captureRef} className="flex flex-col gap-6">
             {/* Acerca del análisis */}
             <div className="rounded-lg border p-4 bg-slate-50">
               <button
@@ -518,11 +526,18 @@ export default function SecurityDiagnosticoPanel({
 
               <div className="rounded-lg border p-4">
                 <HeaderStatusBars headers={securityResult?.headers} />
-                <div className="mt-3">
-                  <SeverityChart findings={securityResult?.findings ?? []} />
-                </div>
               </div>
             </div>
+
+            {/* Histórico simple (barras) */}
+            {/* Reemplazado: solo mostrar el botón/enlace al histórico completo con el mismo estilo que Diagnóstico */}
+            {showInlineHistoryLink && url && (
+              <div className="mt-2">
+                <Link to={`/security-history?url=${encodeURIComponent(url)}`} className="back-link">
+                  Ver histórico de esta URL
+                </Link>
+              </div>
+            )}
 
             {/* Encabezados */}
             {securityResult?.headers && typeof securityResult.headers === 'object' && (
@@ -774,6 +789,19 @@ export default function SecurityDiagnosticoPanel({
             {!securityResult?.headers && !securityResult?.cookies && !Array.isArray(securityResult?.findings) && (
               <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(securityResult, null, 2)}</pre>
             )}
+
+            {/* Separator + Email PDF at the bottom */}
+            <SectionDivider label="Exportación PDF" />
+            <div className="mt-2">
+              <EmailPdfBar
+                captureRef={captureRef as any}
+                url={url}
+                subject={`Diagnóstico de Seguridad: ${url}`}
+                endpoint="/api/security/send-diagnostic"
+                includePdf={true}
+                hideEmailInput={true}
+              />
+            </div>
           </div>
         )}
       </CardContent>
