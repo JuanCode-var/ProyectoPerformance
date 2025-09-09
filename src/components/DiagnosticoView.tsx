@@ -6,6 +6,7 @@ import ActionPlanPanel from "./ActionPlanPanel";
 import EmailSendBar from "./EmailPdfBar";
 import SecurityScoreWidget from "./SecurityScoreWidget"; // show gauge also in main view
 import SecurityDiagnosticoPanel from "./SecurityDiagnosticoPanel";
+import { Info } from "lucide-react";
 
 // shadcn/ui padres
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
@@ -26,16 +27,37 @@ const API_LABELS: Record<string, string> = {
 };
 
 // Pequeno separador visual reutilizable
-function SectionDivider({ label }: { label: string }) {
+function SectionDivider({ label, info }: { label: string; info?: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="w-full my-6" role="separator" aria-label={label}>
+    <div className="w-full my-6" role="region" aria-label={label}>
       <div className="flex items-center gap-3">
         <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
-        <div className="text-[11px] sm:text-xs uppercase tracking-wider text-slate-500 select-none px-2 py-1 rounded-md bg-slate-50 border border-slate-200">
-          {label}
+        <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-slate-50 border border-slate-200">
+          <div className="text-[11px] sm:text-xs uppercase tracking-wider text-slate-600 select-none">{label}</div>
+          {info && (
+            <button
+              type="button"
+              className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              aria-controls={`info-${label.replace(/\s+/g, "-").toLowerCase()}`}
+              title="¿Qué es esto?"
+            >
+              <Info size={14} strokeWidth={2.4} />
+            </button>
+          )}
         </div>
         <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
       </div>
+      {info && open && (
+        <div
+          id={`info-${label.replace(/\s+/g, "-").toLowerCase()}`}
+          className="mt-2 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-md p-3"
+        >
+          {info}
+        </div>
+      )}
     </div>
   );
 }
@@ -143,13 +165,30 @@ function readCategoryScoresFromApi(apiData: any): {
   "best-practices": number | null;
   seo: number | null;
 } {
+  // 1. Si el microservicio ya lo precalculó (0..100)
+  const direct = apiData?.categoryScores;
+  if (direct && typeof direct === "object") {
+    const v = (x: any) => (typeof x === "number" && !Number.isNaN(x) ? Math.round(x) : null);
+    return {
+      performance: v(direct.performance),
+      accessibility: v(direct.accessibility),
+      "best-practices": v(direct["best-practices"]),
+      seo: v(direct.seo),
+    };
+  }
+
+  // 2. Buscar en múltiples ubicaciones del LHR
   const cats =
     apiData?.raw?.lighthouseResult?.categories ||
     apiData?.raw?.categories ||
     apiData?.lighthouseResult?.categories ||
     apiData?.categories ||
+    apiData?.data?.lighthouseResult?.categories ||
+    apiData?.result?.lighthouseResult?.categories ||
     null;
-  const toPct = (x?: number) => (typeof x === "number" ? Math.round(x * 100) : null);
+
+  const toPct = (x?: number) => (typeof x === "number" && !Number.isNaN(x) ? Math.round(x * 100) : null);
+  
   return {
     performance: toPct(cats?.performance?.score),
     accessibility: toPct(cats?.accessibility?.score),
@@ -183,12 +222,24 @@ function getAuditSeconds(apiData: any, id: string): number | null {
   const a = audits?.[id];
   if (!a) return null;
 
+  // Primero intentar leer desde metrics si están disponibles
+  const metrics = apiData?.metrics;
+  if (metrics && typeof metrics[id] === "number") {
+    if (/cumulative-layout-shift|^cls$/i.test(id)) {
+      return Math.round(metrics[id] * 100) / 100; // CLS
+    }
+    return toSeconds(metrics[id]);
+  }
+
+  // Luego desde el audit numericValue
   if (typeof a.numericValue === "number") {
     if (/cumulative-layout-shift|^cls$/i.test(id)) {
       return Math.round(a.numericValue * 100) / 100; // CLS
     }
     return toSeconds(a.numericValue);
   }
+
+  // Finalmente parsear el displayValue
   const dv: string | undefined = a.displayValue;
   if (dv) {
     const m1 = dv.match(/([\d.,]+)\s*ms/i);
@@ -414,20 +465,20 @@ function getCategoryBreakdown(
 
   const auditsObj = pickAudits(apiData);
 
-  const items = cat.auditRefs
+  const items = (cat.auditRefs
     .map((ref: any) => {
       const a = auditsObj?.[ref.id] || {};
-      const sdm: string | undefined = a.scoreDisplayMode;
+      const sdm: string | undefined = (a as any).scoreDisplayMode;
       if (sdm === "notApplicable" || sdm === "manual") return null;
 
       const s =
-        typeof a.score === "number"
-          ? Math.round(a.score * 100)
+        typeof (a as any).score === "number"
+          ? Math.round((a as any).score * 100)
           : null;
 
       // savings
       let savingsLabel = "";
-      const d = a.details || {};
+      const d = (a as any).details || {};
       const ms = typeof d.overallSavingsMs === "number" ? d.overallSavingsMs : null;
       const by = typeof d.overallSavingsBytes === "number" ? d.overallSavingsBytes : null;
 
@@ -440,14 +491,14 @@ function getCategoryBreakdown(
 
       return {
         id: String(ref.id),
-        title: i18nTitle(a.title || ref.id),
+        title: i18nTitle((a as any).title || ref.id),
         scorePct: s,
-        displayValue: a.displayValue || "",
-        description: i18nRich(a.description || ""),
+        displayValue: (a as any).displayValue || "",
+        description: i18nRich((a as any).description || ""),
         savingsLabel,
       } as CatBreakItem;
     })
-    .filter(Boolean) as CatBreakItem[];
+    .filter(Boolean) as CatBreakItem[]);
 
   items.sort((A, B) => {
     const sA = A.scorePct ?? -1,
@@ -623,12 +674,53 @@ const perfMetricDescriptions: Record<string, string> = {
   cls: "Estabilidad visual (desplazamientos acumulados).",
 };
 
+const perfMetricLong: Record<string, React.ReactNode> = {
+  fcp: (
+    <>
+      Indica cuándo se muestra el primer contenido. Umbrales: Bueno &lt; 1.8s, Mejorable 1.8–3.0s, Deficiente &gt; 3.0s.
+      Optimiza CSS crítico y reduce bloqueos en el render.
+    </>
+  ),
+  lcp: (
+    <>
+      Marca cuándo aparece el elemento con contenido más grande (hero, imagen principal, etc.). Umbrales: Bueno &lt; 2.5s,
+      Mejorable 2.5–4.0s, Deficiente &gt; 4.0s. Prioriza recursos críticos e imágenes optimizadas.
+    </>
+  ),
+  tbt: (
+    <>
+      Suma del tiempo en el que el hilo principal estuvo bloqueado durante la carga. Umbrales: Bueno &lt; 0.2s,
+      Mejorable 0.2–0.6s, Deficiente &gt; 0.6s. Divide bundles y evita trabajo JS costoso.
+    </>
+  ),
+  si: (
+    <>
+      Velocidad percibida del render. Umbrales: Bueno &lt; 3.4s, Mejorable 3.4–5.8s, Deficiente &gt; 5.8s.
+      Mantén el DOM ligero y usa lazy-load.
+    </>
+  ),
+  ttfb: (
+    <>
+      Latencia del servidor hasta el primer byte. Umbrales: Bueno &lt; 0.8s, Mejorable 0.8–1.8s, Deficiente &gt; 1.8s.
+      Mejora caché, CDN y rendimiento backend.
+    </>
+  ),
+  cls: (
+    <>
+      Estabilidad visual. Umbrales: Bueno &lt; 0.1, Mejorable 0.1–0.25, Deficiente &gt; 0.25. Reserva espacio para imágenes
+      y evita insertar contenido por encima.
+    </>
+  ),
+};
+
 function PerfBreakdownGrid({
   items,
 }: {
   items: Array<{ id: MetricId; label: string; value: number | null }>;
 }) {
   if (!items.length) return null;
+  const [openInfos, setOpenInfos] = React.useState<Record<string, boolean>>({});
+
   return (
     <Card className="mt-4 w-full">
       <CardHeader>
@@ -640,27 +732,41 @@ function PerfBreakdownGrid({
             const isTime = m.id !== "performance" && m.id !== "cls";
             const isCLS = m.id === "cls";
             const v = m.value;
-            const subtitle = perfMetricDescriptions[m.id] || "";
+            const openInfo = !!openInfos[m.id];
             return (
               <div key={m.id} className="item" style={{ background: softBg(m.id, v) }}>
-                <h4 className="item-label">{m.label}</h4>
-                <CircularGauge
-                  value={
-                    v == null
-                      ? 0
-                      : isTime
-                      ? Number(v.toFixed(1))
-                      : isCLS
-                      ? Number((v ?? 0).toFixed(2))
-                      : Number(v)
-                  }
-                  max={isTime ? undefined : isCLS ? undefined : 100}
-                  color={v == null ? "#9ca3af" : gaugeColor(m.id, v)}
-                  decimals={isTime ? 1 : isCLS ? 2 : 0}
-                  suffix={isTime ? "s" : isCLS ? "" : ""} // sin “%”
-                  size={120}
-                />
-                <p className="item-desc" style={{ marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px' }}>
+                  <strong style={{ fontSize: 13 }}>{m.label}</strong>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
+                    onClick={(e) => { e.stopPropagation(); setOpenInfos((s) => ({ ...s, [m.id]: !s[m.id] })); }}
+                    aria-expanded={openInfo}
+                    title="¿Qué es esto?"
+                    style={{ marginLeft: 8 }}
+                  >
+                    <Info size={14} strokeWidth={2.4} />
+                  </button>
+                </div>
+                <div style={{ padding: 12, display: 'flex', justifyContent: 'center' }}>
+                  <CircularGauge
+                    value={
+                      v == null
+                        ? 0
+                        : isTime
+                        ? Number(v.toFixed(1))
+                        : isCLS
+                        ? Number((v ?? 0).toFixed(2))
+                        : Number(v)
+                    }
+                    max={isTime ? undefined : isCLS ? undefined : 100}
+                    color={v == null ? "#9ca3af" : gaugeColor(m.id, v)}
+                    decimals={isTime ? 1 : isCLS ? 2 : 0}
+                    suffix={isTime ? "s" : isCLS ? "" : ""}
+                    size={120}
+                  />
+                </div>
+                <p className="item-desc" style={{ marginBottom: 0, padding: '0 12px' }}>
                   {v == null
                     ? "—"
                     : isTime
@@ -669,9 +775,11 @@ function PerfBreakdownGrid({
                     ? `${v.toFixed(2)}`
                     : `${v}`}
                 </p>
-                <p style={{ margin: 0, fontSize: 12, color: "#64748b", textAlign: "center" }}>
-                  {subtitle}
-                </p>
+                {openInfo && (
+                  <div style={{ padding: '8px 12px' }} className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-md mt-2">
+                    {(perfMetricLong as any)[m.id] || "Información no disponible."}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -910,6 +1018,7 @@ export default function DiagnosticoView() {
   const [showAccDetails, setShowAccDetails] = useState(false);
   const [showBPDetails, setShowBPDetails] = useState(false);
   const [showSeoDetails, setShowSeoDetails] = useState(false);
+  const [cardInfoOpen, setCardInfoOpen] = useState<Record<string, boolean>>({});
 
   const contenedorReporteRef = useRef<HTMLDivElement | null>(null);
 
@@ -1219,57 +1328,72 @@ export default function DiagnosticoView() {
     },
   ];
 
-  // Desglose Performance (grid tipo SEO)
-  const perfBreakItems = [
-    { id: "fcp" as MetricId, label: "FCP", value: fcpSec },
-    { id: "lcp" as MetricId, label: "LCP", value: lcpSec },
-    { id: "tbt" as MetricId, label: "TBT", value: tbtSec },
-    { id: "si"  as MetricId, label: "SI",  value: siSec },
-    clsVal != null
-      ? ({ id: "cls" as MetricId, label: "CLS", value: clsVal } as const)
-      : ({ id: "ttfb" as MetricId, label: "TTFB", value: ttfbSec } as const),
+  // ===== Items para el desglose de performance (FCP, LCP, TBT, SI, TTFB, CLS)
+  const perfBreakItems: Array<{ id: MetricId; label: string; value: number | null }> = [
+    { id: "fcp",  label: "FCP",  value: fcpSec },
+    { id: "lcp",  label: "LCP",  value: lcpSec },
+    { id: "tbt",  label: "TBT",  value: tbtSec },
+    { id: "si",   label: "SI",   value: siSec },
+    { id: "ttfb", label: "TTFB", value: ttfbSec },
+    { id: "cls",  label: "CLS",  value: clsVal },
   ];
 
-  // Desglose por categoría (items)
+  // ===== Desgloses por categoría (Accesibilidad / Prácticas / SEO)
   const accBreak = getCategoryBreakdown("accessibility", apiData);
   const bpBreak  = getCategoryBreakdown("best-practices", apiData);
   const seoBreak = getCategoryBreakdown("seo", apiData);
 
-  const { errors: detectedErrors, improvements } = buildFindings(apiData, processed);
+  // ===== Plan de acción (combina errores/mejoras y oportunidades)
+  const findings = buildFindings(apiData, processed);
   const opportunities = buildOpportunities(apiData, processed);
-
-  const mapFindingToOpp = (arr: any[], kind: "error" | "improvement") =>
-    arr.map((e, i) => {
-      let savingsLabel = i18nSavings(e.displayValue || "");
-      const ms = e?.details?.overallSavingsMs as number | undefined;
-      const bytes = e?.details?.overallSavingsBytes as number | undefined;
-
-      if (!savingsLabel && typeof ms === "number") {
-        savingsLabel = ms >= 100 ? `${Math.round((ms / 1000) * 10) / 10}s` : `${Math.round(ms)}ms`;
-      } else if (!savingsLabel && typeof bytes === "number") {
-        const kb = bytes / 1024;
-        savingsLabel = kb >= 1024 ? `${(kb / 1024).toFixed(1)}MB` : `${Math.round(kb)}KB`;
-      }
-
-      return {
-        id: e.id || `finding-${i}`,
-        title: e.title || e.id,
-        recommendation: e.recommendation || e.message || e.description || "",
-        severity: e.severity || "info",
-        savingsLabel,
-        impactScore: 100,
-        type: kind,
-      };
-    });
-
-  // Corregir referencia circular de planItems
-  const derivedPlanItems = [
-    ...mapFindingToOpp(opportunities, "improvement"),
-    ...mapFindingToOpp(detectedErrors, "error"),
-    ...mapFindingToOpp(improvements, "improvement"),
+  const planItems = [
+    // Mapear errores/mejoras de findings a formato del panel
+    ...findings.errors.map((e: any) => ({
+      id: e.id,
+      title: e.title,
+      recommendation: e.description,
+      type: "error" as const,
+      severity: "critical" as const,
+      impactScore: 2200, // ponderación alta por defecto para errores
+    })),
+    ...findings.improvements.map((e: any) => ({
+      id: e.id,
+      title: e.title,
+      recommendation: e.description,
+      type: "improvement" as const,
+      severity: "info" as const,
+      impactScore: 900,
+    })),
+    // Y oportunidades calculadas (ya incluyen savings/impacto)
+    ...opportunities,
   ];
 
-  const planItems = derivedPlanItems;
+  const cardInfoText: Record<string, React.ReactNode> = {
+    performance: (
+      <>
+        Índice global (0–100) de Lighthouse que resume el estado de carga percibida de la página. Se compone principalmente
+        de FCP, LCP, TBT, SI y estabilidad visual (CLS). El puntaje varía según el modo de prueba (Móvil/Ordenador).
+      </>
+    ),
+    accessibility: (
+      <>
+        Evalúa si la UI es usable por la mayor cantidad de personas posible: semántica correcta, roles y labels
+        accesibles, contraste de color y navegación por teclado.
+      </>
+    ),
+    "best-practices": (
+      <>
+        Conjunto de verificaciones sobre seguridad del front-end y uso de APIs modernas (HTTPS, uso seguro de JS,
+        imágenes con dimensiones, etc.).
+      </>
+    ),
+    seo: (
+      <>
+        Señales técnicas básicas para descubrimiento en buscadores: metadatos HTML, enlaces, etiquetas canónicas,
+        accesibilidad técnica y contenido indexable.
+      </>
+    ),
+  };
 
   const renderCard = (item: {
     id: MetricId;
@@ -1288,6 +1412,7 @@ export default function DiagnosticoView() {
         : item.id === "seo"
         ? { onClick: () => setShowSeoDetails((v) => !v), style: { cursor: "pointer" } }
         : {};
+    const infoOpen = !!cardInfoOpen[item.id];
     return (
       <div key={item.id} className="item" style={{ background: "#ffffff" }} {...(clickProps as any)}>
         <h3 className="item-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1297,6 +1422,20 @@ export default function DiagnosticoView() {
               {trendSymbol(trendByKey[item.id])}
             </span>
           )}
+          {/* NEW: keep info icon on all main cards */}
+          <button
+            type="button"
+            className="ml-1 inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
+            onClick={(e) => {
+              e.stopPropagation();
+              setCardInfoOpen((prev) => ({ ...prev, [item.id]: !prev[item.id] }));
+            }}
+            aria-expanded={infoOpen}
+            aria-controls={`card-info-${item.id}`}
+            title="¿Qué es esto?"
+          >
+            <Info size={14} strokeWidth={2.4} />
+          </button>
           {item.id === "performance" && (
             <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
               {showPerfDetails ? "Ocultar desgloses" : "Mostrar desgloses"}
@@ -1321,33 +1460,8 @@ export default function DiagnosticoView() {
 
         {item.id === "performance" ? (
           <>
-            <div className="w-full flex flex-col items-center justify-center gap-4">
-              <PerfDial
-                score={item.value ?? null}
-                segments={[
-                  { id: "si",  label: "SI",  value: siSec },
-                  { id: "fcp", label: "FCP", value: fcpSec },
-                  { id: "lcp", label: "LCP", value: lcpSec },
-                  { id: "cls", label: "CLS", value: clsVal },
-                  { id: "tbt", label: "TBT", value: tbtSec },
-                ].filter(Boolean) as DialSeg[]}
-                size={130}
-              />
-              {/* Leyenda centrada */}
-              <div className="flex items-center justify-center gap-6 flex-wrap">
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <span className="inline-block w-3 h-3 rounded-full" style={{ background: "#ef4444" }} />
-                  <span>0–49 Bajo</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <span className="inline-block w-3 h-3 rounded-full" style={{ background: "#f59e0b" }} />
-                  <span>50–89 Aceptable</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <span className="inline-block w-3 h-3 rounded-full" style={{ background: "#22c55e" }} />
-                  <span>90–100 Excelente</span>
-                </div>
-              </div>
+            <div className="w-full min-h-[160px] flex items-center justify-center">
+              <CategoryDial metricId={item.id} value={item.value} size={110} strokeWidth={10} />
             </div>
             <p className="item-desc">
               {item.value == null ? "N/A" : `${item.value}`} — {item.desc}
@@ -1363,10 +1477,15 @@ export default function DiagnosticoView() {
                 ? "N/A"
                 : isPct
                 ? `${item.value}`
-                : `${(item.value as number).toFixed(1)}s`}{" "}
+                : `${(item.value as number).toFixed(1)}s`} {" "}
               — {item.desc}
             </p>
           </>
+        )}
+        {infoOpen && (
+          <div className="mt-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-md p-2" role="note">
+            {cardInfoText[item.id] || item.desc}
+          </div>
         )}
       </div>
     );
@@ -1512,7 +1631,13 @@ export default function DiagnosticoView() {
                       <CardHeader className="flex-row items-center justify-between">
                         <CardTitle>Resumen de Seguridad</CardTitle>
                         {/* Botón "Ver detalle" solo aparece en la vista de performance */}
-                        <Button variant="outline" onClick={() => setActiveDiag('security')}>Ver detalle</Button>
+                        <Button
+                          variant="outline"
+                          className="transition-colors hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
+                          onClick={() => setActiveDiag('security')}
+                        >
+                          Ver detalle
+                        </Button>
                       </CardHeader>
                       <CardContent>
                         <SecurityScoreWidget
@@ -1547,16 +1672,33 @@ export default function DiagnosticoView() {
                   </>
                 )}
 
-                <SectionDivider label="Resumen" />
+                <SectionDivider
+                  label="Resumen"
+                  info={
+                    <>
+                      Vista general del estado de rendimiento. El puntaje (0–100) se calcula con base en métricas como FCP, LCP,
+                      TBT, SI y estabilidad visual (CLS). Las tarjetas de Accesibilidad, Prácticas recomendadas y SEO reflejan aspectos
+                      técnicos complementarios. Puedes pulsar cada tarjeta para ver su desglose.
+                    </>
+                  }
+                />
                 {/* Grid principal: performance + categorías */}
                 <div className="diagnostico-grid w-full">
                   {renderCard(perfCard)}
                   {categoryCards.map(renderCard)}
                 </div>
 
-                {/* Desgloses y captura */}
+                {/* Desglozes y captura */}
                 {(showPerfDetails || showAccDetails || showBPDetails || showSeoDetails) && (
-                  <SectionDivider label="Desgloses y capturas" />
+                  <SectionDivider
+                    label="Desgloses y capturas"
+                    info={
+                      <>
+                        Métricas de rendimiento clave y la captura final de la página durante la auditoría. Los colores indican
+                        si una métrica está en buen estado, es mejorable o es deficiente según los umbrales recomendados de Lighthouse.
+                      </>
+                    }
+                  />
                 )}
 
                 {/* Desglose Performance — tipo SEO */}
@@ -1589,13 +1731,28 @@ export default function DiagnosticoView() {
                   />
                 )}
 
-                <SectionDivider label="Plan de acción" />
+                <SectionDivider
+                  label="Plan de acción"
+                  info={
+                    <>
+                      Recomendaciones priorizadas para mejorar el rendimiento basadas en oportunidades y fallos detectados por Lighthouse
+                      (tamaño de recursos, compresión, caché, carga diferida, etc.).
+                    </>
+                  }
+                />
                 <ActionPlanPanel
                   opportunities={planItems}
                   performance={performance}
                 />
 
-                <SectionDivider label="Compartir / Exportar" />
+                <SectionDivider
+                  label="Compartir / Exportar"
+                  info={
+                    <>
+                      Envía por correo y exporta a PDF este diagnóstico con métricas, desgloses y plan de acción para compartir con tu equipo.
+                    </>
+                  }
+                />
                 <EmailSendBar
                   captureRef={contenedorReporteRef as any}
                   url={url as string}
@@ -1609,7 +1766,6 @@ export default function DiagnosticoView() {
               </div>
             </div>
           )}
-          {/* ...existing code... */}
         </div>
       </CardContent>
     </Card>

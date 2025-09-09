@@ -99,128 +99,191 @@ export default function SecurityScoreWidget({
   }, [topFindings]);
 
   return (
-    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-      <div
-        onMouseEnter={() => setShowTip(true)}
-        onMouseLeave={() => setShowTip(false)}
-        role="img"
-        aria-label={`Calificación de seguridad ${s ?? "sin datos"}`}
-        style={{
-          width: 120,
-          height: 120,
-          borderRadius: 12,
-          background: "#fff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          border: "1px solid #e6e6e6",
-          position: "relative",
-          cursor: "default",
-        }}
-      >
-        <svg width={110} height={110} viewBox="0 0 110 110" style={{ transform: "rotate(-90deg)" }}>
-          {/* Track */}
-          <circle cx="55" cy="55" r={R} stroke="#e5e7eb" strokeWidth="10" fill="none" />
-          {/* Progress: color sólido alineado a la leyenda */}
-          <circle
-            cx="55"
-            cy="55"
-            r={R}
-            stroke={gaugeColor}
-            strokeWidth="10"
-            strokeLinecap="round"
-            strokeDasharray={`${C} ${C}`}
-            strokeDashoffset={remainder}
-            fill="none"
-          />
-          {/* Tick marks every 10% */}
-          {[...Array(10)].map((_, i) => (
-            <line
-              key={i}
-              x1="55"
-              y1="9"
-              x2="55"
-              y2="13"
-              stroke="#cbd5e1"
-              strokeWidth="2"
-              transform={`rotate(${i * 36}, 55, 55)`}
+    <div className="bg-gradient-to-br from-white to-slate-50 rounded-xl border border-slate-200 p-6 shadow-sm">
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* Gauge principal con diseño mejorado */}
+        <div className="relative flex-shrink-0">
+          <div
+            onMouseEnter={() => setShowTip(true)}
+            onMouseLeave={() => setShowTip(false)}
+            role="img"
+            aria-label={`Calificación de seguridad ${s ?? "sin datos"}`}
+            className="relative w-32 h-32 rounded-2xl bg-white shadow-lg border border-slate-200 flex items-center justify-center cursor-default group hover:shadow-xl transition-all duration-300"
+          >
+            {/* Efecto de resplandor basado en la puntuación */}
+            <div 
+              className="absolute inset-0 rounded-2xl opacity-20 group-hover:opacity-30 transition-opacity"
+              style={{ 
+                background: `radial-gradient(circle at center, ${gaugeColor}20 0%, transparent 70%)`,
+                filter: `drop-shadow(0 0 20px ${gaugeColor}40)`
+              }}
             />
-          ))}
-        </svg>
-        <div style={{ position: "absolute", textAlign: "center" }}>
-          <div style={{ fontSize: 28, fontWeight: 800, color: "#0f172a" }}>{s == null ? "—" : animated}</div>
-        </div>
+            
+            <svg width={110} height={110} viewBox="0 0 110 110" style={{ transform: "rotate(-90deg)" }}>
+              {/* Track con gradiente sutil */}
+              <circle cx="55" cy="55" r={R} stroke="url(#trackGradient)" strokeWidth="8" fill="none" />
+              
+              {/* Progress con gradiente dinámico */}
+              <circle
+                cx="55"
+                cy="55"
+                r={R}
+                stroke="url(#progressGradient)"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeDasharray={`${C} ${C}`}
+                strokeDashoffset={remainder}
+                fill="none"
+                className="transition-all duration-1000 ease-out"
+              />
+              
+              {/* Gradientes definidos */}
+              <defs>
+                <linearGradient id="trackGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f1f5f9" />
+                  <stop offset="100%" stopColor="#e2e8f0" />
+                </linearGradient>
+                <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor={gaugeColor} />
+                  <stop offset="100%" stopColor={gaugeColor + '80'} />
+                </linearGradient>
+              </defs>
+              
+              {/* Tick marks mejorados */}
+              {[...Array(10)].map((_, i) => (
+                <line
+                  key={i}
+                  x1="55"
+                  y1="8"
+                  x2="55"
+                  y2="14"
+                  stroke="#cbd5e1"
+                  strokeWidth="1.5"
+                  transform={`rotate(${i * 36}, 55, 55)`}
+                />
+              ))}
+            </svg>
 
-        {showTip && (
-          <div style={{
-            position: "absolute",
-            top: "100%",
-            left: "50%",
-            transform: "translateX(-50%)",
-            marginTop: 8,
-            background: "#111827",
-            color: "#fff",
-            padding: "8px 10px",
-            borderRadius: 8,
-            fontSize: 12,
-            whiteSpace: "nowrap",
-            zIndex: 40,
-            boxShadow: "0 6px 18px rgba(0,0,0,0.18)"
-          }}>
-            {info.text}
-          </div>
-        )}
-      </div>
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>
-          Calificación de seguridad {s == null ? "" : `— ${info.g}`}
-        </div>
-
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <div style={{ flex: 1 }}>
-            {/* Inline mini bar */}
-            <div style={{ height: 10, background: "#f1f5f9", borderRadius: 8, overflow: "hidden" }} aria-hidden>
-              <div style={{ width: `${s ?? 0}%`, height: "100%", background: gaugeColor }} />
+            {/* Valor central con animación mejorada */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+              <div className="text-3xl font-black text-slate-900 mb-1 transition-all duration-300">
+                {s == null ? "—" : animated}
+              </div>
+              <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: gaugeColor }}>
+                {info.g}
+              </div>
             </div>
-            <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>{info.text}</div>
 
-            {/* Sparkline history */}
-            {sparkPoints && (
-              <div style={{ marginTop: 10 }}>
-                <MiniDivider label="Historial" />
-                <svg width={sparkPoints.W} height={sparkPoints.H} viewBox={`0 0 ${sparkPoints.W} ${sparkPoints.H}`}>
-                  <path d={sparkPoints.path} fill="none" stroke="#2563eb" strokeWidth={1.5} />
+            {/* Tooltip mejorado */}
+            {showTip && (
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-3 z-50">
+                <div className="bg-slate-900 text-white px-3 py-2 rounded-lg text-xs whitespace-nowrap shadow-xl">
+                  {info.text}
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-b-slate-900"></div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Contenido principal */}
+        <div className="flex-1 min-w-0 space-y-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">
+              Calificación de Seguridad {s != null && `— Grado ${info.g}`}
+            </h3>
+            
+            {/* Barra de progreso horizontal con gradiente */}
+            <div className="relative h-3 bg-gradient-to-r from-slate-100 to-slate-200 rounded-full overflow-hidden shadow-inner">
+              <div 
+                className="h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden"
+                style={{ 
+                  width: `${s ?? 0}%`, 
+                  background: `linear-gradient(90deg, ${gaugeColor}, ${gaugeColor}cc)`,
+                  boxShadow: `0 0 10px ${gaugeColor}40`
+                }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse"></div>
+              </div>
+            </div>
+            
+            <p className="text-sm text-slate-600 mt-2 leading-relaxed">{info.text}</p>
+          </div>
+
+          {/* Sparkline history mejorado */}
+          {sparkPoints && (
+            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+              <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                📊 Evolución Histórica
+              </h4>
+              <div className="relative">
+                <svg width={sparkPoints.W} height={sparkPoints.H} viewBox={`0 0 ${sparkPoints.W} ${sparkPoints.H}`} className="w-full h-auto">
+                  {/* Área bajo la curva */}
+                  <defs>
+                    <linearGradient id="sparklineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#3b82f650" />
+                      <stop offset="100%" stopColor="#3b82f610" />
+                    </linearGradient>
+                  </defs>
+                  <path d={`${sparkPoints.path} L ${sparkPoints.W} ${sparkPoints.H} L 0 ${sparkPoints.H} Z`} fill="url(#sparklineGradient)" />
+                  <path d={sparkPoints.path} fill="none" stroke="#3b82f6" strokeWidth={2} />
+                  {/* Puntos en la línea */}
+                  {sparkPoints.path.split(' ').filter((_, i) => i % 3 === 1).map((point, i) => (
+                    <circle key={i} cx={point} cy={sparkPoints.path.split(' ')[i * 3 + 2]} r="2" fill="#3b82f6" />
+                  ))}
                 </svg>
               </div>
-            )}
-          </div>
-
-          <div style={{ minWidth: 200, fontSize: 12, color: "#475569" }}>
-            <MiniDivider label="Leyenda" />
-            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 6 }}>
-              <span style={{ width: 10, height: 10, background: "#16a34a", borderRadius: 2 }} /> <span>90-100 A</span>
-              <span style={{ width: 10, height: 10, background: "#22c55e", borderRadius: 2 }} /> <span>75-89 B</span>
-              <span style={{ width: 10, height: 10, background: "#f59e0b", borderRadius: 2 }} /> <span>50-74 C</span>
-              <span style={{ width: 10, height: 10, background: "#ef4444", borderRadius: 2 }} /> <span>25-49 D</span>
-              <span style={{ width: 10, height: 10, background: "#7f1d1d", borderRadius: 2 }} /> <span>0-24 F</span>
             </div>
+          )}
+        </div>
 
-            {/* Top issues */}
-            {topItems.length > 0 && (
-              <div style={{ marginTop: 10 }}>
-                <MiniDivider label="Principales hallazgos" />
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}>
-                  {topItems.map((it) => (
-                    <li key={it.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span style={{ width: 8, height: 8, background: it.color, borderRadius: 999 }} />
-                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.title}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+        {/* Panel lateral con información adicional */}
+        <div className="w-full lg:w-64 space-y-4">
+          {/* Leyenda mejorada */}
+          <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
+            <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              🎯 Escala de Calificación
+            </h4>
+            <div className="space-y-2">
+              {[
+                { range: "90-100", grade: "A", color: "#16a34a", label: "Excelente" },
+                { range: "75-89", grade: "B", color: "#22c55e", label: "Bueno" },
+                { range: "50-74", grade: "C", color: "#f59e0b", label: "Regular" },
+                { range: "25-49", grade: "D", color: "#ef4444", label: "Débil" },
+                { range: "0-24", grade: "F", color: "#7f1d1d", label: "Crítico" }
+              ].map((item) => (
+                <div key={item.grade} className="flex items-center gap-3 text-xs">
+                  <div 
+                    className="w-3 h-3 rounded-sm shadow-sm" 
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="font-mono text-slate-600 min-w-0">{item.range}</span>
+                  <span className="font-bold" style={{ color: item.color }}>{item.grade}</span>
+                  <span className="text-slate-500 truncate">{item.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
+
+          {/* Principales hallazgos mejorados */}
+          {topItems.length > 0 && (
+            <div className="bg-white rounded-lg p-4 border border-slate-200 shadow-sm">
+              <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                ⚠️ Principales Hallazgos
+              </h4>
+              <ul className="space-y-2">
+                {topItems.map((item) => (
+                  <li key={item.id} className="flex items-start gap-3 p-2 rounded-lg bg-slate-50 border border-slate-100">
+                    <div 
+                      className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" 
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="text-xs text-slate-700 leading-relaxed">{item.title}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -4,18 +4,42 @@ import { Button } from "../shared/ui/button";
 import SecurityScoreWidget from "./SecurityScoreWidget";
 import EmailPdfBar from "./EmailPdfBar";
 import { Link, useNavigate } from "react-router-dom";
+import { Info } from "lucide-react";
 
-// Pequeño separador visual reutilizable (igual que en DiagnosticoView)
-function SectionDivider({ label }: { label: string }) {
+// Pequeño separador visual reutilizable mejorado
+function SectionDivider({ label, info }: { label: string; info?: React.ReactNode }) {
+  const [open, setOpen] = React.useState(false);
   return (
-    <div className="w-full my-6" role="separator" aria-label={label}>
-      <div className="flex items-center gap-3">
+    <div className="w-full my-8" role="region" aria-label={label}>
+      <div className="flex items-center gap-4">
         <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
-        <div className="text-[11px] sm:text-xs uppercase tracking-wider text-slate-500 select-none px-2 py-1 rounded-md bg-slate-50 border border-slate-200">
-          {label}
+        <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-gradient-to-r from-slate-50 to-white border border-slate-200 shadow-sm">
+          <div className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-slate-700 select-none">
+            {label}
+          </div>
+          {info && (
+            <button
+              type="button"
+              className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 hover:scale-105 transition-all duration-200 shadow-sm"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              aria-controls={`info-${label.replace(/\s+/g, "-").toLowerCase()}`}
+              title="¿Qué es esto?"
+            >
+              <Info size={16} strokeWidth={2.2} />
+            </button>
+          )}
         </div>
         <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
       </div>
+      {info && open && (
+        <div
+          id={`info-${label.replace(/\s+/g, "-").toLowerCase()}`}
+          className="mt-4 text-sm text-slate-700 bg-gradient-to-r from-blue-50 to-slate-50 border border-blue-200 rounded-lg p-4 shadow-sm animate-in slide-in-from-top-2 duration-300"
+        >
+          {info}
+        </div>
+      )}
     </div>
   );
 }
@@ -262,24 +286,48 @@ const SeverityChart = ({ findings }: { findings: any[] }) => {
   }
   const total = counts.high + counts.medium + counts.low || 1;
   const items = [
-    { label: 'Alta', value: Math.round((counts.high / total) * 100), color: '#ef4444' },
-    { label: 'Media', value: Math.round((counts.medium / total) * 100), color: '#f59e0b' },
-    { label: 'Baja', value: Math.round((counts.low / total) * 100), color: '#10b981' },
+    { label: 'Crítica', value: Math.round((counts.high / total) * 100), color: '#dc2626', icon: '🔴' },
+    { label: 'Media', value: Math.round((counts.medium / total) * 100), color: '#f59e0b', icon: '🟡' },
+    { label: 'Baja', value: Math.round((counts.low / total) * 100), color: '#059669', icon: '🟢' },
   ];
+  
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-        {items.map((it) => (
-          <div key={it.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 12, height: 12, borderRadius: 3, background: it.color }} />
-            <span style={{ fontSize: 12, color: '#334155' }}>{it.label} {`(${it.value}%)`}</span>
+    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+      <h4 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+        📊 Distribución por Severidad
+      </h4>
+      
+      {/* Leyenda */}
+      <div className="flex flex-wrap gap-4 mb-4">
+        {items.map((item) => (
+          <div key={item.label} className="flex items-center gap-2">
+            <span className="text-sm">{item.icon}</span>
+            <span className="text-xs font-medium text-slate-600">
+              {item.label}: {item.value}%
+            </span>
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        {items.map((it) => (
-          <div key={it.label} style={{ flex: it.value, height: 12, background: it.color, borderRadius: 6 }} />
-        ))}
+      
+      {/* Barra de progreso segmentada */}
+      <div className="relative h-4 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+        <div className="flex h-full">
+          {items.map((item, index) => (
+            <div
+              key={item.label}
+              className="transition-all duration-500 ease-out"
+              style={{
+                width: `${item.value}%`,
+                background: `linear-gradient(135deg, ${item.color}, ${item.color}cc)`,
+                borderRadius: index === 0 ? '9999px 0 0 9999px' : 
+                            index === items.length - 1 ? '0 9999px 9999px 0' : '0'
+              }}
+            />
+          ))}
+        </div>
+        
+        {/* Overlay con efecto de brillo */}
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse opacity-60" />
       </div>
     </div>
   );
@@ -288,13 +336,42 @@ const SeverityChart = ({ findings }: { findings: any[] }) => {
 const HeaderStatusBars = ({ headers }: { headers?: Record<string, any> }) => {
   const total = Object.keys(headers || {}).length;
   const present = Object.values(headers || {}).filter((h: any) => h && (h.present || h.ok || h.passed || h.value != null)).length;
+  const missing = total - present;
   const pct = total === 0 ? 0 : Math.round((present / total) * 100);
+  
   return (
-    <div>
-      <h4 className="text-sm font-medium mb-2">Encabezados analizados</h4>
-      <div className="mb-2 text-xs text-slate-600">Presentes: {present}/{total}</div>
-      <div style={{ background: '#eef2ff', height: 12, borderRadius: 6, overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, background: '#3b82f6', height: '100%' }} />
+    <div className="space-y-3">
+      {/* Estadísticas compactas */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-600">Presentes</span>
+          <span className="font-bold text-green-600 text-lg">{present}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-600">Faltantes</span>
+          <span className="font-bold text-red-600 text-lg">{missing}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-600">Cobertura</span>
+          <span className="font-bold text-blue-600 text-lg">{pct}%</span>
+        </div>
+      </div>
+      
+      {/* Barra de progreso */}
+      <div className="relative">
+        <div className="h-3 bg-gradient-to-r from-red-100 to-green-100 rounded-full overflow-hidden shadow-inner">
+          <div 
+            className="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-1000 ease-out relative"
+            style={{ width: `${pct}%` }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse" />
+          </div>
+        </div>
+        
+        {/* Indicador textual compacto */}
+        <div className="text-xs text-slate-600 mt-2 text-center">
+          {present} de {total} encabezados
+        </div>
       </div>
     </div>
   );
@@ -427,31 +504,90 @@ export default function SecurityDiagnosticoPanel({
   }, [autoRunOnMount, url]);
 
   return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle>Diagnóstico de Seguridad</CardTitle>
+    <Card className="mt-4 bg-gradient-to-br from-white to-slate-50 border-slate-200 shadow-lg">
+      <CardHeader className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-200">
+        <CardTitle className="flex items-center gap-3 text-slate-800">
+          🛡️ Diagnóstico de Seguridad
+          <div className="ml-auto">
+            {securityLoading && (
+              <div className="flex items-center gap-2 text-sm text-blue-600">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+                Analizando...
+              </div>
+            )}
+          </div>
+        </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-6">
         {securityLoading && (
-          <div className="space-y-4">
-            <div className="animate-pulse grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="h-28 rounded-lg bg-slate-100" />
-              <div className="h-28 rounded-lg bg-slate-100" />
-              <div className="h-28 rounded-lg bg-slate-100" />
+          <div className="space-y-6">
+            {/* Loading con shimmer effect mejorado */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="relative h-32 rounded-xl bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-pulse transform -skew-x-12"></div>
+                </div>
+              ))}
             </div>
-            <div className="animate-pulse h-40 rounded-lg bg-slate-100" />
+            
+            <div className="relative h-48 rounded-xl bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-pulse transform -skew-x-12"></div>
+            </div>
+            
+            <div className="text-center py-4">
+              <div className="flex items-center justify-center gap-3 text-slate-600">
+                <div className="animate-spin rounded-full h-6 w-6 border-3 border-blue-500 border-t-transparent"></div>
+                <span className="font-medium">Ejecutando análisis de seguridad...</span>
+              </div>
+              <p className="text-sm text-slate-500 mt-2">
+                Revisando encabezados HTTP, cookies y configuraciones de seguridad
+              </p>
+            </div>
           </div>
         )}
+        
         {securityError && (
-          <div className="flex items-center gap-2">
-            <p className="error">{securityError}</p>
-            <Button variant="outline" onClick={handleSecurityDiagnostics}>Reintentar</Button>
+          <div className="bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 rounded-xl p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <span className="text-red-600 text-lg">⚠️</span>
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-red-800 mb-2">Error en el análisis</h3>
+                <p className="text-red-700 mb-4">{securityError}</p>
+                <Button 
+                  variant="outline" 
+                  onClick={handleSecurityDiagnostics}
+                  className="border-red-300 text-red-700 hover:bg-red-50 hover:border-red-400"
+                >
+                  🔄 Reintentar análisis
+                </Button>
+              </div>
+            </div>
           </div>
         )}
+        
         {!securityLoading && !securityError && !securityResult && (
-          <div className="flex flex-col items-center gap-3">
-            <p>Haz clic en "Analizar ahora" para revisar los encabezados de seguridad de esta URL.</p>
-            <Button variant="outline" onClick={handleSecurityDiagnostics}>Analizar ahora</Button>
+          <div className="text-center py-12">
+            <div className="max-w-md mx-auto">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <span className="text-2xl">🔒</span>
+              </div>
+              <h3 className="text-lg font-semibold text-slate-800 mb-3">
+                Análisis de Seguridad Disponible
+              </h3>
+              <p className="text-slate-600 mb-6">
+                Inicia el análisis para revisar los encabezados de seguridad HTTP, cookies y configuraciones de esta URL.
+              </p>
+              <Button 
+                onClick={handleSecurityDiagnostics}
+                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all duration-200"
+              >
+                🚀 Iniciar Análisis de Seguridad
+              </Button>
+            </div>
           </div>
         )}
         {securityResult && (
@@ -477,55 +613,78 @@ export default function SecurityDiagnosticoPanel({
               </div>
             </div>
 
-            <SectionDivider label="Resumen" />
-            {/* Resumen */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="rounded-lg border p-4">
-                <SecurityScoreWidget
-                  score={securityResult?.score ?? securityResult?.securityScore ?? null}
-                  grade={securityResult?.grade}
-                  history={securityHistory}
-                  topFindings={Array.isArray(securityResult?.findings)
-                    ? securityResult.findings
-                        .filter((f: any) => f?.severity === 'critical' || f?.severity === 'warning')
-                        .slice(0, 3)
-                    : []}
-                />
-              </div>
-
-              <div className="rounded-lg border p-4">
-                <div className="text-sm space-y-1">
-                  <div>
-                    <span className="font-medium">
-                      {securityResult?.summary?.passed ??
-                        securityResult?.passCount ??
-                        (Array.isArray(securityResult?.findings)
-                          ? securityResult.findings.filter((f: any) => f?.passed).length
-                          : '-')}
-                    </span>
-                    <span className="ml-2 text-slate-600">OK</span>
-                  </div>
-                  <div>
-                    <span className="font-medium text-amber-600">
-                      {securityResult?.summary?.warnings ?? securityResult?.warningCount ?? '-'}
-                    </span>
-                    <span className="ml-2 text-slate-600">Avisos</span>
-                  </div>
-                  <div>
-                    <span className="font-medium text-red-600">
-                      {securityResult?.summary?.failed ??
-                        securityResult?.failCount ??
-                        (Array.isArray(securityResult?.findings)
-                          ? securityResult.findings.filter((f: any) => !f?.passed).length
-                          : '-')}
-                    </span>
-                    <span className="ml-2 text-slate-600">Fallos</span>
-                  </div>
+            <SectionDivider
+              label="Resumen"
+              info={
+                <>
+                  Vista general del estado de seguridad para la URL analizada. El puntaje (0–100) se calcula a partir de
+                  reglas y verificaciones de encabezados, cookies y hallazgos. Aquí verás: evolución histórica, top hallazgos,
+                  conteo de pruebas OK, avisos y fallos, y un resumen de cuántos encabezados están presentes.
+                </>
+              }
+            />
+            {/* Resumen - Layout lado a lado */}
+            <div className="flex flex-col lg:flex-row gap-6">
+              {/* Panel principal con el gauge */}
+              <div className="flex-1">
+                <div className="rounded-lg border p-6 bg-gradient-to-br from-white to-slate-50">
+                  <SecurityScoreWidget
+                    score={securityResult?.score ?? securityResult?.securityScore ?? null}
+                    grade={securityResult?.grade}
+                    history={securityHistory}
+                    topFindings={Array.isArray(securityResult?.findings)
+                      ? securityResult.findings
+                          .filter((f: any) => f?.severity === 'critical' || f?.severity === 'warning')
+                          .slice(0, 3)
+                      : []}
+                  />
                 </div>
               </div>
+              
+              {/* Panel lateral con métricas */}
+              <div className="lg:w-80 flex flex-col gap-4">
+                {/* Estado de pruebas */}
+                <div className="rounded-lg border p-4 bg-white">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    📊 Estado de Pruebas
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-600">Pasadas</span>
+                      <span className="font-bold text-green-600 text-lg">
+                        {securityResult?.summary?.passed ??
+                          securityResult?.passCount ??
+                          (Array.isArray(securityResult?.findings)
+                            ? securityResult.findings.filter((f: any) => f?.passed).length
+                            : '-')}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-600">Avisos</span>
+                      <span className="font-bold text-amber-600 text-lg">
+                        {securityResult?.summary?.warnings ?? securityResult?.warningCount ?? '-'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-600">Fallos</span>
+                      <span className="font-bold text-red-600 text-lg">
+                        {securityResult?.summary?.failed ??
+                          securityResult?.failCount ??
+                          (Array.isArray(securityResult?.findings)
+                            ? securityResult.findings.filter((f: any) => !f?.passed).length
+                            : '-')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
-              <div className="rounded-lg border p-4">
-                <HeaderStatusBars headers={securityResult?.headers} />
+                {/* Estado de encabezados */}
+                <div className="rounded-lg border p-4 bg-white">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    🔒 Estado de Encabezados
+                  </h4>
+                  <HeaderStatusBars headers={securityResult?.headers} />
+                </div>
               </div>
             </div>
 
@@ -542,7 +701,16 @@ export default function SecurityDiagnosticoPanel({
             {/* Encabezados */}
             {securityResult?.headers && typeof securityResult.headers === 'object' && (
               <>
-                <SectionDivider label="Encabezados" />
+                <SectionDivider
+                  label="Encabezados"
+                  info={
+                    <>
+                      Analiza la presencia y configuración de los principales encabezados HTTP de seguridad (CSP, HSTS, X-Frame-Options,
+                      X-Content-Type-Options, Referrer-Policy, Permissions-Policy, entre otros). Cada tarjeta muestra si el encabezado
+                      está presente, por qué es importante, la recomendación, valores sugeridos y ejemplos para Nginx/Apache/Express.
+                    </>
+                  }
+                />
                 {(() => {
                   const entries = Object.entries(securityResult.headers as Record<string, any>);
                   const sorted = entries.sort(([aKey, aInfo]: any, [bKey, bInfo]: any) => {
@@ -665,7 +833,15 @@ export default function SecurityDiagnosticoPanel({
             {/* Cookies */}
             {securityResult?.cookies && (
               <>
-                <SectionDivider label="Cookies" />
+                <SectionDivider
+                  label="Cookies"
+                  info={
+                    <>
+                      Revisa cookies detectadas en la primera respuesta y valida banderas de seguridad como Secure, HttpOnly y SameSite.
+                      Estas ayudan a mitigar robo de cookies y ataques CSRF. Se listan atributos clave (dominio, path, expiración) para su auditoría.
+                    </>
+                  }
+                />
                 <div>
                   <h3 className="text-lg font-semibold mb-2">Cookies</h3>
                   {Array.isArray(securityResult.cookies) ? (
@@ -706,7 +882,15 @@ export default function SecurityDiagnosticoPanel({
             {/* Hallazgos */}
             {Array.isArray(securityResult?.findings) && securityResult.findings.length > 0 && (
               <>
-                <SectionDivider label="Hallazgos" />
+                <SectionDivider
+                  label="Hallazgos"
+                  info={
+                    <>
+                      Resultados adicionales derivados de heurísticas y comprobaciones automatizadas (por ejemplo, políticas demasiado permisivas o
+                      redirecciones inseguras). Cada elemento indica si pasó o requiere revisión y su severidad para priorización.
+                    </>
+                  }
+                />
                 <div>
                   <h3 className="text-lg font-semibold mb-2">Hallazgos</h3>
                   <div className="flex flex-col gap-2">
@@ -747,7 +931,15 @@ export default function SecurityDiagnosticoPanel({
               return (
                 <>
                   {(d.errors.length > 0 || d.improvements.length > 0 || d.plan.length > 0) && (
-                    <SectionDivider label="Plan de acción" />
+                    <SectionDivider
+                      label="Plan de acción"
+                      info={
+                        <>
+                          Lista priorizada generada a partir de fallos y mejoras detectadas. Incluye recomendaciones concretas para implementar
+                          los encabezados o ajustes necesarios en tu servidor o aplicación.
+                        </>
+                      }
+                    />
                   )}
 
                   {d.errors.length > 0 && (
@@ -791,7 +983,15 @@ export default function SecurityDiagnosticoPanel({
             )}
 
             {/* Separator + Email PDF at the bottom */}
-            <SectionDivider label="Exportación PDF" />
+            <SectionDivider
+              label="Exportación PDF"
+              info={
+                <>
+                  Genera un PDF con todo el diagnóstico de seguridad mostrado en pantalla para compartir con tu equipo o stakeholders.
+                  El documento incluye puntajes, encabezados, hallazgos y el plan de acción.
+                </>
+              }
+            />
             <div className="mt-2">
               <EmailPdfBar
                 captureRef={captureRef as any}

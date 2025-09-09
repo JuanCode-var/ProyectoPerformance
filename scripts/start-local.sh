@@ -19,6 +19,5 @@ npm run dev &
 cd ..
 
 echo "🚀 Iniciando microservicio Frontend en modo desarrollo..."
-cd PulseChoukairPerformanceRT
 npm run dev &
 cd ..
