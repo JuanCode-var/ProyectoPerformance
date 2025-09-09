@@ -10,5 +10,73 @@
 @import "./styles/pdf-scope.css";
 
 @layer base {
-  html, body, #root { height: 100%; width: 100%; overflow-x: hidden; }
+  html, body, #root { 
+    height: 100%; 
+    width: 100%; 
+    overflow-x: hidden; 
+    margin: 0;
+    padding: 0;
+  }
+  
+  /* Asegurar que no haya limitaciones de ancho */
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+  
+  /* Forzar ancho completo para layouts principales */
+  main, .main, [role="main"] {
+    width: 100% !important;
+    max-width: none !important;
+  }
+}
+
+/* Estilos globales para TODOS los botones */
+button, [role="button"], .btn, .tab-button, .checkbox-item, input[type="submit"], input[type="button"] {
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+}
+
+/* Efectos hover azules para todos los botones */
+button:hover:not(:disabled), 
+[role="button"]:hover:not(:disabled), 
+.btn:hover:not(:disabled), 
+.tab-button:hover:not(.active):not(:disabled),
+.checkbox-item:hover:not(:disabled),
+input[type="submit"]:hover:not(:disabled), 
+input[type="button"]:hover:not(:disabled) {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  color: #1d4ed8 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Remover decoraciones de texto subrayado */
+button, [role="button"], .btn, .tab-button {
+  text-decoration: none !important;
+  border-bottom: none !important;
+}
+
+/* Estilos específicos para tabs activos */
+.tab-button.active, [data-state="active"] {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+  color: white !important;
+}
+
+.tab-button.active:hover, [data-state="active"]:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
+  color: white !important;
+}
+
+/* Asegurar que todos los elementos interactivos tengan cursor pointer */
+a, button, input[type="submit"], input[type="button"], input[type="reset"], 
+select, [role="button"], [role="tab"], [role="menuitem"], [role="option"],
+.clickable, .interactive, .btn, .tab-button, .checkbox-item, 
+[onclick], [data-toggle], [data-dismiss] {
+  cursor: pointer !important;
+}
+
+/* Quitar subrayados de enlaces que parecen botones */
+a.btn, a[role="button"], .tab-button a {
+  text-decoration: none !important;
+  border-bottom: none !important;
 }

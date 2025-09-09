@@ -72,16 +72,25 @@ export default function EmailPdfBar({
   function copyStylesTo(doc: Document) {
     const head = doc.head;
     const srcDoc = document;
-    srcDoc.querySelectorAll('link[rel="stylesheet"]').forEach((lnk) => {
-      const el = doc.createElement("link");
-      el.rel = "stylesheet";
-      el.href = (lnk as HTMLLinkElement).href;
-      head.appendChild(el);
-    });
-    srcDoc.querySelectorAll("style").forEach((st) => {
-      const el = doc.createElement("style");
-      el.textContent = st.textContent || "";
-      head.appendChild(el);
+
+    // NOTE: avoid copying external <link rel="stylesheet"> into the iframe because
+    // those stylesheets may contain modern color functions (color(), oklab(), ...)
+    // that html2canvas can't parse. We will rely on inlining computed styles
+    // for visual fidelity and only copy/clean <style> blocks.
+
+    // Helper to sanitize CSS content by removing modern color functions
+    const sanitizeCss = (cssText: string) =>
+      cssText.replace(/\b(color|oklab|oklch|lab|lch|color-mix)\([^)]*\)/gi, 'transparent');
+
+    // Copy and sanitize <style> elements
+    srcDoc.querySelectorAll('style').forEach((st) => {
+      try {
+        const el = doc.createElement('style');
+        el.textContent = sanitizeCss(st.textContent || '');
+        head.appendChild(el);
+      } catch (e) {
+        // ignore problematic style blocks
+      }
     });
   }
 
@@ -147,8 +156,17 @@ export default function EmailPdfBar({
     // 1) iframe invisible
     const iframe = document.createElement("iframe");
     Object.assign(iframe.style, {
-      position: "fixed", left: "-99999px", top: "0", width: "0", height: "0",
-      border: "0", opacity: "0", pointerEvents: "none"
+      position: "fixed",
+      left: "-99999px",
+      top: "0",
+      // Do NOT use 0x0 — make iframe have a real layout size so getBoundingClientRect
+      // on cloned nodes returns useful values. Keep it visually hidden.
+      width: "1200px",
+      height: "100vh",
+      border: "0",
+      opacity: "0",
+      pointerEvents: "none",
+      visibility: "hidden",
     } as CSSStyleDeclaration);
     document.body.appendChild(iframe);
 
@@ -157,6 +175,21 @@ export default function EmailPdfBar({
     idoc.write("<!doctype html><html><head></head><body></body></html>");
     idoc.close();
     copyStylesTo(idoc);
+
+    // Force a desktop viewport inside the iframe so media queries and layout
+    // compute as for a desktop (prevents mobile layout when running on wide screens).
+    try {
+      const vw = Math.max(1200, window.innerWidth || 1200);
+      const meta = idoc.createElement('meta');
+      meta.name = 'viewport';
+      meta.content = `width=${vw}`;
+      idoc.head.appendChild(meta);
+      if (idoc.documentElement) idoc.documentElement.style.width = `${vw}px`;
+      if (idoc.body) idoc.body.style.width = `${vw}px`;
+      try { iframe.style.width = `${vw}px`; } catch (e) {}
+    } catch (e) {
+      // ignore
+    }
 
     // 2) clon
     const clone = src.cloneNode(true) as HTMLElement;
@@ -170,30 +203,177 @@ export default function EmailPdfBar({
     wrapper.appendChild(clone);
     idoc.body.appendChild(wrapper);
 
+    // --- NEW: inline computed styles from the original document into the cloned nodes ---
+    // html2canvas can fail parsing modern CSS color functions (e.g. color(), oklab()),
+    // so we copy computed styles from the source elements and apply them as inline styles
+    // on the clone. This preserves appearance while avoiding problematic stylesheet rules.
+    const sanitizeCss = (cssText: string) =>
+      cssText.replace(/\b(color|oklab|oklch|lab|lch|color-mix)\([^)]*\)/gi, 'transparent');
+
+    function inlineComputedStyles(srcEl: HTMLElement, dstEl: HTMLElement) {
+      try {
+        const cs = window.getComputedStyle(srcEl);
+        // Prefer cssText when available, otherwise build from properties
+        if ((cs as any).cssText) {
+          dstEl.style.cssText = sanitizeCss((cs as any).cssText);
+        } else {
+          let text = "";
+          for (let i = 0; i < cs.length; i++) {
+            const prop = cs[i];
+            try {
+              const val = cs.getPropertyValue(prop);
+              if (val) text += `${prop}: ${val}; `;
+            } catch (e) {}
+          }
+          dstEl.style.cssText = sanitizeCss(text);
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // Recurse children in parallel only when counts match, otherwise try best-effort
+      const srcChildren = Array.from(srcEl.children) as HTMLElement[];
+      const dstChildren = Array.from(dstEl.children) as HTMLElement[];
+      const n = Math.min(srcChildren.length, dstChildren.length);
+      for (let i = 0; i < n; i++) {
+        inlineComputedStyles(srcChildren[i] as HTMLElement, dstChildren[i] as HTMLElement);
+      }
+    }
+
+    try {
+      // Run inlining on the top node; this is potentially expensive but necessary to avoid
+      // html2canvas parsing CSS functions not supported by its parser.
+      inlineComputedStyles(src, clone);
+    } catch (e) {
+      // noop
+    }
+
     try {
       // 3) ancho/alto objetivo
       const rect = src.getBoundingClientRect();
-      const targetW = Math.ceil(captureWidthPx ?? Math.max(src.scrollWidth, rect.width, 1280));
+      // Prefer an explicit captureWidthPx, then the current window.width (to capture desktop layout),
+      // then the source element sizes, falling back to 1280.
+      const viewportPrefer = Math.max(window.innerWidth || 1280, src.scrollWidth || 0, rect.width || 0, 1280);
+      const targetW = Math.ceil(captureWidthPx ?? viewportPrefer);
       clone.style.width = `${targetW}px`;
       clone.style.maxWidth = `${targetW}px`;
       clone.style.overflow = "visible";
 
+      // Ensure the iframe and its document are forced to the desktop width so the cloned DOM
+      // lays out as on desktop (prevents responsive/mobile CSS from taking effect).
+      try {
+        iframe.style.width = `${targetW}px`;
+        iframe.style.minWidth = `${targetW}px`;
+
+        // Insert or update a meta viewport tag to lock the layout width inside the iframe.
+        let meta = idoc.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
+        if (!meta) {
+          meta = idoc.createElement('meta');
+          meta.name = 'viewport';
+          idoc.head.appendChild(meta);
+        }
+        meta.content = `width=${targetW}, initial-scale=1`;
+
+        // Force documentElement/body widths to match the target capture width.
+        idoc.documentElement.style.width = `${targetW}px`;
+        idoc.documentElement.style.maxWidth = `${targetW}px`;
+        idoc.body.style.width = `${targetW}px`;
+        idoc.body.style.maxWidth = `${targetW}px`;
+        idoc.documentElement.style.boxSizing = 'border-box';
+        idoc.body.style.boxSizing = 'border-box';
+      } catch (e) {
+        // best-effort — ignore failures here
+      }
+
       await waitForReady(idoc, clone, extraWaitMs);
       const targetH = clone.scrollHeight;
 
+      // --- NEW: Ensure no canvas element inside the clone has 0 width/height ---
+      function fixZeroSizeCanvases(root: HTMLElement) {
+        try {
+          const canvases = Array.from(root.querySelectorAll('canvas')) as HTMLCanvasElement[];
+          canvases.forEach((c) => {
+            try {
+              // Try multiple ways to get a usable CSS size (bounding rect may be 0 inside hidden iframe)
+              const rect = (c as HTMLElement).getBoundingClientRect();
+              const fallbackW = (c as any).offsetWidth || (c as any).clientWidth || 0;
+              const fallbackH = (c as any).offsetHeight || (c as any).clientHeight || 0;
+              const cssWraw = rect.width || fallbackW || 1;
+              const cssHraw = rect.height || fallbackH || 1;
+              const cssW = Math.max(1, Math.round(cssWraw));
+              const cssH = Math.max(1, Math.round(cssHraw));
+
+              // Ensure internal bitmap has at least 1px in both dims
+              if (!c.width || c.width < 1) c.width = cssW;
+              if (!c.height || c.height < 1) c.height = cssH;
+
+              // If internal bitmap is smaller than desired CSS size, enlarge it
+              if (c.width < cssW) c.width = cssW;
+              if (c.height < cssH) c.height = cssH;
+
+              // Ensure CSS size is non-zero so html2canvas won't treat it as empty
+              try {
+                const sW = parseFloat(c.style.width as any) || 0;
+                const sH = parseFloat(c.style.height as any) || 0;
+                if (sW < 1) c.style.width = `${cssW}px`;
+                if (sH < 1) c.style.height = `${cssH}px`;
+              } catch (e) {}
+
+              // Clear the canvas to avoid patterns referencing empty bitmaps
+              const ctx = c.getContext('2d');
+              if (ctx) ctx.clearRect(0, 0, c.width, c.height);
+            } catch (e) {
+              // ignore per-canvas failures
+            }
+          });
+        } catch (e) {
+          // noop
+        }
+      }
+
+      // Run the fix before rendering to canvas
+      fixZeroSizeCanvases(clone);
+
+      // NEW: replace all <canvas> elements with <img> to avoid html2canvas pattern errors
+      function replaceCanvasesWithImages(root: HTMLElement) {
+        const canvases = Array.from(root.querySelectorAll('canvas')) as HTMLCanvasElement[];
+        canvases.forEach((c) => {
+          try {
+            const dataUrl = c.toDataURL('image/png');
+            const img = idoc.createElement('img');
+            img.src = dataUrl;
+            img.width = c.width;
+            img.height = c.height;
+            img.style.width = c.style.width || c.width + 'px';
+            img.style.height = c.style.height || c.height + 'px';
+            c.parentNode?.replaceChild(img, c);
+          } catch (e) {
+            // ignore per-canvas failures
+          }
+        });
+      }
+      replaceCanvasesWithImages(clone);
+
+      // Remove any remaining <canvas> elements to avoid createPattern errors
+      Array.from(clone.querySelectorAll('canvas')).forEach(c => c.remove());
+
       // 4) canvas
       const canvas = await html2canvas(clone, {
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        scale: Math.min(2, Math.max(1, window.devicePixelRatio || 2)),
-        logging: false,
-        width: targetW,
-        height: targetH,
-        windowWidth: targetW,
-        windowHeight: targetH,
-        scrollX: 0,
-        scrollY: 0,
-      });
+        // use SVG foreignObject to avoid CanvasRenderingContext2D.createPattern errors
+        foreignObjectRendering: true,
+         // skip any canvas elements
+         ignoreElements: (el) => el.tagName.toLowerCase() === 'canvas',
+         useCORS: true,
+         backgroundColor: "#ffffff",
+         scale: Math.min(2, Math.max(1, window.devicePixelRatio || 2)),
+         logging: false,
+         width: targetW,
+         height: targetH,
+         windowWidth: targetW,
+         windowHeight: targetH,
+         scrollX: 0,
+         scrollY: 0,
+       });
 
       // 5) PDF con cortes inteligentes en px del CANVAS
       const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4" });
@@ -355,9 +535,24 @@ export default function EmailPdfBar({
           border: "none",
           padding: "12px 16px",
           borderRadius: 10,
-          cursor: sending ? "default" : "pointer",
+          cursor: "pointer",
           boxShadow: "0 1px 2px rgba(0,0,0,.08)",
           fontWeight: 600,
+          transition: "all 0.3s ease",
+        }}
+        onMouseEnter={(e) => {
+          if (!sending) {
+            e.currentTarget.style.background = "#1d4ed8";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 4px 12px rgba(59, 130, 246, 0.4)";
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!sending) {
+            e.currentTarget.style.background = "#2563EB";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "0 1px 2px rgba(0,0,0,.08)";
+          }
         }}
       >
         {sending ? "Enviando…" : "Enviar informe (PDF) ✉️"}

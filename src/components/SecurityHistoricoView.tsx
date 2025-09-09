@@ -3,7 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
 import { Button } from "../shared/ui/button";
-import { type SecurityHistoryPoint } from "./SecurityHistoryChart";
+
+export type SecurityHistoryPoint = { fecha: string | number | Date; score: number | null };
 
 function useQuery(): URLSearchParams {
   return new URLSearchParams(useLocation().search);
@@ -14,7 +15,7 @@ async function safeParse(res: Response): Promise<any> {
   try { return JSON.parse(txt || "{}"); } catch { return { _raw: txt }; }
 }
 
-// Simple, readable SVG line/area chart for 0..100 scores with grid + tooltips
+// Goal-focused comparative chart for security scores with target lines and performance indicators
 function SecurityHistoryLineChart({ data, height = 420 }: { data: SecurityHistoryPoint[]; height?: number }) {
   const points = useMemo(() => {
     const arr = (data || []).map((d) => ({
@@ -34,13 +35,29 @@ function SecurityHistoryLineChart({ data, height = 420 }: { data: SecurityHistor
 
   const xs: number[] = points.map((_, i) => padding.left + i * step);
   const ys: number[] = points.map((p) => yFor(p.score));
-  const path = xs.map((x, i) => `${i === 0 ? "M" : "L"}${x},${ys[i]}`).join(" ");
-  const area = `${path} L${xs[xs.length-1]},${padding.top + innerH} L${xs[0]},${padding.top + innerH} Z`;
-
-  const ticks = [0, 25, 50, 75, 100];
-
-  // deltas vs previous point
+  
+  // Goal/target definitions for security
+  const excellentTarget = 90;
+  const goodTarget = 75;
+  const acceptableTarget = 60;
+  
+  // Calculate metrics for comparison
+  const average = Math.round(points.reduce((a,b)=>a+b.score,0)/points.length);
+  const min = Math.min(...points.map(p=>p.score));
+  const max = Math.max(...points.map(p=>p.score));
+  const latest = points[points.length - 1]?.score || 0;
+  const trend = points.length > 1 ? latest - points[0].score : 0;
+  
+  // Deltas vs previous point
   const deltas: Array<number | null> = points.map((p, i) => (i === 0 ? null : points[i].score - points[i-1].score));
+  
+  // Performance zones
+  const zones = [
+    { min: excellentTarget, max: 100, color: "#16a34a", label: "Excelente", opacity: 0.1 },
+    { min: goodTarget, max: excellentTarget, color: "#eab308", label: "Bueno", opacity: 0.08 },
+    { min: acceptableTarget, max: goodTarget, color: "#f97316", label: "Aceptable", opacity: 0.06 },
+    { min: 0, max: acceptableTarget, color: "#ef4444", label: "Crítico", opacity: 0.04 }
+  ];
 
   const [hover, setHover] = useState<number | null>(null);
   const idx = hover ?? (points.length - 1);
@@ -52,43 +69,115 @@ function SecurityHistoryLineChart({ data, height = 420 }: { data: SecurityHistor
   return (
     <div style={{ width: "100%", overflowX: "auto" }}>
       <div style={{ minWidth: width }}>
-        {/* Header stats */}
-        <div className="text-sm text-slate-700 mb-2 flex flex-wrap gap-4">
-          <div>
-            <span className="font-semibold">Promedio:</span> {Math.round(points.reduce((a,b)=>a+b.score,0)/points.length)}
+        {/* Header stats with goal comparison */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
+          <div className="text-center p-3 rounded-lg bg-slate-50">
+            <div className="text-lg font-bold text-slate-900">{latest}</div>
+            <div className="text-xs text-slate-600">Actual</div>
           </div>
-          <div>
-            <span className="font-semibold">Mín:</span> {Math.min(...points.map(p=>p.score))}
+          <div className="text-center p-3 rounded-lg bg-slate-50">
+            <div className="text-lg font-bold text-slate-900">{average}</div>
+            <div className="text-xs text-slate-600">Promedio</div>
           </div>
-          <div>
-            <span className="font-semibold">Máx:</span> {Math.max(...points.map(p=>p.score))}
+          <div className="text-center p-3 rounded-lg bg-slate-50">
+            <div className={`text-lg font-bold ${trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {trend >= 0 ? '+' : ''}{trend.toFixed(0)}
+            </div>
+            <div className="text-xs text-slate-600">Tendencia</div>
+          </div>
+          <div className="text-center p-3 rounded-lg bg-slate-50">
+            <div className="text-lg font-bold text-blue-600">{excellentTarget}</div>
+            <div className="text-xs text-slate-600">Meta</div>
           </div>
         </div>
 
-        <svg width={width} height={height} role="img" aria-label="Histórico de seguridad (línea)">
-          {/* Grid */}
-          {ticks.map((t, i) => (
+        {/* Performance indicator */}
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-sm font-medium">Estado actual:</span>
+          {latest >= excellentTarget && <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-800">🎯 Excelente</span>}
+          {latest >= goodTarget && latest < excellentTarget && <span className="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-800">👍 Bueno</span>}
+          {latest >= acceptableTarget && latest < goodTarget && <span className="px-2 py-1 rounded text-xs bg-orange-100 text-orange-800">⚠️ Aceptable</span>}
+          {latest < acceptableTarget && <span className="px-2 py-1 rounded text-xs bg-red-100 text-red-800">🚨 Crítico</span>}
+        </div>
+
+        <svg width={width} height={height} role="img" aria-label="Histórico de seguridad comparativo">
+          <defs>
+            <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#2563eb" stopOpacity="0.3"/>
+              <stop offset="100%" stopColor="#2563eb" stopOpacity="0.05"/>
+            </linearGradient>
+          </defs>
+
+          {/* Performance zones background */}
+          {zones.map((zone, i) => (
+            <rect key={i} 
+              x={padding.left} 
+              y={yFor(zone.max)} 
+              width={width - padding.left - padding.right} 
+              height={yFor(zone.min) - yFor(zone.max)} 
+              fill={zone.color} 
+              fillOpacity={zone.opacity} 
+            />
+          ))}
+
+          {/* Target lines */}
+          <g>
+            <line x1={padding.left} x2={width - padding.right} y1={yFor(excellentTarget)} y2={yFor(excellentTarget)} 
+              stroke="#16a34a" strokeWidth="2" strokeDasharray="8 4" />
+            <text x={width - padding.right + 4} y={yFor(excellentTarget) + 4} fontSize={11} fill="#16a34a" fontWeight="600">Meta {excellentTarget}</text>
+            
+            <line x1={padding.left} x2={width - padding.right} y1={yFor(goodTarget)} y2={yFor(goodTarget)} 
+              stroke="#eab308" strokeWidth="1.5" strokeDasharray="6 3" />
+            <text x={width - padding.right + 4} y={yFor(goodTarget) + 4} fontSize={10} fill="#eab308">Bueno {goodTarget}</text>
+            
+            <line x1={padding.left} x2={width - padding.right} y1={yFor(acceptableTarget)} y2={yFor(acceptableTarget)} 
+              stroke="#f97316" strokeWidth="1.5" strokeDasharray="4 2" />
+            <text x={width - padding.right + 4} y={yFor(acceptableTarget) + 4} fontSize={10} fill="#f97316">Mín {acceptableTarget}</text>
+          </g>
+
+          {/* Grid lines */}
+          {[0, 25, 50, 75, 100].map((t, i) => (
             <g key={i}>
-              <line x1={padding.left} x2={width - padding.right} y1={yFor(t)} y2={yFor(t)} stroke="#e5e7eb" strokeDasharray="4 4" />
+              <line x1={padding.left} x2={width - padding.right} y1={yFor(t)} y2={yFor(t)} stroke="#e5e7eb" strokeWidth="0.5" />
               <text x={8} y={yFor(t) + 4} fontSize={11} fill="#64748b">{t}</text>
             </g>
           ))}
 
-          {/* Area under curve */}
-          <path d={area} fill="#93c5fd" fillOpacity={0.22} />
-          {/* Line */}
-          <path d={path} fill="none" stroke="#2563eb" strokeWidth={2.5} />
+          {/* Area under curve with gradient */}
+          <path d={`${xs.map((x, i) => `${i === 0 ? "M" : "L"}${x},${ys[i]}`).join(" ")} L${xs[xs.length-1]},${padding.top + innerH} L${xs[0]},${padding.top + innerH} Z`} 
+            fill="url(#areaGradient)" />
 
-          {/* Points + labels */}
-          {xs.map((x, i) => (
-            <g key={i}>
-              <circle cx={x} cy={ys[i]} r={4} fill="#2563eb">
-                <title>{`Score: ${points[i].score}\nFecha: ${points[i].date.toLocaleString()}${deltas[i] == null ? "" : `\nΔ vs ant.: ${deltas[i] > 0 ? "+" : ""}${deltas[i].toFixed(0)}`}`}</title>
-              </circle>
-              {/* score label above point */}
-              <text x={x} y={ys[i] - 8} fontSize={11} fontWeight={600} fill="#0f172a" textAnchor="middle">{points[i].score}</text>
-            </g>
-          ))}
+          {/* Main line */}
+          <path d={xs.map((x, i) => `${i === 0 ? "M" : "L"}${x},${ys[i]}`).join(" ")} 
+            fill="none" stroke="#2563eb" strokeWidth={3} />
+
+          {/* Data points with conditional colors based on performance */}
+          {xs.map((x, i) => {
+            const score = points[i].score;
+            const pointColor = score >= excellentTarget ? "#16a34a" : 
+                             score >= goodTarget ? "#eab308" : 
+                             score >= acceptableTarget ? "#f97316" : "#ef4444";
+            const delta = deltas[i];
+            const deltaColor = delta === null ? pointColor : delta > 0 ? "#16a34a" : delta < 0 ? "#ef4444" : pointColor;
+            
+            return (
+              <g key={i}>
+                <circle cx={x} cy={ys[i]} r={5} fill={pointColor} stroke="#fff" strokeWidth="2">
+                  <title>{`Score: ${score}\nFecha: ${points[i].date.toLocaleString()}${delta == null ? "" : `\nΔ vs ant.: ${delta > 0 ? "+" : ""}${delta.toFixed(0)}`}`}</title>
+                </circle>
+                {/* Score label with background */}
+                <rect x={x - 12} y={ys[i] - 20} width="24" height="14" rx="2" fill="#fff" stroke="#e5e7eb" />
+                <text x={x} y={ys[i] - 10} fontSize={10} fontWeight="600" fill="#0f172a" textAnchor="middle">{score}</text>
+                
+                {/* Delta indicator for non-first points */}
+                {delta !== null && (
+                  <text x={x} y={ys[i] + 18} fontSize={9} fill={deltaColor} textAnchor="middle" fontWeight="500">
+                    {delta > 0 ? "↗" : delta < 0 ? "↘" : "→"}{Math.abs(delta)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
 
           {/* Interactive hover zones */}
           {xs.map((x, i) => (
@@ -97,16 +186,16 @@ function SecurityHistoryLineChart({ data, height = 420 }: { data: SecurityHistor
           ))}
 
           {/* Hover marker */}
-          {idx != null && (
+          {hover !== null && (
             <g>
-              <line x1={hoverX} x2={hoverX} y1={padding.top} y2={padding.top + innerH} stroke="#94a3b8" strokeDasharray="3 3" />
-              <circle cx={hoverX} cy={hoverY} r={5} fill="#1d4ed8" stroke="#fff" strokeWidth={2} />
+              <line x1={hoverX} x2={hoverX} y1={padding.top} y2={padding.top + innerH} stroke="#1d4ed8" strokeWidth="2" strokeDasharray="4 4" />
+              <circle cx={hoverX} cy={hoverY} r={7} fill="#1d4ed8" stroke="#fff" strokeWidth="3" />
             </g>
           )}
 
           {/* X labels with date + time */}
           {points.map((p, i) => {
-            const show = i % Math.max(1, Math.floor(points.length / 10)) === 0 || i === points.length - 1;
+            const show = i % Math.max(1, Math.floor(points.length / 8)) === 0 || i === points.length - 1;
             if (!show) return null;
             const lbl = p.date.toLocaleString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
             return (
@@ -114,15 +203,18 @@ function SecurityHistoryLineChart({ data, height = 420 }: { data: SecurityHistor
             );
           })}
 
-          {/* Tooltip (score + fecha + delta) */}
-          {hoverPt && (
-            <g transform={`translate(${hoverX + 8}, ${Math.max(hoverY - 44, padding.top + 6)})`}>
-              <rect width="230" height="40" rx="6" ry="6" fill="#0f172a" opacity={0.9} />
-              <text x={10} y={18} fontSize={12} fill="#fff">
-                {`Score ${hoverPt.score} — ${hoverPt.date.toLocaleString()}`}
+          {/* Enhanced tooltip */}
+          {hover !== null && hoverPt && (
+            <g transform={`translate(${Math.min(hoverX + 12, width - 280)}, ${Math.max(hoverY - 60, padding.top + 6)})`}>
+              <rect width="270" height="55" rx="8" ry="8" fill="#0f172a" opacity={0.95} />
+              <text x={12} y={18} fontSize={12} fill="#fff" fontWeight="600">
+                Score {hoverPt.score} — {hoverPt.date.toLocaleDateString()}
               </text>
-              <text x={10} y={33} fontSize={12} fill="#fff">
-                {hoverDelta == null ? "Inicio de serie" : `Δ vs anterior: ${hoverDelta > 0 ? "+" : ""}${hoverDelta.toFixed(0)}`}
+              <text x={12} y={33} fontSize={11} fill="#94a3b8">
+                {hoverPt.date.toLocaleTimeString()} • {hoverDelta == null ? "Inicio de serie" : `Cambio: ${hoverDelta > 0 ? "+" : ""}${hoverDelta.toFixed(0)}`}
+              </text>
+              <text x={12} y={47} fontSize={11} fill={hoverPt.score >= excellentTarget ? "#22c55e" : hoverPt.score >= goodTarget ? "#eab308" : hoverPt.score >= acceptableTarget ? "#fb923c" : "#ef4444"}>
+                {hoverPt.score >= excellentTarget ? "🎯 Excelente" : hoverPt.score >= goodTarget ? "👍 Bueno" : hoverPt.score >= acceptableTarget ? "⚠️ Aceptable" : "🚨 Crítico"}
               </text>
             </g>
           )}
@@ -182,46 +274,111 @@ export default function SecurityHistoricoView() {
         {history && history.length > 0 && (
           <div className="rounded-lg border p-3 mt-3">
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Evolución del score de seguridad</h3>
+              <h3 className="text-lg font-semibold">Análisis de Performance de Seguridad</h3>
             </div>
-            {/* Nueva gráfica funcional */}
+            {/* Nueva gráfica comparativa y orientada a objetivos */}
             <SecurityHistoryLineChart data={history} height={420} />
 
-            {/* Tabla comparativa de mediciones */}
+            {/* Tabla comparativa mejorada con objetivos */}
             {(() => {
               // preparar deltas vs medición anterior (orden cronológico asc)
               const asc = [...history].sort((a,b)=> new Date(a.fecha as any).getTime() - new Date(b.fecha as any).getTime());
-              const deltasMap = new Map<number, number | null>();
+              const deltasMap = new Map<number, { delta: number | null; status: string; trend: string }>();
+              
+              // Definir objetivos
+              const excellentTarget = 90;
+              const goodTarget = 75;
+              const acceptableTarget = 60;
+              
               for (let i=0;i<asc.length;i++) {
                 const ts = new Date(asc[i].fecha as any).getTime();
+                const current = asc[i].score as number;
                 const prev = i>0 ? asc[i-1] : null;
-                const d = prev && typeof asc[i].score === 'number' && typeof prev.score === 'number'
-                  ? (asc[i].score as number) - (prev.score as number)
+                const delta = prev && typeof current === 'number' && typeof prev.score === 'number'
+                  ? current - (prev.score as number)
                   : null;
-                deltasMap.set(ts, d);
+                
+                const status = current >= excellentTarget ? 'Excelente' : 
+                              current >= goodTarget ? 'Bueno' : 
+                              current >= acceptableTarget ? 'Aceptable' : 'Crítico';
+                
+                const trend = delta === null ? 'Inicial' : delta > 0 ? 'Mejora' : delta < 0 ? 'Deterioro' : 'Estable';
+                
+                deltasMap.set(ts, { delta, status, trend });
               }
+              
               const desc = [...asc].reverse();
+              
               return (
                 <div className="mt-4 overflow-x-auto">
+                  <div className="mb-3 text-sm text-slate-600">
+                    <strong>Objetivos:</strong> Excelente ≥90 • Bueno ≥75 • Aceptable ≥60 • Crítico &lt;60
+                  </div>
                   <table className="min-w-full text-sm">
                     <thead>
-                      <tr className="text-left text-slate-600 border-b">
-                        <th className="py-2 pr-4">Fecha y hora</th>
-                        <th className="py-2 pr-4">Score</th>
-                        <th className="py-2 pr-4">Δ vs anterior</th>
+                      <tr className="text-left text-slate-600 border-b bg-slate-50">
+                        <th className="py-3 px-3">Fecha y hora</th>
+                        <th className="py-3 px-3">Score</th>
+                        <th className="py-3 px-3">Estado</th>
+                        <th className="py-3 px-3">Tendencia</th>
+                        <th className="py-3 px-3">Dist. a Meta</th>
                       </tr>
                     </thead>
                     <tbody>
                       {desc.map((row, i) => {
                         const ts = new Date(row.fecha as any).getTime();
-                        const d = deltasMap.get(ts);
-                        const color = d == null ? '#64748b' : d > 0 ? '#16a34a' : d < 0 ? '#ef4444' : '#64748b';
-                        const sign = d == null ? '' : d > 0 ? '+' : '';
+                        const info = deltasMap.get(ts);
+                        const score = row.score as number;
+                        const distToTarget = excellentTarget - score;
+                        
+                        const statusColors: Record<string, string> = {
+                          'Excelente': 'text-green-700 bg-green-50',
+                          'Bueno': 'text-yellow-700 bg-yellow-50',
+                          'Aceptable': 'text-orange-700 bg-orange-50',
+                          'Crítico': 'text-red-700 bg-red-50'
+                        };
+                        
+                        const trendColors: Record<string, string> = {
+                          'Mejora': 'text-green-600',
+                          'Deterioro': 'text-red-600',
+                          'Estable': 'text-slate-600',
+                          'Inicial': 'text-slate-500'
+                        };
+                        
+                        const trendIcons: Record<string, string> = {
+                          'Mejora': '📈',
+                          'Deterioro': '📉',
+                          'Estable': '➡️',
+                          'Inicial': '🏁'
+                        };
+                        
+                        const status = info?.status || 'Crítico';
+                        const trend = info?.trend || 'Inicial';
+                        
                         return (
-                          <tr key={i} className="border-b last:border-0">
-                            <td className="py-2 pr-4 whitespace-nowrap">{new Date(row.fecha as any).toLocaleString()}</td>
-                            <td className="py-2 pr-4 font-medium">{row.score ?? '—'}</td>
-                            <td className="py-2 pr-4" style={{ color }}>{d == null ? '—' : `${sign}${d.toFixed(0)}`}</td>
+                          <tr key={i} className="border-b last:border-0 hover:bg-slate-25">
+                            <td className="py-2 px-3 whitespace-nowrap">{new Date(row.fecha as any).toLocaleString()}</td>
+                            <td className="py-2 px-3 font-bold text-lg">{score}</td>
+                            <td className="py-2 px-3">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[status]}`}>
+                                {status}
+                              </span>
+                            </td>
+                            <td className={`py-2 px-3 font-medium ${trendColors[trend]}`}>
+                              {trendIcons[trend]} {trend}
+                              {info?.delta !== null && info?.delta !== 0 && info?.delta !== undefined && (
+                                <span className="ml-1 text-xs">
+                                  ({info.delta > 0 ? '+' : ''}{info.delta})
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3">
+                              {distToTarget <= 0 ? (
+                                <span className="text-green-600 font-medium">🎯 Meta alcanzada</span>
+                              ) : (
+                                <span className="text-slate-600">-{distToTarget} pts</span>
+                              )}
+                            </td>
                           </tr>
                         );
                       })}

@@ -11,10 +11,10 @@ import SecurityHistoryPage from "./pages/security-history";
 
 export default function App() {
   return (
-    <>
+    <div className="min-h-screen w-full bg-gray-50">
       <Navbar />
-      <main className="main">
-        <div className="container">
+      <main className="w-full">
+        <div className="w-full">
           <Routes>
             {/* Home = página FSD con shadcn */}
             <Route path="/" element={<RunAuditPage />} />
@@ -29,6 +29,6 @@ export default function App() {
           </Routes>
         </div>
       </main>
-    </>
+    </div>
   );
 }

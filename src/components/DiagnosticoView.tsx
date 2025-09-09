@@ -418,28 +418,33 @@ function CategoryBreakdown({
           {items.map((it) => {
             const isNull = it.scorePct == null;
             return (
-              <div key={it.id} className="item" style={{ background: softBg("performance", it.scorePct) }}>
+              <div 
+                key={it.id} 
+                className="item" 
+                style={{ background: softBg("performance", it.scorePct) }}
+              >
                 <h4
                   className="item-label"
                   title={typeof it.description === "string" ? it.description : ""}
                 >
                   {it.title}
                 </h4>
-                <CircularGauge
-                  value={isNull ? 0 : it.scorePct!}
-                  max={100}
-                  color={isNull ? "#9ca3af" : gaugeColor("performance", it.scorePct)}
-                  decimals={0}
-                  suffix="" // sin símbolo
-                  size={120}
-                />
-                <p className="item-desc">
-                  {isNull
+                <div className="flex-1 flex items-center justify-center my-4">
+                  <CircularGauge
+                    value={isNull ? 0 : it.scorePct!}
+                    max={100}
+                    color={isNull ? "#9ca3af" : gaugeColor("performance", it.scorePct)}
+                    decimals={0}
+                    suffix="" // sin símbolo
+                    size={120}
+                  />
+                </div>
+                <div className="item-desc">{isNull
                     ? "—"
                     : it.savingsLabel
                     ? `Ahorro: ${it.savingsLabel}`
                     : it.displayValue || "—"}
-                </p>
+                </div>
               </div>
             );
           })}
@@ -727,28 +732,31 @@ function PerfBreakdownGrid({
         <CardTitle>Desglose de Performance</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="diagnostico-grid">
+        <div className="diagnostico-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
           {items.map((m) => {
             const isTime = m.id !== "performance" && m.id !== "cls";
             const isCLS = m.id === "cls";
             const v = m.value;
             const openInfo = !!openInfos[m.id];
             return (
-              <div key={m.id} className="item" style={{ background: softBg(m.id, v) }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px' }}>
-                  <strong style={{ fontSize: 13 }}>{m.label}</strong>
+              <div 
+                key={m.id} 
+                className="item" 
+                style={{ background: softBg(m.id, v) }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="item-label">{m.label}</h4>
                   <button
                     type="button"
                     className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
                     onClick={(e) => { e.stopPropagation(); setOpenInfos((s) => ({ ...s, [m.id]: !s[m.id] })); }}
                     aria-expanded={openInfo}
                     title="¿Qué es esto?"
-                    style={{ marginLeft: 8 }}
                   >
                     <Info size={14} strokeWidth={2.4} />
                   </button>
                 </div>
-                <div style={{ padding: 12, display: 'flex', justifyContent: 'center' }}>
+                <div className="flex-1 flex items-center justify-center my-4">
                   <CircularGauge
                     value={
                       v == null
@@ -766,7 +774,7 @@ function PerfBreakdownGrid({
                     size={120}
                   />
                 </div>
-                <p className="item-desc" style={{ marginBottom: 0, padding: '0 12px' }}>
+                <div className="item-value">
                   {v == null
                     ? "—"
                     : isTime
@@ -774,9 +782,9 @@ function PerfBreakdownGrid({
                     : isCLS
                     ? `${v.toFixed(2)}`
                     : `${v}`}
-                </p>
+                </div>
                 {openInfo && (
-                  <div style={{ padding: '8px 12px' }} className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-md mt-2">
+                  <div className="mt-3 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-md p-3">
                     {(perfMetricLong as any)[m.id] || "Información no disponible."}
                   </div>
                 )}
@@ -1404,28 +1412,28 @@ export default function DiagnosticoView() {
     const isPct = ["performance", "accessibility", "best-practices", "seo"].includes(item.id);
     const clickProps =
       item.id === "performance"
-        ? { onClick: () => setShowPerfDetails((v) => !v), style: { cursor: "pointer" } }
+        ? { onClick: () => setShowPerfDetails((v: boolean) => !v), style: { cursor: "pointer" } }
         : item.id === "accessibility"
-        ? { onClick: () => setShowAccDetails((v) => !v), style: { cursor: "pointer" } }
+        ? { onClick: () => setShowAccDetails((v: boolean) => !v), style: { cursor: "pointer" } }
         : item.id === "best-practices"
-        ? { onClick: () => setShowBPDetails((v) => !v), style: { cursor: "pointer" } }
+        ? { onClick: () => setShowBPDetails((v: boolean) => !v), style: { cursor: "pointer" } }
         : item.id === "seo"
-        ? { onClick: () => setShowSeoDetails((v) => !v), style: { cursor: "pointer" } }
+        ? { onClick: () => setShowSeoDetails((v: boolean) => !v), style: { cursor: "pointer" } }
         : {};
     const infoOpen = !!cardInfoOpen[item.id];
     return (
-      <div key={item.id} className="item" style={{ background: "#ffffff" }} {...(clickProps as any)}>
-        <h3 className="item-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {item.label}
+      <div key={item.id} className="item" style={{ background: softBg(item.id, item.value) }} {...(clickProps as any)}>
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <h3 className="item-label flex-shrink-0">{item.label}</h3>
           {trendByKey[item.id] && (
-            <span style={{ fontSize: 12, color: trendColor(trendByKey[item.id]) }}>
+            <span className="text-xs" style={{ color: trendColor(trendByKey[item.id]) }}>
               {trendSymbol(trendByKey[item.id])}
             </span>
           )}
           {/* NEW: keep info icon on all main cards */}
           <button
             type="button"
-            className="ml-1 inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
+            className="ml-auto flex-shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
             onClick={(e) => {
               e.stopPropagation();
               setCardInfoOpen((prev) => ({ ...prev, [item.id]: !prev[item.id] }));
@@ -1436,54 +1444,44 @@ export default function DiagnosticoView() {
           >
             <Info size={14} strokeWidth={2.4} />
           </button>
-          {item.id === "performance" && (
-            <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
-              {showPerfDetails ? "Ocultar desgloses" : "Mostrar desgloses"}
-            </span>
-          )}
-          {item.id === "accessibility" && (
-            <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
-              {showAccDetails ? "Ocultar desglose" : "Mostrar desglose"}
-            </span>
-          )}
-          {item.id === "best-practices" && (
-            <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
-              {showBPDetails ? "Ocultar desglose" : "Mostrar desglose"}
-            </span>
-          )}
-          {item.id === "seo" && (
-            <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
-              {showSeoDetails ? "Ocultar desglose" : "Mostrar desglose"}
-            </span>
-          )}
-        </h3>
+        </div>
 
-        {item.id === "performance" ? (
-          <>
-            <div className="w-full min-h-[160px] flex items-center justify-center">
-              <CategoryDial metricId={item.id} value={item.value} size={110} strokeWidth={10} />
-            </div>
-            <p className="item-desc">
-              {item.value == null ? "N/A" : `${item.value}`} — {item.desc}
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="w-full min-h-[160px] flex items-center justify-center">
-              <CategoryDial metricId={item.id} value={item.value} size={110} strokeWidth={10} />
-            </div>
-            <p className="item-desc">
-              {item.value == null
-                ? "N/A"
-                : isPct
-                ? `${item.value}`
-                : `${(item.value as number).toFixed(1)}s`} {" "}
-              — {item.desc}
-            </p>
-          </>
+        {/* Texto de ayuda para interactividad */}
+        {item.id === "performance" && (
+          <div className="text-xs text-gray-500 mb-3">
+            {showPerfDetails ? "👆 Clic para ocultar desgloses" : "👆 Clic para mostrar desgloses"}
+          </div>
         )}
+        {item.id === "accessibility" && (
+          <div className="text-xs text-gray-500 mb-3">
+            {showAccDetails ? "👆 Clic para ocultar desglose" : "👆 Clic para mostrar desglose"}
+          </div>
+        )}
+        {item.id === "best-practices" && (
+          <div className="text-xs text-gray-500 mb-3">
+            {showBPDetails ? "👆 Clic para ocultar desglose" : "👆 Clic para mostrar desglose"}
+          </div>
+        )}
+        {item.id === "seo" && (
+          <div className="text-xs text-gray-500 mb-3">
+            {showSeoDetails ? "👆 Clic para ocultar desglose" : "👆 Clic para mostrar desglose"}
+          </div>
+        )}
+
+        {/* Gauge centrado */}
+        <div className="flex-1 flex items-center justify-center my-4">
+          <CategoryDial metricId={item.id} value={item.value} size={110} strokeWidth={10} />
+        </div>
+        
+        {/* Valor y descripción */}
+        <div className="item-value">
+          {item.value == null ? "N/A" : `${item.value}`}
+        </div>
+        <div className="item-desc">
+          {item.desc}
+        </div>
         {infoOpen && (
-          <div className="mt-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-md p-2" role="note">
+          <div className="mt-3 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-md p-3 leading-relaxed" role="note">
             {cardInfoText[item.id] || item.desc}
           </div>
         )}
@@ -1493,102 +1491,142 @@ export default function DiagnosticoView() {
 
   // =================== UI ===================
   return (
-    <Card>
-      <CardContent>
-        <div ref={contenedorReporteRef} className="w-full" style={{ overflowX: "hidden" }}>
-          <div className="flex items-center gap-4 mb-2">
-            <Link to="/" className="back-link">Nuevo diagnóstico</Link>
-            {!!url && activeDiag === 'performance' && (
-              <Link
-                to={`/historico?url=${encodeURIComponent(url as string)}`}
-                className="back-link"
+    <div className="w-full min-h-screen bg-gray-50 overflow-visible">
+      <div className="w-full px-2 sm:px-4 lg:px-6 py-4 overflow-visible">
+        <Card className="w-full bg-white shadow-lg border-0 rounded-lg overflow-visible">
+          <CardContent className="p-4 sm:p-6 lg:p-8">
+            <div ref={contenedorReporteRef} className="w-full space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 mb-6">
+              <Link 
+                to="/" 
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors duration-200 border border-blue-200 hover:border-blue-300"
               >
-                Ver histórico de esta URL
+                ← Nuevo diagnóstico
               </Link>
-            )}
-            {!!url && activeDiag === 'security' && (
-              <Link
-                to={`/security-history?url=${encodeURIComponent(url as string)}`}
-                className="back-link"
+              {!!url && activeDiag === 'performance' && (
+                <Link
+                  to={`/historico?url=${encodeURIComponent(url as string)}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200 border border-gray-200 hover:border-gray-300"
+                >
+                  📊 Ver histórico de esta URL
+                </Link>
+              )}
+              {!!url && activeDiag === 'security' && (
+                <Link
+                  to={`/security-history?url=${encodeURIComponent(url as string)}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200 border border-gray-200 hover:border-gray-300"
+                >
+                  🔒 Ver histórico de esta URL
+                </Link>
+              )}
+            </div>
+
+            {/* UI Buttons for diagnostics (centrado arriba del título) */}
+            {bothMode && (
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8 px-4">
+              <Button 
+                className={`px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-300 shadow-sm hover:shadow-md border-0 min-w-[280px] ${
+                  activeDiag === 'performance' 
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-700 text-white hover:-translate-y-0.5' 
+                    : 'bg-white text-blue-600 hover:bg-blue-50 border border-blue-200'
+                }`}
+                onClick={() => {
+                  setActiveDiag('performance');
+                }} 
+                variant="outline"
               >
-                Ver histórico de esta URL
-              </Link>
+                📊 Ver diagnóstico Performance
+              </Button>
+              <Button 
+                className={`px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-300 shadow-sm hover:shadow-md border-0 min-w-[280px] ${
+                  activeDiag === 'security' 
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-700 text-white hover:-translate-y-0.5' 
+                    : 'bg-white text-blue-600 hover:bg-blue-50 border border-blue-200'
+                }`}
+                onClick={() => {
+                  setActiveDiag('security');
+                }} 
+                variant="outline"
+              >
+                🔒 Ver diagnóstico de Seguridad
+              </Button>
+            </div>
             )}
-          </div>
 
-          {/* UI Buttons for diagnostics (centrado arriba del título) */}
-          {bothMode && (
-          <div className="diagnostico-btn-group justify-center text-center">
-            <Button 
-              style={{
-                background: activeDiag === 'performance' ? 'linear-gradient(to right, #3b82f6, #2563eb)' : '#ffffff',
-                color: activeDiag === 'performance' ? '#ffffff' : '#2563eb',
-                border: 'none',
-                transition: 'all 0.3s ease',
-                padding: '10px 20px',
-                borderRadius: '6px',
-                fontWeight: 500
-              }}
-              onClick={() => {
-                setActiveDiag('performance');
-              }} 
-              variant="outline"
-            >
-              Ver diagnóstico Performance
-            </Button>
-            <Button 
-              style={{
-                background: activeDiag === 'security' ? 'linear-gradient(to right, #3b82f6, #2563eb)' : '#ffffff',
-                color: activeDiag === 'security' ? '#ffffff' : '#2563eb',
-                border: 'none',
-                transition: 'all 0.3s ease',
-                padding: '10px 20px',
-                borderRadius: '6px',
-                fontWeight: 500
-              }}
-              onClick={() => {
-                setActiveDiag('security');
-              }} 
-              variant="outline"
-            >
-              Ver diagnóstico de Seguridad
-            </Button>
-          </div>
-          )}
-
-          <h2 className="diagnostico-title">
-            Diagnóstico de <span className="url">{url}</span>
-          </h2>
+            <div className="text-center mb-6 sm:mb-8">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 leading-tight mb-2">
+                Diagnóstico de 
+              </h1>
+              <p className="text-lg sm:text-xl text-blue-600 font-semibold break-all max-w-4xl mx-auto px-2">
+                {url}
+              </p>
+            </div>
 
           {/* Show strategy tabs only for performance */}
           {activeDiag === 'performance' && (
-            <div className="w-full flex justify-center mb-2">
+            <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-3 mb-4 px-2 overflow-visible">
               <Tabs value={strategy} onValueChange={(v)=>{ setPerfLoading(true); setStrategy((v as 'mobile'|'desktop')); }}>
-                <TabsList className="bg-[#e9eefb] rounded-xl p-1">
+                <TabsList className="bg-[#e9eefb] rounded-xl p-1 w-full sm:w-auto">
                   <TabsTrigger
                     value="mobile"
-                    className="w-40 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                    className="flex-1 sm:w-32 lg:w-40 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs sm:text-sm"
                     disabled={perfLoading}
                   >
-                    <span role="img" aria-label="mobile" className="mr-2">📱</span>
-                    Móvil
+                    <span role="img" aria-label="mobile" className="mr-1 sm:mr-2">📱</span>
+                    <span className="hidden sm:inline">Móvil</span>
+                    <span className="sm:hidden">Móv</span>
                     {perfLoading && strategy === 'mobile' && (
-                      <span className="ml-2 text-xs opacity-80">Cargando…</span>
+                      <span className="ml-1 sm:ml-2 text-xs opacity-80 hidden sm:inline">Cargando…</span>
                     )}
                   </TabsTrigger>
                   <TabsTrigger
                     value="desktop"
-                    className="w-40 data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+                    className="flex-1 sm:w-32 lg:w-40 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs sm:text-sm"
                     disabled={perfLoading}
                   >
-                    <span role="img" aria-label="desktop" className="mr-2">🖥</span>
-                    Ordenador
+                    <span role="img" aria-label="desktop" className="mr-1 sm:mr-2">🖥</span>
+                    <span className="hidden sm:inline">Ordenador</span>
+                    <span className="sm:hidden">PC</span>
                     {perfLoading && strategy === 'desktop' && (
-                      <span className="ml-2 text-xs opacity-80">Cargando…</span>
+                      <span className="ml-1 sm:ml-2 text-xs opacity-80 hidden sm:inline">Cargando…</span>
                     )}
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
+              
+              {/* Info icon para explicar las estrategias de testing */}
+              <div 
+                className="relative group cursor-help flex-shrink-0"
+                title="Información sobre las estrategias de testing"
+              >
+                <Info 
+                  size={18} 
+                  className="text-blue-600 hover:text-blue-700 transition-colors" 
+                />
+                <div className="absolute left-1/2 transform -translate-x-1/2 bottom-full mb-2 w-80 sm:w-96 p-3 sm:p-4 bg-slate-900 text-white text-sm rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+                  <div className="font-semibold mb-2 text-sm">🔍 Estrategias de Testing - Google PageSpeed API</div>
+                  <div className="space-y-2 sm:space-y-3 text-xs leading-relaxed">
+                    <div>
+                      <strong className="text-blue-300">📱 Móvil:</strong>
+                      <br />• Simula un Moto G4 con conexión 3G lenta
+                      <br />• Viewport: 412x823px, densidad 2.625x
+                      <br />• Throttling: CPU 4x más lento, red 3G (1.6Mbps down, 750Kbps up)
+                      <br />• Métricas más estrictas para reflejar dispositivos reales
+                    </div>
+                    <div>
+                      <strong className="text-orange-300">🖥 Ordenador:</strong>
+                      <br />• Simula un desktop con conexión rápida
+                      <br />• Viewport: 1350x940px
+                      <br />• Sin throttling de CPU, conexión de escritorio típica
+                      <br />• Umbrales más permisivos para LCP, FCP, etc.
+                    </div>
+                    <div className="pt-2 border-t border-slate-700">
+                      <strong className="text-green-300">💡 Tip:</strong> Google recomienda priorizar la experiencia móvil ya que representa ~60% del tráfico web.
+                    </div>
+                  </div>
+                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-900"></div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1683,7 +1721,7 @@ export default function DiagnosticoView() {
                   }
                 />
                 {/* Grid principal: performance + categorías */}
-                <div className="diagnostico-grid w-full">
+                <div className="diagnostico-grid">
                   {renderCard(perfCard)}
                   {categoryCards.map(renderCard)}
                 </div>
@@ -1766,8 +1804,10 @@ export default function DiagnosticoView() {
               </div>
             </div>
           )}
-        </div>
-      </CardContent>
-    </Card>
+          </div>
+        </CardContent>
+      </Card>
+      </div>
+    </div>
   );
 }
