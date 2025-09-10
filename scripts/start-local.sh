@@ -1,6 +1,6 @@
 #start-local.sh
 #Script para iniciar todos los servicios en modo desarrollo localmente
-# chmod +x scripts/start-local.sh (darle permisos a un documento para que sea local) 
+# chmod +x scripts/start-local.sh - chmod +x scripts/*.sh (darle permisos a un documento para que sea local) 
 #ejecutarlo: ./scripts/start-local.sh
 
 echo "🚀 Iniciando microservicio PageSpeed en modo desarrollo..."

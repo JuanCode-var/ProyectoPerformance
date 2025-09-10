@@ -3,9 +3,9 @@
    ------------------------------------------------------ */
 
 @layer components {
-  /* Card principal */
+  /* Card principal con proporciones profesionales mejoradas */
   .card {
-    @apply relative mx-auto my-8 max-w-[1400px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-8 shadow-2xl backdrop-blur-md;
+    @apply relative mx-auto my-8 max-w-[750px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-8 shadow-lg backdrop-blur-md;
   }
   .card::before {
     content: "";
@@ -54,12 +54,15 @@
     animation: spin 1s linear infinite;
   }
 
-  /* Grid principal de gauges */
+  /* Grid principal de gauges con límite profesional mejorado */
   .gauges-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
     gap: 32px;
     margin-top: 32px;
+    max-width: 1400px; /* aumentado para mejor distribución */
+    margin-left: auto;
+    margin-right: auto;
   }
 
   /* Tarjeta métrica */
@@ -87,7 +90,7 @@
   }
   .carousel-btn:hover:not(:disabled) { @apply scale-105 border-blue-500 bg-blue-500 text-white shadow-md; }
 
-  /* Área central del gauge */
+  /* Área central del gauge - tamaño profesional restaurado */
   .carousel-gauge {
     @apply min-w-[200px] rounded-xl border-2 border-slate-200 bg-slate-50 p-5 text-center shadow-sm transition;
   }
@@ -109,9 +112,12 @@
   /* Label de métricas */
   .item-label { @apply mb-4 text-center text-sm font-semibold uppercase tracking-wide text-slate-900; }
 
-  /* Tabs */
+  /* Tabs con proporciones equilibradas mejoradas */
   .tabs {
     @apply mb-6 flex gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1;
+    max-width: 750px; /* aumentado para mejor proporción */
+    margin-left: auto;
+    margin-right: auto;
   }
   .tab-button {
     @apply flex-1 cursor-pointer rounded-lg border-0 bg-transparent px-5 py-3 text-sm font-medium text-slate-500 transition;

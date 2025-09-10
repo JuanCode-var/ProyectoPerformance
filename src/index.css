@@ -18,6 +18,17 @@
     padding: 0;
   }
   
+  /* Escala global normalizada */
+  html { font-size: 14px; }
+  @media (min-width: 1280px) { html { font-size: 15px; } }
+  @media (max-width: 480px) { html { font-size: 16px; } }
+
+  /* Pantalla completa: sin padding lateral global. Compensar navbar fijo */
+  body { 
+    padding-top: 4rem; 
+    background: #f8fafc !important; /* fondo plano, sin gradientes que creen "bandas" */
+  }
+  
   /* Asegurar que no haya limitaciones de ancho */
   *, *::before, *::after {
     box-sizing: border-box;
@@ -30,33 +41,29 @@
   }
 }
 
-/* Estilos globales para TODOS los botones */
-button, [role="button"], .btn, .tab-button, .checkbox-item, input[type="submit"], input[type="button"] {
+/* Interactivos: transición y cursor, sin imponer estilos visuales agresivos */
+button, [role="button"], .btn, input[type="submit"], input[type="button"] {
   cursor: pointer !important;
-  transition: all 0.3s ease !important;
+  transition: all 0.2s ease !important;
 }
 
-/* Efectos hover azules para todos los botones */
-button:hover:not(:disabled), 
-[role="button"]:hover:not(:disabled), 
-.btn:hover:not(:disabled), 
-.tab-button:hover:not(.active):not(:disabled),
-.checkbox-item:hover:not(:disabled),
-input[type="submit"]:hover:not(:disabled), 
-input[type="button"]:hover:not(:disabled) {
+/* Hover global (opt-in a través de .btn o [data-variant]) para no afectar componentes específicos */
+.btn:hover:not(:disabled),
+button.btn:hover:not(:disabled),
+button[data-variant]:hover:not(:disabled),
+[role="button"][data-variant]:hover:not(:disabled) {
   background-color: rgba(59, 130, 246, 0.1) !important;
   color: #1d4ed8 !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2) !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.18) !important;
 }
 
-/* Remover decoraciones de texto subrayado */
-button, [role="button"], .btn, .tab-button {
+/* Remover decoraciones de texto subrayado en elementos que parecen botones */
+button, [role="button"], .btn {
   text-decoration: none !important;
   border-bottom: none !important;
 }
 
-/* Estilos específicos para tabs activos */
+/* Estilos específicos para tabs activos (mantener) */
 .tab-button.active, [data-state="active"] {
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
   color: white !important;
@@ -70,8 +77,7 @@ button, [role="button"], .btn, .tab-button {
 /* Asegurar que todos los elementos interactivos tengan cursor pointer */
 a, button, input[type="submit"], input[type="button"], input[type="reset"], 
 select, [role="button"], [role="tab"], [role="menuitem"], [role="option"],
-.clickable, .interactive, .btn, .tab-button, .checkbox-item, 
-[onclick], [data-toggle], [data-dismiss] {
+.clickable, .interactive, .btn, [onclick], [data-toggle], [data-dismiss] {
   cursor: pointer !important;
 }
 

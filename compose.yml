@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:6
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  micro-pagespeed:
+    build: ./microPagespeed
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PS_PORT=3001
+      - PSI_API_KEY=AIzaSyCX_fQrS880HJ_rNsush2O54b6Ilcynbhc
+    ports:
+      - "3001:3001"
+
+  security-service:
+    build: ./security-service
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+    ports:
+      - "3002:3002"
+
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - MONGO_URI=mongodb://mongo:27017/BD_Diagnostico_Rendimiento
+      - MS_PAGESPEED_URL=http://micro-pagespeed:3001
+      - MS_SECURITY_URL=http://security-service:3002
+      - REDIS_ENABLED=false
+    depends_on:
+      - mongo
+      - micro-pagespeed
+      - security-service
+    ports:
+      - "4000:4000"
+
+  web:
+    build:
+      context: .
+      dockerfile: src/Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  mongo_data:

@@ -213,7 +213,7 @@ export default function Formulario() {
             <div className="form-header">
               <motion.div className="logo-container" whileHover={{ rotate: 2, scale: 1.02 }}>
                 <img
-                  src="../../public/LogoChoucair.png"
+                  src="/LogoChoucair.png"
                   alt="Choucair Business Centric Testing"
                   className="logo-img-form"
                 />

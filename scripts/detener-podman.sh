@@ -1,28 +1,31 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Detener todo: ./scripts/detener-podman.sh
+set -euo pipefail
 
-echo '[33m⏹️ Deteniendo y eliminando contenedores...[0m'
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
 
-for container in web api micro-pagespeed mongo; do
-  if podman container exists $container; then
-    echo "[34mDeteniendo $container...[0m"
-    podman stop $container
-    echo "[31mEliminando $container...[0m"
-    podman rm $container
-  else
-    echo "[90mContenedor $container no existe. Saltando...[0m"
-  fi
-done
+COMPOSE="podman compose"
 
-read -p '¿Deseas eliminar el volumen mongo_data también? (s/n): ' eliminar_volumen
-if [[ $eliminar_volumen == "s" ]]; then
+printf '⏹️  Deteniendo stack...\n'
+$COMPOSE down || true
+
+read -r -p '¿Eliminar el volumen de Mongo (mongo_data)? [s/N]: ' RM_VOL
+if [[ "${RM_VOL:-N}" =~ ^[sS]$ ]]; then
   if podman volume exists mongo_data; then
-    echo '[31mEliminando volumen mongo_data...[0m'
-    podman volume rm mongo_data
+    echo '🧹 Eliminando volumen mongo_data...'
+    podman volume rm mongo_data || true
   else
-    echo '[90mVolumen mongo_data no existe. Nada que eliminar.[0m'
+    echo 'ℹ️  Volumen mongo_data no existe.'
   fi
 else
-  echo '[32mVolumen mongo_data conservado.[0m'
+  echo '✅ Volumen mongo_data conservado.'
 fi
 
-echo '[32m✅ Limpieza completada.[0m'
+read -r -p '¿Eliminar imágenes construidas (web, api, micro-pagespeed, security-service)? [s/N]: ' RM_IMG
+if [[ "${RM_IMG:-N}" =~ ^[sS]$ ]]; then
+  echo '🧹 Eliminando imágenes...'
+  podman images | awk '/pulsechoukairperformancert-|pulsechoukair\/|micro-pagespeed|security-service/ {print $3}' | xargs -r podman rmi -f || true
+fi
+
+printf '✅ Limpieza completada.\n'

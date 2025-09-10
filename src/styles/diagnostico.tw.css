@@ -41,15 +41,16 @@
 
 /* ========== COMPONENTS (UI reutilizable) ========== */
 @layer components {
-  /* Contenedor responsivo */
-  .screen-wrap { @apply max-w-[1280px] mx-auto px-4 md:px-6 lg:px-8; }
+  /* Contenedor responsivo con ancho profesional mejorado */
+  .screen-wrap { @apply max-w-[1400px] mx-auto px-6 md:px-8 lg:px-10; }
 
-  /* Card principal */
+  /* Card principal con proporciones profesionales mejoradas */
   .card {
     @apply relative mx-auto my-8 rounded-2xl border p-8 backdrop-blur;
     background: var(--bg-primary);
-    box-shadow: var(--shadow-xl);
+    box-shadow: var(--shadow-lg); /* sombra más sutil */
     overflow: hidden;
+    max-width: 750px; /* aumentado para mejor lectura */
   }
   .card::before {
     content: "";
@@ -98,10 +99,13 @@
   /* Grid de tarjetas principales - más responsive */
   .diagnostico-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
     margin-top: 24px;
     width: 100%;
+    max-width: 1400px; /* límite para evitar que se extienda demasiado */
+    margin-left: auto;
+    margin-right: auto;
   }
   
   /* Media queries para ajustar columnas específicas por pantalla */
@@ -127,13 +131,13 @@
     }
   }
 
-  /* Tarjetas individuales mejoradas */
+  /* Tarjetas individuales mejoradas para errores detectados */
   .item {
     @apply relative overflow-hidden rounded-xl border text-center transition-all duration-300;
     background: var(--bg-primary);
     box-shadow: var(--shadow-sm);
-    padding: 16px 12px;
-    min-height: 180px;
+    padding: 20px 16px;
+    min-height: 200px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;

@@ -28,7 +28,7 @@ PulseChoukairPerformanceRT #
 │   ├── servicios-choucair.jpg # 
 │   ├── study.jpg # 
 │   ├── test-performance.jpg # 
-│   ├── tipos-pruebas.jpg # 
+│   ├── tipos-pruebas.jpg #                                         
 │   └── vite.svg # 
 ├── scripts # 
 │   ├── detener-podman.sh # 
@@ -91,6 +91,7 @@ PulseChoukairPerformanceRT #
 │   │   ├── MetricsDashboard.tsx # 
 │   │   ├── Navbar.tsx # 
 │   │   ├── SecurityDiagnosticoPanel.tsx # 
+│   │   ├── SecurityHistoricoView.tsx # 
 │   │   └── SecurityScoreWidget.tsx # 
 │   ├── entities # 
 │   │   └── audit # 
@@ -112,7 +113,9 @@ PulseChoukairPerformanceRT #
 │   │   │   └── index.tsx # 
 │   │   ├── history # 
 │   │   │   └── index.tsx # 
-│   │   └── run-audit # 
+│   │   ├── run-audit # 
+│   │   │   └── index.tsx # 
+│   │   └── security-history # 
 │   │       └── index.tsx # 
 │   ├── processes # 
 │   │   └── audit-run-flow # 

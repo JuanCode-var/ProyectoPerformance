@@ -1,18 +1,18 @@
 /* ===== NAVBAR MODERNO ===== */
 .modern-navbar {
-  position: sticky;
+  position: fixed; /* was: sticky */
   top: 0;
   z-index: 1000;
-  background: linear-gradient(135deg, #fafafa 0%, #eeeeee 100%);
+  background: #ffffff; /* fondo sólido para evitar banding */
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(29, 78, 216, 0.1);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  /* border-bottom: 1px solid rgba(29, 78, 216, 0.1); */ /* remove bottom border */
+  box-shadow: none; /* sin sombra para que no parezca borde */
   transition: all 0.3s ease;
 }
 
 .modern-navbar.scrolled {
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  background: #ffffff; /* mantener sólido */
+  box-shadow: none; /* sin sombra para que no parezca borde */
 }
 
 .navbar-container {
