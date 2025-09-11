@@ -655,10 +655,6 @@ function CategoryDial({
   const safe = typeof value === "number" ? value : 0;
   const tint = softTint(metricId, value);
 
-  // Diámetro interno: igual al diámetro del gauge (size - strokeWidth) con un factor
-  // para dejar margen con el anillo. Ajusta 0.80 si lo quieres un pelín más grande/pequeño.
-  const innerDiameter = Math.max((size - strokeWidth) * 0.90, 0);
-
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <CircularGauge
@@ -669,11 +665,11 @@ function CategoryDial({
         strokeWidth={strokeWidth}
         decimals={0}
         suffix=""
-        textColor="#111827" // Mostramos el número centrado en el SVG
+        textColor="#111827"
         trackColor="#e5e7eb"
         showValue={true}
         centerFill={tint}
-        centerRadiusPct={0.90}
+        centerRadiusPct={0.98}
       />
     </div>
   );
@@ -1524,6 +1520,41 @@ export default function DiagnosticoView() {
             <div className="w-full min-h-[160px] flex items-center justify-center">
               <CategoryDial metricId={item.id} value={item.value} size={110} strokeWidth={10} />
             </div>
+            {/* Escala visual completa para otras métricas */}
+            <div className="flex flex-col items-center gap-3 mb-2">
+              {/* Escala completa siempre visible */}
+              <div className="flex flex-wrap justify-center gap-1 text-xs">
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
+                  item.value != null && item.value < 50 
+                    ? 'bg-red-50 border-red-200 text-red-700 font-medium' 
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}>
+                  <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                  <span>Malo (0-49)</span>
+                </div>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
+                  item.value != null && item.value >= 50 && item.value < 90 
+                    ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium' 
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}>
+                  <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                  <span>Medio (50-89)</span>
+                </div>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
+                  item.value != null && item.value >= 90 
+                    ? 'bg-green-50 border-green-200 text-green-700 font-medium' 
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}>
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span>Bueno (90-100)</span>
+                </div>
+              </div>
+              
+              {/* Texto explicativo pequeño */}
+              <p className="text-xs text-center text-slate-500 max-w-[240px] leading-tight">
+                El estado actual se resalta según el puntaje obtenido
+              </p>
+            </div>
             <p className="item-desc">
               {item.value == null
                 ? "N/A"
@@ -1964,10 +1995,6 @@ export default function DiagnosticoView() {
                     <p className="text-sm text-slate-500">No hay datos de seguridad disponibles.</p>
                   )}
                 </div>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <Button onClick={() => setShowCombinedSummary(false)} variant="outline">Cerrar</Button>
               </div>
             </div>
           </div>

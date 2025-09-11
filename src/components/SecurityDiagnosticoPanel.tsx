@@ -145,62 +145,99 @@ const HEADER_INFO: Record<string, HeaderMeta> = {
     description: "Evita que la página sea embebida en iframes (clickjacking).",
     recommendation: "Use DENY o SAMEORIGIN según el caso.",
     learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options",
-    why: "Protege contra ataques de clickjacking.",
+    why: "Protege contra ataques de clickjacking que pueden engañar a usuarios para hacer clic en elementos ocultos.",
     expected: "X-Frame-Options: DENY",
+    nginx: "add_header X-Frame-Options \"DENY\" always;",
+    apache: "Header always set X-Frame-Options \"DENY\"",
+    express: "res.set('X-Frame-Options', 'DENY');",
   },
   "x-content-type-options": {
     title: "X-Content-Type-Options",
     description: "Evita que el navegador haga MIME sniffing.",
     recommendation: "Use X-Content-Type-Options: nosniff.",
     learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options",
+    why: "Previene ataques basados en MIME confusion donde el navegador interpreta archivos de forma diferente a la especificada.",
     expected: "X-Content-Type-Options: nosniff",
+    nginx: "add_header X-Content-Type-Options \"nosniff\" always;",
+    apache: "Header always set X-Content-Type-Options \"nosniff\"",
+    express: "res.set('X-Content-Type-Options', 'nosniff');",
   },
   "referrer-policy": {
     title: "Referrer-Policy",
     description: "Controla cuánta información de referencia se envía.",
     recommendation: "Use 'strict-origin-when-cross-origin' o más restrictivo.",
     learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Referrer-Policy",
+    why: "Protege la privacidad limitando qué información se envía en el encabezado Referer a otros sitios.",
     expected: "Referrer-Policy: strict-origin-when-cross-origin",
+    nginx: "add_header Referrer-Policy \"strict-origin-when-cross-origin\" always;",
+    apache: "Header always set Referrer-Policy \"strict-origin-when-cross-origin\"",
+    express: "res.set('Referrer-Policy', 'strict-origin-when-cross-origin');",
   },
   "permissions-policy": {
     title: "Permissions-Policy",
     description: "Restringe APIs del navegador (geolocación, cámara, etc.).",
     recommendation: "Defina políticas por defecto lo más restrictivas posible.",
     learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Permissions_Policy",
+    why: "Mejora la seguridad y privacidad limitando qué APIs del navegador pueden usar scripts o iframes embebidos.",
     expected: "Permissions-Policy: geolocation=(), camera=(), microphone=()",
+    nginx: "add_header Permissions-Policy \"geolocation=(), camera=(), microphone=()\" always;",
+    apache: "Header always set Permissions-Policy \"geolocation=(), camera=(), microphone=()\"",
+    express: "res.set('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');",
   },
   "cross-origin-opener-policy": {
     title: "Cross-Origin-Opener-Policy",
     description: "Aísla el contexto del documento para mayor seguridad.",
     recommendation: "Use same-origin si es posible.",
     learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cross-Origin-Opener-Policy",
+    why: "Protege contra ataques de cross-origin que podrían acceder a tu ventana a través de window.opener.",
     expected: "Cross-Origin-Opener-Policy: same-origin",
+    nginx: "add_header Cross-Origin-Opener-Policy \"same-origin\" always;",
+    apache: "Header always set Cross-Origin-Opener-Policy \"same-origin\"",
+    express: "res.set('Cross-Origin-Opener-Policy', 'same-origin');",
   },
   "cross-origin-embedder-policy": {
     title: "Cross-Origin-Embedder-Policy",
     description: "Requerido para aislar recursos y habilitar ciertas APIs.",
     recommendation: "Use require-corp si es posible.",
     learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cross-Origin-Embedder-Policy",
+    why: "Habilita características avanzadas del navegador como SharedArrayBuffer y mejora el aislamiento de recursos.",
     expected: "Cross-Origin-Embedder-Policy: require-corp",
+    nginx: "add_header Cross-Origin-Embedder-Policy \"require-corp\" always;",
+    apache: "Header always set Cross-Origin-Embedder-Policy \"require-corp\"",
+    express: "res.set('Cross-Origin-Embedder-Policy', 'require-corp');",
   },
   "cache-control": {
     title: "Cache-Control",
     description: "Controla el cacheo del contenido (útil para información sensible).",
     recommendation: "Para contenido sensible: no-store, no-cache, must-revalidate.",
     learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control",
+    why: "Previene que información sensible se almacene en cachés de navegadores o proxies intermedios.",
     expected: "Cache-Control: no-store, no-cache, must-revalidate",
+    nginx: "add_header Cache-Control \"no-store, no-cache, must-revalidate\" always;",
+    apache: "Header always set Cache-Control \"no-store, no-cache, must-revalidate\"",
+    express: "res.set('Cache-Control', 'no-store, no-cache, must-revalidate');",
   },
   server: {
     title: "Server",
     description: "Exponer la tecnología del servidor puede ayudar a fingerprinting.",
     recommendation: "Oculte o generalice el valor del header Server.",
     learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server",
+    why: "Evita revelar información sobre la tecnología del servidor que podrían usar atacantes para identificar vulnerabilidades específicas.",
+    expected: "Server: (oculto o genérico)",
+    nginx: "server_tokens off;",
+    apache: "ServerTokens Prod\nServerSignature Off",
+    express: "app.disable('x-powered-by'); // Para ocultar Express",
   },
   "x-powered-by": {
     title: "X-Powered-By",
     description: "Divulga la tecnología usada (Express, PHP, etc.).",
     recommendation: "Elimínelo para evitar fuga de información.",
     learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Powered-By",
+    why: "Oculta información sobre el framework o tecnología utilizada, reduciendo la superficie de ataque.",
+    expected: "(sin encabezado)",
+    nginx: "# No se envía por defecto en nginx",
+    apache: "# Remover con mod_headers si se agrega",
+    express: "app.disable('x-powered-by');",
   },
 };
 
@@ -397,6 +434,25 @@ export default function SecurityDiagnosticoPanel({
   const [securityResult, setSecurityResult] = useState<any>(null);
   // NEW: history for sparkline in widget inside this panel
   const [securityHistory, setSecurityHistory] = useState<Array<{ fecha: string | number | Date; score: number | null }>>([]);
+  // Estado para tooltips informativos
+  const [showTestsTooltip, setShowTestsTooltip] = useState(false);
+  const [showHeadersTooltip, setShowHeadersTooltip] = useState(false);
+
+  // Cerrar tooltips al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.tooltip-container')) {
+        setShowTestsTooltip(false);
+        setShowHeadersTooltip(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const [showSecurityAbout, setShowSecurityAbout] = useState(false);
   const [expandedHeaders, setExpandedHeaders] = useState<Record<string, boolean>>({});
@@ -608,8 +664,29 @@ export default function SecurityDiagnosticoPanel({
                 id="about-panel"
                 className={`text-sm text-slate-600 mt-2 transition-all ${showSecurityAbout ? "opacity-100" : "opacity-0 hidden"}`}
               >
-                El análisis revisa encabezados HTTP, cookies y hallazgos derivados. Proporciona
-                recomendaciones y un puntaje orientativo para ayudar a priorizar correcciones.
+                <div className="space-y-3">
+                  <p>
+                    El diagnóstico de seguridad se basa exclusivamente en evidencias objetivas de la respuesta HTTP real del sitio 
+                    (cabeceras, cookies, redirecciones y un análisis superficial del HTML). No inventa datos, no altera el servidor 
+                    y usa mejores prácticas de referencia (OWASP / MDN).
+                  </p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                    <div>✓ Fuente primaria: Cabeceras y cookies reales (verificable)</div>
+                    <div>✓ Sin modificación del sistema auditado</div>
+                    <div>✓ Reglas alineadas a estándares seguros comunes</div>
+                    <div>⚠️ Limitado a superficie de cabeceras (no pentest completo)</div>
+                  </div>
+                  
+                  <p className="text-xs leading-relaxed">
+                    <strong>Alcance y limitaciones:</strong> El puntaje constituye un indicador técnico objetivo de la higiene 
+                    de configuración observable en la capa HTTP (cabeceras como CSP, HSTS, X-Frame-Options, cookies seguras). 
+                    Cada recomendación deriva de elementos verificables en la respuesta del servidor. La mejora del puntaje se 
+                    logra aplicando buenas prácticas reconocidas que reducen vectores comunes como clickjacking y XSS reflejado. 
+                    <em>Este puntaje no certifica cumplimiento normativo ni cubre vulnerabilidades lógicas, de autenticación o 
+                    inyección, por lo que debe complementarse con pruebas adicionales.</em>
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -643,14 +720,47 @@ export default function SecurityDiagnosticoPanel({
               
               {/* Panel lateral con métricas */}
               <div className="lg:w-80 flex flex-col gap-4">
+                {/* Título del histórico */}
+                <div className="text-center">
+                  <h3 className="text-sm font-medium text-slate-600 mb-4 flex items-center justify-center gap-2">
+                   Datos del Histórico de Seguridad
+                  </h3>
+                </div>
+                
                 {/* Estado de pruebas */}
                 <div className="rounded-lg border p-4 bg-white">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                    📊 Estado de Pruebas
-                  </h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                      📊 Estado de Pruebas
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Histórico</span>
+                      <div className="relative tooltip-container">
+                        <button
+                          type="button"
+                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
+                          title="Información sobre el estado de pruebas"
+                          onClick={() => setShowTestsTooltip(!showTestsTooltip)}
+                        >
+                          <Info size={12} strokeWidth={2.4} />
+                        </button>
+                        {showTestsTooltip && (
+                          <div className="absolute right-0 top-6 z-50 w-72 p-3 bg-slate-900 text-white text-xs rounded-lg shadow-lg border">
+                            <div className="font-semibold mb-2">Estado de Pruebas de Seguridad</div>
+                            <div className="space-y-1 leading-relaxed">
+                              <div><strong className="text-green-300">Revisadas:</strong> Pruebas que cumplieron los criterios de seguridad</div>
+                              <div><strong className="text-amber-300">Avisos:</strong> Configuraciones que requieren atención</div>
+                              <div><strong className="text-red-300">Mejoras por revisar:</strong> Elementos que necesitan corrección</div>
+                            </div>
+                            <div className="absolute -top-1 right-3 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-slate-900"></div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Pasadas</span>
+                      <span className="text-sm text-slate-600">Revisadas</span>
                       <span className="font-bold text-green-600 text-lg">
                         {securityResult?.summary?.passed ??
                           securityResult?.passCount ??
@@ -666,7 +776,7 @@ export default function SecurityDiagnosticoPanel({
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Fallos</span>
+                      <span className="text-sm text-slate-600">Mejoras por revisar</span>
                       <span className="font-bold text-red-600 text-lg">
                         {securityResult?.summary?.failed ??
                           securityResult?.failCount ??
@@ -678,11 +788,42 @@ export default function SecurityDiagnosticoPanel({
                   </div>
                 </div>
 
+                {/* Título fuera del cuadro indicando que es del histórico */}
+                <h3 className="text-lg font-semibold text-slate-700 mb-2">📊 Datos del histórico</h3>
+                
                 {/* Estado de encabezados */}
                 <div className="rounded-lg border p-4 bg-white">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                    🔒 Estado de Encabezados
-                  </h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                      🔒 Estado de Encabezados
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Histórico</span>
+                      <div className="relative tooltip-container">
+                        <button
+                          type="button"
+                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
+                          title="Información sobre encabezados de seguridad"
+                          onClick={() => setShowHeadersTooltip(!showHeadersTooltip)}
+                        >
+                          <Info size={12} strokeWidth={2.4} />
+                        </button>
+                        {showHeadersTooltip && (
+                          <div className="absolute right-0 top-6 z-50 w-80 p-3 bg-slate-900 text-white text-xs rounded-lg shadow-lg border">
+                            <div className="font-semibold mb-2">Estado de Encabezados de Seguridad</div>
+                            <div className="space-y-1 leading-relaxed">
+                              <div>Analiza la presencia y configuración de encabezados HTTP críticos para la seguridad:</div>
+                              <div><strong className="text-blue-300">CSP:</strong> Content Security Policy - Previene XSS</div>
+                              <div><strong className="text-emerald-300">HSTS:</strong> Strict Transport Security - Fuerza HTTPS</div>
+                              <div><strong className="text-purple-300">X-Frame-Options:</strong> Previene clickjacking</div>
+                              <div className="text-slate-300 mt-1">Y otros encabezados de protección importantes</div>
+                            </div>
+                            <div className="absolute -top-1 right-3 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-slate-900"></div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                   <HeaderStatusBars headers={securityResult?.headers} />
                 </div>
               </div>
@@ -787,8 +928,20 @@ export default function SecurityDiagnosticoPanel({
                             ) : null}
 
                             <div className={`mt-2 text-xs bg-slate-50 border rounded p-2 transition-all ${isExpanded ? "opacity-100" : "opacity-0 hidden"}`}>
-                              <div><strong>¿Por qué importa?</strong> {meta?.why ?? meta?.description ?? '—'}</div>
-                              <div className="mt-1"><strong>Recomendación:</strong> {meta?.recommendation ?? meta?.suggestion ?? '—'}</div>
+                              <div>
+                                <strong>¿Por qué importa?</strong> {
+                                  meta?.why ?? 
+                                  meta?.description ?? 
+                                  'Este encabezado de seguridad ayuda a proteger la aplicación contra vulnerabilidades comunes y mejora la postura de seguridad general.'
+                                }
+                              </div>
+                              <div className="mt-1">
+                                <strong>Recomendación:</strong> {
+                                  meta?.recommendation ?? 
+                                  meta?.suggestion ?? 
+                                  'Configure este encabezado siguiendo las mejores prácticas de seguridad para su caso de uso específico.'
+                                }
+                              </div>
                               {meta?.expected && (
                                 <div className="mt-1">
                                   <strong>Valor recomendado:</strong>
