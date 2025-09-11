@@ -123,6 +123,21 @@ function gaugeColor(metricId: MetricId, value: number | null | undefined) {
   }
 }
 
+// Función para obtener la etiqueta de la escala visual de performance
+function getPerformanceScaleLabel(value: number | null | undefined): { text: string; color: string; bgColor: string } {
+  if (value == null) {
+    return { text: "N/A", color: "#9ca3af", bgColor: "rgba(156,163,175,0.1)" };
+  }
+  
+  if (value >= 90) {
+    return { text: "Bueno", color: "#22c55e", bgColor: "rgba(34,197,94,0.1)" };
+  } else if (value >= 50) {
+    return { text: "Medio", color: "#f59e0b", bgColor: "rgba(245,158,11,0.1)" };
+  } else {
+    return { text: "Malo", color: "#ef4444", bgColor: "rgba(239,68,68,0.1)" };
+  }
+}
+
 // ===== Fondos suaves (tarjetas/desgloses y centro del dial) =====
 function softBg(metricId: MetricId, value: number | null | undefined) {
   const isPct = ["performance", "accessibility", "best-practices", "seo"].includes(metricId);
@@ -1004,6 +1019,8 @@ export default function DiagnosticoView() {
 
   // NEW: mostrar botones de tabs (Performance/Security) solo cuando se pidieron ambas pruebas
   const [bothMode, setBothMode] = useState<boolean>(typeParam === "both");
+  // NUEVO estado para modal de resumen combinado
+  const [showCombinedSummary, setShowCombinedSummary] = useState(false);
 
   const [auditData, setAuditData] = useState<AuditEnvelope | null>(null);
   const [err, setErr] = useState<string>("");
@@ -1229,7 +1246,7 @@ export default function DiagnosticoView() {
             </Link>
           )}
           <h2 className="diagnostico-title">
-            Diagnóstico de <span className="url">{url}</span>
+            Diagnóstico de: <span className="url">{url}</span>
           </h2>
           <p className="no-metrics">No se encontraron métricas para la API seleccionada.</p>
           {(audit as any)?.security && (
@@ -1463,6 +1480,41 @@ export default function DiagnosticoView() {
             <div className="w-full min-h-[160px] flex items-center justify-center">
               <CategoryDial metricId={item.id} value={item.value} size={110} strokeWidth={10} />
             </div>
+            {/* Escala visual completa de performance */}
+            <div className="flex flex-col items-center gap-3 mb-2">
+              {/* Escala completa siempre visible */}
+              <div className="flex flex-wrap justify-center gap-1 text-xs">
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
+                  item.value != null && item.value < 50 
+                    ? 'bg-red-50 border-red-200 text-red-700 font-medium' 
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}>
+                  <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                  <span>Malo (0-49)</span>
+                </div>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
+                  item.value != null && item.value >= 50 && item.value < 90 
+                    ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium' 
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}>
+                  <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                  <span>Medio (50-89)</span>
+                </div>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
+                  item.value != null && item.value >= 90 
+                    ? 'bg-green-50 border-green-200 text-green-700 font-medium' 
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}>
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span>Bueno (90-100)</span>
+                </div>
+              </div>
+              
+              {/* Texto explicativo pequeño */}
+              <p className="text-xs text-center text-slate-500 max-w-[240px] leading-tight">
+                El estado actual se resalta según el puntaje obtenido
+              </p>
+            </div>
             <p className="item-desc">
               {item.value == null ? "N/A" : `${item.value}`} — {item.desc}
             </p>
@@ -1553,11 +1605,30 @@ export default function DiagnosticoView() {
             >
               Ver diagnóstico de Seguridad
             </Button>
+            {/* Nuevo botón de resumen combinado (solo cuando hay datos de ambos) */}
+            {(audit as any)?.security && activeApi && (
+              <Button
+                style={{
+                  background: showCombinedSummary ? 'linear-gradient(to right, #3b82f6, #2563eb)' : '#ffffff',
+                  color: showCombinedSummary ? '#ffffff' : '#2563eb',
+                  border: 'none',
+                  transition: 'all 0.3s ease',
+                  padding: '10px 20px',
+                  borderRadius: '6px',
+                  fontWeight: 500
+                }}
+                onClick={() => setShowCombinedSummary(true)}
+                variant="outline"
+                disabled={perfLoading}
+              >
+                Resumen combinado
+              </Button>
+            )}
           </div>
           )}
 
           <h2 className="diagnostico-title">
-            Diagnóstico de <span className="url">{url}</span>
+            Diagnóstico de: <span className="url">{url}</span>
           </h2>
 
           {/* Show strategy tabs only for performance */}
@@ -1601,9 +1672,9 @@ export default function DiagnosticoView() {
                   size={18} 
                   className="text-blue-600 hover:text-blue-700 transition-colors" 
                 />
-                <div className="absolute left-1/2 transform -translate-x-1/2 bottom-full mb-2 w-80 sm:w-96 p-3 sm:p-4 bg-slate-900 text-white text-sm rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+                <div className="strategy-tooltip absolute left-1/2 -translate-x-1/2 top-full mt-2 p-4 bg-slate-900 text-white text-sm rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-[999]">
                   <div className="font-semibold mb-2 text-sm">🔍 Estrategias de Testing - Google PageSpeed API</div>
-                  <div className="space-y-2 sm:space-y-3 text-xs leading-relaxed">
+                  <div className="space-y-2 text-xs leading-relaxed">
                     <div>
                       <strong className="text-blue-300">📱 Móvil:</strong>
                       <br />• Simula un Moto G4 con conexión 3G lenta
@@ -1622,7 +1693,7 @@ export default function DiagnosticoView() {
                       <strong className="text-green-300">💡 Tip:</strong> Google recomienda priorizar la experiencia móvil ya que representa ~60% del tráfico web.
                     </div>
                   </div>
-                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-900"></div>
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-slate-900"></div>
                 </div>
               </div>
             </div>
@@ -1659,54 +1730,15 @@ export default function DiagnosticoView() {
                 </div>
               )}
               <div className={perfLoading ? 'opacity-60 transition-opacity' : ''}>
-                {/* Seguridad: calificación rápida */}
-                {(audit as any)?.security && (
-                  <>
-                    <SectionDivider label="Seguridad" />
-                    <Card className="mt-2 w-full">
-                      <CardHeader className="flex-row items-center justify-between">
-                        <CardTitle>Resumen de Seguridad</CardTitle>
-                        {/* Botón "Ver detalle" solo aparece en la vista de performance */}
-                        <Button
-                          variant="outline"
-                          className="transition-colors hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300"
-                          onClick={() => setActiveDiag('security')}
-                        >
-                          Ver detalle
-                        </Button>
-                      </CardHeader>
-                      <CardContent>
-                        <SecurityScoreWidget
-                          score={(audit as any)?.security?.score}
-                          grade={(audit as any)?.security?.grade}
-                          history={securityHistory}
-                          topFindings={((audit as any)?.security?.findings || []).filter((f: any) => f?.severity === 'critical' || f?.severity === 'warning').slice(0, 3)}
-                        />
-                        {/* Quick facts if present */}
-                        {Boolean((audit as any)?.security) && (
-                          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-700">
-                            <div className="flex items-center gap-2">
-                              <span className="inline-block w-2 h-2 rounded-full" style={{ background: (audit as any)?.security?.https ? '#16a34a' : '#ef4444' }} />
-                              <span>HTTPS activo: {(audit as any)?.security?.https ? 'Sí' : 'No'}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="inline-block w-2 h-2 rounded-full" style={{ background: (audit as any)?.security?.httpsEnforced ? '#16a34a' : '#f59e0b' }} />
-                              <span>Redirección a HTTPS: {(audit as any)?.security?.httpsEnforced ? 'Sí' : 'No clara'}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="inline-block w-2 h-2 rounded-full" style={{ background: (audit as any)?.security?.checks?.['hsts']?.ok ? '#16a34a' : '#ef4444' }} />
-                              <span>HSTS: {(audit as any)?.security?.checks?.['hsts']?.ok ? 'OK' : 'Falta o débil'}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="inline-block w-2 h-2 rounded-full bg-slate-400" />
-                              <span>Entorno: {(audit as any)?.security?.environment?.kind || '—'}</span>
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </>
-                )}
+                {/* Título de Diagnóstico de Performance */}
+                <div className="mb-6">
+                  <h3 className="flex items-center gap-3 text-slate-700 text-lg font-medium mb-2">
+                    ⚡ Diagnóstico de Performance
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Análisis completo del rendimiento web mediante {API_LABELS[activeApi]} en modo {strategy === "mobile" ? "Móvil" : "Ordenador"}.
+                  </p>
+                </div>
 
                 <SectionDivider
                   label="Resumen"
@@ -1804,6 +1836,143 @@ export default function DiagnosticoView() {
           )}
         </div>
       </CardContent>
+      {/* Modal de resumen combinado */}
+      {showCombinedSummary && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Resumen combinado de Performance y Seguridad"
+          onClick={() => setShowCombinedSummary(false)}
+        >
+          <div
+            style={{
+              background: '#ffffff', borderRadius: 20, maxWidth: '1200px', width: '100%',
+              maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 40px -8px rgba(0,0,0,0.25)',
+              padding: '32px 32px 40px'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-10">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <h3 className="text-xl md:text-2xl font-bold text-slate-900 m-0">Resumen combinado</h3>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => setShowCombinedSummary(false)}>Cerrar</Button>
+                </div>
+              </div>
+
+              {/* NUEVO LAYOUT: Performance (columna fija) + Seguridad (columna expandida) */}
+              <div className="flex flex-col lg:flex-row gap-10 items-start">
+                {/* Bloque Performance */}
+                <div className="w-full lg:max-w-sm border rounded-2xl p-5 flex flex-col gap-4 bg-white/90 backdrop-blur-sm shadow-sm">
+                  <h4 className="text-base font-semibold text-slate-800 m-0 flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />Performance
+                  </h4>
+                  {activeApi && performance != null ? (
+                    <div className="flex flex-col items-center gap-6">
+                      <CategoryDial metricId="performance" value={performance} size={140} strokeWidth={14} />
+                      
+                      {/* Escala visual completa de performance - versión modal */}
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="flex flex-wrap justify-center gap-1 text-xs">
+                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
+                            performance < 50 
+                              ? 'bg-red-50 border-red-200 text-red-700 font-medium' 
+                              : 'bg-slate-50 border-slate-200 text-slate-600'
+                          }`}>
+                            <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                            <span>Malo (0-49)</span>
+                          </div>
+                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
+                            performance >= 50 && performance < 90 
+                              ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium' 
+                              : 'bg-slate-50 border-slate-200 text-slate-600'
+                          }`}>
+                            <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                            <span>Medio (50-89)</span>
+                          </div>
+                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
+                            performance >= 90 
+                              ? 'bg-green-50 border-green-200 text-green-700 font-medium' 
+                              : 'bg-slate-50 border-slate-200 text-slate-600'
+                          }`}>
+                            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                            <span>Bueno (90-100)</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3 w-full text-[11px] text-slate-700">
+                        {perfBreakItems.map(m => (
+                          <div key={m.id} className="flex flex-col items-center p-2 rounded-lg bg-slate-50 border">
+                            <span className="font-semibold tracking-wide">{m.label}</span>
+                            <span className="text-slate-900 mt-1 text-xs">
+                              {m.value == null ? '—' : (m.id === 'cls' ? m.value?.toFixed(2) : m.id === 'fcp' || m.id === 'lcp' || m.id === 'tbt' || m.id === 'si' || m.id === 'ttfb' ? `${m.value?.toFixed(1)}s` : m.value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-center text-slate-600 max-w-[260px] m-0">
+                        Puntaje y métricas clave ({strategy === 'mobile' ? 'Móvil' : 'Ordenador'}).
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">No hay métricas de performance.</p>
+                  )}
+                </div>
+
+                {/* Bloque Seguridad ocupa el resto */}
+                <div className="flex-1 w-full border rounded-2xl p-6 bg-white/90 backdrop-blur-sm shadow-sm overflow-visible">
+                  <h4 className="text-base font-semibold text-slate-800 m-0 flex items-center gap-2 mb-4">
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />Seguridad
+                  </h4>
+                  {(audit as any)?.security ? (
+                    <div className="flex flex-col gap-6">
+                      {/* Widget a ancho completo */}
+                      <div className="w-full">
+                        <SecurityScoreWidget
+                          score={(audit as any)?.security?.score}
+                          grade={(audit as any)?.security?.grade}
+                          history={securityHistory}
+                          topFindings={((audit as any)?.security?.findings || []).filter((f: any) => f?.severity === 'critical' || f?.severity === 'warning').slice(0, 3)}
+                        />
+                      </div>
+                      {/* Quick facts en una rejilla más amplia */}
+                      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 text-xs text-slate-700">
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border">
+                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: (audit as any)?.security?.https ? '#16a34a' : '#ef4444' }} />
+                          <span className="font-medium">HTTPS: {(audit as any)?.security?.https ? 'Sí' : 'No'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border">
+                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: (audit as any)?.security?.httpsEnforced ? '#16a34a' : '#f59e0b' }} />
+                          <span className="font-medium">Redir. HTTPS: {(audit as any)?.security?.httpsEnforced ? 'Sí' : 'No claro'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border">
+                          <span className="inline-block w-2 h-2 rounded-full" style={{ background: (audit as any)?.security?.checks?.['hsts']?.ok ? '#16a34a' : '#ef4444' }} />
+                          <span className="font-medium">HSTS: {(audit as any)?.security?.checks?.['hsts']?.ok ? 'OK' : 'Falta'}</span>
+                        </div>
+                        <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border">
+                          <span className="inline-block w-2 h-2 rounded-full bg-slate-400" />
+                          <span className="font-medium">Entorno: {(audit as any)?.security?.environment?.kind || '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">No hay datos de seguridad disponibles.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <Button onClick={() => setShowCombinedSummary(false)} variant="outline">Cerrar</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

@@ -49,7 +49,8 @@
     @apply relative mx-auto my-8 rounded-2xl border p-8 backdrop-blur;
     background: var(--bg-primary);
     box-shadow: var(--shadow-lg); /* sombra más sutil */
-    overflow: hidden;
+    /* Antes: overflow:hidden cortaba tooltips; ahora visible para que no se recorte el popup */
+    overflow: visible;
     max-width: 750px; /* aumentado para mejor lectura */
   }
   .card::before {
@@ -76,14 +77,22 @@
   .title { @apply m-0 mb-2 text-4xl font-bold leading-tight text-slate-900; }
   .title .url { color: var(--accent-color); @apply font-semibold break-all; }
 
+  /* Ajuste: solo la URL en azul, el prefijo en color normal y tamaño reducido */
   .diagnostico-title {
-    @apply m-0 mb-2 text-4xl font-bold leading-tight;
+    @apply m-0 mb-2 text-xl md:text-2xl font-bold leading-snug;
     color: var(--text-primary);
-    background: var(--gradient-accent);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    background: none;
+    -webkit-background-clip: initial;
+    -webkit-text-fill-color: initial;
   }
+  .diagnostico-title .url { @apply font-semibold break-all; color: var(--accent-color); }
+
+  /* Tooltip fijo para estrategias */
+  .strategy-tooltip { width: 420px; max-width:420px; }
+  @media (max-width:560px){ .strategy-tooltip{ width: 340px; max-width:340px; } }
+
+  /* Asegurar que padres no oculten el tooltip */
+  .diagnostico-btn-group, .card, .screen-wrap { overflow: visible !important; }
 
   .date { @apply mb-6 text-sm font-medium text-slate-400; }
 
@@ -262,83 +271,6 @@
 .diagnostico-header h1 { @apply text-3xl font-bold leading-tight break-words; }
 .diagnostico-header small,
 .diagnostico-header .subtitle { @apply text-sm text-gray-500; }
-
-/* ========== MODO CAPTURA PDF (para html2canvas/jsPDF) ========== */
-/* soporta tanto .pdf-capture como .pdf-root (tu EmailPdfBar usa .pdf-root) */
-.pdf-capture body, .pdf-root body { background: #ffffff !important; }
-.pdf-capture *, .pdf-root * {
-  animation: none !important;
-  transition: none !important;
-  filter: none !important;
-  text-shadow: none !important;
-}
-.pdf-capture .card, .pdf-root .card {
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  border-top: 4px solid var(--accent-color) !important;
-}
-.pdf-capture .card::before, .pdf-root .card::before { content: none !important; }
-.pdf-capture .diagnostico-title, .pdf-root .diagnostico-title {
-  background: none !important;
-  -webkit-background-clip: initial !important;
-  -webkit-text-fill-color: initial !important;
-  color: var(--text-primary) !important;
-}
-.pdf-capture .title .url,
-.pdf-capture .diagnostico-header h1,
-.pdf-root .title .url,
-.pdf-root .diagnostico-header h1 {
-  word-break: break-all !important;
-  overflow-wrap: anywhere !important;
-}
-.pdf-capture .item:hover, .pdf-capture .gauge-card:hover,
-.pdf-root .item:hover, .pdf-root .gauge-card:hover {
-  transform: none !important;
-  box-shadow: none !important;
-}
-/* No partir bloques */
-.pdf-capture .card, .pdf-capture .item, .pdf-capture .gauge-card, .pdf-capture .metrics-list li, .pdf-capture .error,
-.pdf-root .card, .pdf-root .item, .pdf-root .gauge-card, .pdf-root .metrics-list li, .pdf-root .error {
-  break-inside: avoid; page-break-inside: avoid;
-}
-/* Barra sólida Lighthouse en PDF */
-.pdf-capture .lighthouse-bar, .pdf-root .lighthouse-bar {
-  background: #2563eb !important;
-  height: 12px !important;
-  border-radius: 9999px !important;
-}
-/* Ajustes de paddings en PDF */
-.pdf-capture .container, .pdf-capture .card,
-.pdf-root .container, .pdf-root .card { padding-left: 1rem !important; padding-right: 1rem !important; }
-
-/* ========== Responsive (específico para móviles muy pequeños) ========== */
-@media (max-width:480px){
-  .card{ 
-    @apply mx-2 rounded-lg px-3 py-4; 
-    margin-top: 16px;
-    margin-bottom: 16px;
-  }
-  .item{ 
-    padding: 16px 12px;
-    min-height: 180px;
-  }
-  .item-value{ 
-    @apply text-xl; 
-    margin: 10px 0 6px 0;
-  }
-  .item-label {
-    @apply text-[9px];
-    margin-bottom: 6px;
-  }
-  .item-desc {
-    @apply text-xs;
-    margin-top: 6px;
-  }
-  .title,.diagnostico-title{ 
-    @apply text-2xl; 
-  }
-}
 
 @layer components {
   /* Contenedor de acciones (alineado a la derecha) */
