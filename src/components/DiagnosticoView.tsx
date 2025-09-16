@@ -1771,6 +1771,24 @@ export default function DiagnosticoView() {
                   </p>
                 </div>
 
+                {/* Fundamentos / confiabilidad del diagnóstico */}
+                <SectionDivider
+                  label="Acerca del análisis"
+                  info={
+                    <>
+                      <div className="space-y-3 text-xs leading-relaxed">
+                        <p><strong>Fuente de datos:</strong> Ejecución de Google Lighthouse (LHR) vía microservicio, extrayendo categories, audits y métricas (FCP, LCP, TBT, CLS, TTFB, SI). No se alteran los cálculos originales; sólo se normalizan (0–100) y se clasifican.</p>
+                        <p><strong>Flujo:</strong> Petición → ejecución/recuperación Lighthouse → parseo de categories → extracción de métricas y hallazgos → clasificación (errores, mejoras, oportunidades) → render.</p>
+                        <p><strong>Variabilidad:</strong> Carga del servidor origen, latencia/red, recursos de terceros, caché fría/caliente, estrategia (Móvil vs Ordenador), throttling de Lighthouse, versión de Lighthouse, geolocalización/CDN, picos de CPU (JS largo / GC).</p>
+                        <p><strong>Confiabilidad:</strong> Metodología abierta Lighthouse; umbrales alineados con Web Vitals; trazabilidad (URL, timestamp, estrategia); reproducible con lighthouse CLI usando parámetros equivalentes.</p>
+                        <p><strong>Interpretación rápida:</strong> Performance ≥90 Bueno, 50–89 Medio, &lt;50 Mejorar. LCP &lt;2.5s, TBT &lt;0.2s, CLS &lt;0.1, TTFB &lt;0.8s.</p>
+                        <p><strong>Buenas prácticas para comparar:</strong> Ejecutar 3–5 corridas y usar mediana; no mezclar estrategias; evitar ventanas de despliegue/picos; fijar versión de Lighthouse si se busca consistencia histórica.</p>
+                        <p><strong>Limitaciones:</strong> Emulación ≠ condiciones reales completas; variación geográfica y de usuarios finales; cambios futuros de versión pueden ajustar pesos de métricas.</p>
+                      </div>
+                    </>
+                  }
+                />
+
                 <SectionDivider
                   label="Resumen"
                   info={
