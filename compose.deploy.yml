@@ -19,7 +19,7 @@ services:
     environment:
       - NODE_ENV=production
       - PS_PORT=3001
-      - PSI_API_KEY=${PSI_API_KEY}
+      - PSI_API_KEY=AIzaSyCX_fQrS880HJ_rNsush2O54b6Ilcynbhc
     ports:
       - "3001:3001"
 
