@@ -1636,8 +1636,12 @@ export default function DiagnosticoView() {
             >
               Ver diagnóstico de Seguridad
             </Button>
-            {/* Nuevo botón de resumen combinado (solo cuando hay datos de ambos) */}
-            {(audit as any)?.security && activeApi && (
+          </div>
+          )}
+
+          {/* Botón de resumen combinado centrado */}
+          {bothMode && (audit as any)?.security && activeApi && (
+            <div className="flex justify-center mb-4">
               <Button
                 style={{
                   background: showCombinedSummary ? 'linear-gradient(to right, #3b82f6, #2563eb)' : '#ffffff',
@@ -1654,8 +1658,7 @@ export default function DiagnosticoView() {
               >
                 Resumen combinado
               </Button>
-            )}
-          </div>
+            </div>
           )}
 
           <h2 className="diagnostico-title">
