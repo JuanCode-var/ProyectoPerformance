@@ -1,5 +1,3 @@
-
-
 // Endpoint POST /audit para compatibilidad con gateway
 // (debe ir después de la declaración de 'app')
 
@@ -200,17 +198,22 @@ function buildPlanMarkdownEs(proc: ReturnType<typeof buildProcessedFromPayload>)
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
-app.use(morgan("tiny"));
+
+// Logging HTTP básico
+app.use(morgan('combined'));
 
 // Endpoint POST /audit para compatibilidad con gateway
 app.post("/audit", async (req: Request, res: Response) => {
   try {
     const { url, strategy = "mobile", categories = ["performance"] } = req.body;
+    
     if (!url) return res.status(400).json({ error: "url is required" });
 
     const payload = await runPageSpeed({ url, strategy, categories });
+    
     res.json(payload);
   } catch (e: any) {
+    console.error(`[pagespeed] error:`, e?.message || String(e));
     res.status(500).json({ error: "Internal error", detail: e?.message || String(e) });
   }
 });

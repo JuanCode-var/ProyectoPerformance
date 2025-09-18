@@ -145,15 +145,12 @@ export default function Formulario() {
       const categories = ['performance'];
       const payload = {
         url: parsed.data.url,
-        strategy,
-        categories,
         name: parsed.data.name,
         email: parsed.data.email,
+        strategy,
+        categories,
         type: parsed.data.type,
       };
-
-      // Debug: log payload y endpoint
-      console.log('[DEBUG][FRONTEND] Enviando payload a /api/audit:', payload);
 
       let response: Response;
       try {
@@ -163,23 +160,21 @@ export default function Formulario() {
           body: JSON.stringify(payload),
         });
       } catch (fetchErr) {
-        console.error('[DEBUG][FRONTEND] Error de red al hacer fetch:', fetchErr);
+        console.error('[frontend] fetch failed:', fetchErr);
         throw new Error('No se pudo conectar con el backend (/api/audit)');
       }
-
-      console.log('[DEBUG][FRONTEND] Status de respuesta:', response.status);
 
       const text = await response.text();
       let apiPayload: ApiResponse;
       try {
         apiPayload = text ? (JSON.parse(text) as ApiResponse) : {};
       } catch {
-        console.error('[DEBUG][FRONTEND] Respuesta no válida del servidor:', text);
+        console.error('[frontend] invalid server response:', text);
         throw new Error('Respuesta no válida del servidor');
       }
 
       if (!response.ok) {
-        console.error('[DEBUG][FRONTEND] Error en respuesta:', apiPayload);
+        console.error('[frontend] response error:', apiPayload);
         throw new Error((apiPayload && (apiPayload.error as string)) || `Error ${response.status}`);
       }
 
@@ -187,7 +182,6 @@ export default function Formulario() {
         throw new Error("El diagnóstico no pudo ser persistido. Por favor, inténtalo nuevamente más tarde.");
       }
 
-      console.log('[DEBUG][FRONTEND] Navegando a /diagnostico/' + apiPayload._id);
       // Determinar tipo de diagnóstico para mostrar
       const types = parsed.data.type;
       const initType = types.includes('pagespeed') && types.includes('security')

@@ -129,9 +129,6 @@ export async function guardarDatos(req: Request, res: Response) {
   const fail = (status: number, msg: string, extra: Record<string, unknown> = {}) =>
     res.status(status).json({ ok: false, error: msg, ...extra });
 
-  // Log para depuración: mostrar la URL real que usará el backend para el microservicio
-  console.log("[DEBUG] MS_PAGESPEED_URL:", process.env.MS_PAGESPEED_URL);
-
   try {
     const {
       url,
@@ -155,9 +152,6 @@ export async function guardarDatos(req: Request, res: Response) {
       pagespeed: { endpoint: withAudit(MS_PAGESPEED_URL) },
       security: { endpoint: MS_SECURITY_URL },
     };
-    // Log para depuración: mostrar el endpoint real que usará el backend
-    console.log("[DEBUG] Endpoint pagespeed:", MICROSERVICES.pagespeed.endpoint);
-    console.log("[DEBUG] Endpoint security:", MICROSERVICES.security.endpoint);
 
     const tipos = Array.isArray(type)
       ? (type as string[])

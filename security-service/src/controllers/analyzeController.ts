@@ -7,10 +7,12 @@ type Response = express.Response;
 export async function analyzeUrl(req: Request, res: Response) {
   const { url } = req.body || {};
   if (!url) return res.status(400).json({ error: 'URL requerida' });
+  
   try {
     const result = await analyzeSecurity(url);
     res.json(result);
   } catch (err: any) {
+    console.error(`[security] analyze failed:`, err?.message || String(err));
     res.status(500).json({ error: 'Error al analizar la URL', details: err?.message || String(err) });
   }
 }

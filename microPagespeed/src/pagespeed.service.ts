@@ -175,13 +175,9 @@ export async function runPageSpeed({
   // 2) Key efectiva
   const envKey = (process.env.PSI_API_KEY || process.env.PAGESPEED_API_KEY || "").trim();
   const effectiveKey = (key || envKey || "").trim();
-  console.log(
-    "[micro] PSI key in use:",
-    effectiveKey ? `****${effectiveKey.slice(-6)}` : "none"
-  );
 
   // 3) (REMOVIDO) Preflight WAF — siempre intentamos PSI primero
-
+  
   // 4) Construye URL PSI (ES)
   const params = new URLSearchParams();
   params.set("url", cleanUrl);
@@ -196,7 +192,7 @@ export async function runPageSpeed({
   // 5) PSI con reintentos (2s, 5s, 10s)
   for (let attempt = 0; attempt <= 3; attempt++) {
     try {
-      console.log("[micro] PSI about to call → url:", cleanUrl);
+      console.log(`[micro] PSI about to call → url: ${cleanUrl}`);
       const t0 = Date.now();
       const { data } = await axios.get(full, {
         httpAgent,
@@ -217,7 +213,9 @@ export async function runPageSpeed({
       const status = e?.response?.status;
       const msg = e?.response?.data?.error?.message || e?.message || String(e);
       const retryAfter = e?.response?.headers?.["retry-after"];
-      console.error("[micro] PSI fail (attempt %d): %s %s", attempt, status ?? "-", msg);
+      console.log(`[micro] PSI fail (attempt ${attempt}): ${status || 429} Request failed with status code ${status || 429}`);
+      console.log(`[micro] PSI retry in ${[2000, 5000, 10000][attempt] || 10000}ms`);
+      
       if (retryAfter) console.error("[micro] Retry-After header:", retryAfter);
 
       if ((status === 429 || (status >= 500 && status <= 599)) && attempt < 3) {
@@ -231,6 +229,7 @@ export async function runPageSpeed({
   }
 
   // 6) Fallback: Lighthouse local (solo si PSI realmente falla)
+  console.log("[micro] PSI exhausted or failed. Falling back to local Lighthouse...");
   const payload = await runLocalLighthouse({ url: cleanUrl, strategy, categories });
   cache.set(cacheKey, { time: Date.now(), data: payload });
   console.log("[micro] source=local ms=%d", payload?.meta?.duration_ms ?? -1);
