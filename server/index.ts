@@ -2,20 +2,25 @@
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { connectDB } from './database/mongo.js';      // 👈 mantén .js (NodeNext)
 import formRoutes from './routes/formRoutes.js';      // 👈 mantén .js (NodeNext)
 import securityRoutes from './routes/securityRoutes.js'; // 👈 mantén .js (NodeNext)
+import authRoutes from './routes/auth.js';
 
-import redisClient, {
-  connectRedisIfEnabled,
-  REDIS_ENABLED,
-} from './../src/redisClient.js'; // 👈 mantén .js (NodeNext)
+// Evitar que TS incluya archivos fuera de rootDir durante build
+// (cargamos dinámicamente en runtime ESM)
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const redisMod: any = await (Function('return import("../src/redisClient.js")')());
+const { default: redisClient, connectRedisIfEnabled, REDIS_ENABLED } = redisMod;
 
-// 👇 Solo cierre elegante de la cola
-import { closePagespeedQueue } from './../src/queue.js'; // 👈 mantén .js (NodeNext)
+// 👇 Solo cierre elegante de la cola (carga dinámica)
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const queueMod: any = await (Function('return import("../src/queue.js")')());
+const { closePagespeedQueue } = queueMod;
 
 import {
   getDiagnosticsRaw,
@@ -32,9 +37,10 @@ const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 
 // Middlewares
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(cookieParser());
 
 app.use((req, _res, next) => {
   req.on('aborted', () => {
@@ -44,6 +50,7 @@ app.use((req, _res, next) => {
 });
 
 // Rutas
+app.use('/api', authRoutes);
 app.use('/api', formRoutes);
 app.use('/api', securityRoutes);
 app.get('/api/diagnostics/:rawUrl',               getDiagnosticsRaw as any);
@@ -82,8 +89,9 @@ async function bootstrap() {
       console.log(`🚀 Gateway escuchando en http://localhost:${PORT}`);
     });
 
-    server.headersTimeout = 120_000;
-    server.keepAliveTimeout = 120_000;
+    // Aumentar timeouts para diagnósticos largos (PSI/Lighthouse)
+    server.headersTimeout = 300_000; // antes 120_000
+    server.keepAliveTimeout = 300_000; // antes 120_000
     (server as any).requestTimeout = 0;
 
     const shutdown = async (signal: string) => {

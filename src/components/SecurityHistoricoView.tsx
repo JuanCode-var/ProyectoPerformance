@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
 import { Button } from "../shared/ui/button";
+import { useAuth } from '../auth/AuthContext';
+import { Ban } from 'lucide-react';
 
 export type SecurityHistoryPoint = { fecha: string | number | Date; score: number | null };
 
@@ -228,6 +230,8 @@ export default function SecurityHistoricoView() {
   const query = useQuery();
   const url = query.get("url") || "";
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isCliente = user?.role === 'cliente';
 
   const [history, setHistory] = useState<SecurityHistoryPoint[] | null>(null);
   const [err, setErr] = useState<string>("");
@@ -235,6 +239,7 @@ export default function SecurityHistoricoView() {
   if (!url) return <Navigate to="/" replace />;
 
   useEffect(() => {
+    if (isCliente) return; // no cargar para cliente
     (async () => {
       try {
         const r = await fetch(`/api/security/history?url=${encodeURIComponent(url)}`);
@@ -248,7 +253,22 @@ export default function SecurityHistoricoView() {
         setErr(e?.message || "Error cargando histórico de seguridad");
       }
     })();
-  }, [url]);
+  }, [url, isCliente]);
+
+  if (isCliente) return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>Histórico de seguridad</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-2 text-slate-600 mb-3">
+          <Ban size={18} />
+          <span>Acceso al histórico de seguridad restringido para clientes.</span>
+        </div>
+        <Button variant="outline" onClick={() => navigate(-1)} className="back-link">Volver al diagnóstico</Button>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <Card className="mt-4">

@@ -1,8 +1,7 @@
 // server/routes/send-diagnostic.ts
 import type { Request, Response } from "express";
 import nodemailer from "nodemailer";
-import Mail from "nodemailer/lib/mailer";                 // 👈 import como valor
-import type { SentMessageInfo } from "nodemailer/lib/smtp-transport"; // 👈 tipo directo
+import type { SendMailOptions, SentMessageInfo } from "nodemailer";
 
 
 // Importa tu modelo y utils reales (NodeNext/ESM ⇒ termina en .js)
@@ -75,8 +74,8 @@ export async function sendDiagnostic(req: Request, res: Response) {
     // 4) KPIs render
     const kpi = (label: string, val: string) =>
       `<div style="flex:1;min-width:120px;border:1px solid #E5E7EB;border-radius:12px;padding:12px;text-align:center">
-         <div style="font-size:12px;color:#6B7280">${escapeHtml(label)}</div>
-         <div style="font-size:20px;font-weight:700;color:#111827;margin-top:4px">${escapeHtml(val)}</div>
+         <div style="font-size:12px;color:#6B7280">${label}</div>
+         <div style="font-size:20px;font-weight:700;color:#111827;margin-top:4px">${val}</div>
        </div>`;
 
     const fecha = new Date(doc.fecha).toLocaleString();
@@ -85,12 +84,12 @@ export async function sendDiagnostic(req: Request, res: Response) {
     // 5) Secciones de oportunidades
     const oppLi = opps
       .map((o) => {
-        const savings = o.savingsLabel ? ` · Ahorro: ${escapeHtml(o.savingsLabel)}` : "";
+        const savings = o.savingsLabel ? ` · Ahorro: ${o.savingsLabel}` : "";
         const reco = o.recommendation
-          ? `<div style="color:#374151;margin-top:4px">${mdLinkify(escapeHtml(o.recommendation))}</div>`
+          ? `<div style="color:#374151;margin-top:4px">${mdLinkify(o.recommendation)}</div>`
           : "";
         return `<li style="margin:0 0 10px 0">
-          <div style="font-weight:600;color:#111827">${escapeHtml(o.title || o.id)}${savings}</div>
+          <div style="font-weight:600;color:#111827">${o.title || o.id}${savings}</div>
           ${reco}
         </li>`;
       })
@@ -99,21 +98,21 @@ export async function sendDiagnostic(req: Request, res: Response) {
     // 6) Body HTML del correo (limpio y con estilos inline)
     const html = `
       <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.45">
-        <h2 style="text-align:center;color:#2563EB;margin:0 0 4px 0">${escapeHtml(title)}</h2>
-        <div style="text-align:center;font-size:12px;color:#6B7280">Generado: ${escapeHtml(
-          fecha
-        )} · Estrategia: ${escapeHtml(doc.strategy || "mobile")}</div>
+        <h2 style="text-align:center;color:#2563EB;margin:0 0 4px 0">${title}</h2>
+        <div style="text-align:center;font-size:12px;color:#6B7280">Generado: ${fecha} · Estrategia: ${
+          doc.strategy || "mobile"
+        }</div>
         <div style="text-align:center;font-size:12px;color:#6B7280;margin-bottom:16px">
-          Fuente: ${escapeHtml(doc.audit?.pagespeed?.meta?.source || "desconocida")}
+          Fuente: ${doc.audit?.pagespeed?.meta?.source || "desconocida"}
         </div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin:16px 0">
-          ${kpi("Performance", pct(metrics.performance))}
-          ${kpi("FCP", fmtS(metrics.fcp))}
-          ${kpi("LCP", fmtS(metrics.lcp))}
-          ${kpi("TBT", fmtMs(metrics.tbt))}
-          ${kpi("Speed Index", fmtS(metrics.si))}
-          ${kpi("TTFB", fmtS(metrics.ttfb))}
+          ${kpi("Performance", `${Math.round(metrics.performance ?? 0)}%`)}
+          ${kpi("FCP", `${Number(metrics.fcp ?? 0).toFixed(2)}s`)}
+          ${kpi("LCP", `${Number(metrics.lcp ?? 0).toFixed(2)}s`)}
+          ${kpi("TBT", `${Math.round(metrics.tbt ?? 0)}ms`)}
+          ${kpi("Speed Index", `${Number(metrics.si ?? 0).toFixed(2)}s`)}
+          ${kpi("TTFB", `${Number(metrics.ttfb ?? 0).toFixed(2)}s`)}
         </div>
 
         <h3 style="margin:20px 0 8px;color:#111827">Plan de acción sugerido</h3>
@@ -126,7 +125,7 @@ export async function sendDiagnostic(req: Request, res: Response) {
         </div>
 
         <p style="text-align:right;font-size:12px;color:#6B7280;margin-top:24px">
-          URL: <a href="${escapeHtml(doc.url)}" style="color:#2563EB">${escapeHtml(doc.url)}</a>
+          URL: <a href="${doc.url}" style="color:#2563EB">${doc.url}</a>
         </p>
       </div>
     `;
@@ -136,25 +135,26 @@ export async function sendDiagnostic(req: Request, res: Response) {
       service: "gmail",
       auth: { user: process.env.EMAIL_USER as string, pass: process.env.EMAIL_PASS as string },
     });
-// 8) Opciones de correo (Mail.Options)
-const mailOptions: Mail.Options = {
-  from: process.env.EMAIL_USER,
-  to: toEmail,
-  subject: title,
-  html,
-  attachments: pdf?.base64 && pdf?.filename
-    ? [
-        {
-          filename: pdf.filename,
-          content: Buffer.from(pdf.base64, "base64"),
-          contentType: pdf.contentType || "application/pdf",
-        },
-      ]
-    : undefined,
-};
 
-// 9) Enviar (tipo directo, no como namespace)
-const info: SentMessageInfo = await transporter.sendMail(mailOptions);
+    // 8) Opciones de correo
+    const mailOptions: SendMailOptions = {
+      from: process.env.EMAIL_USER,
+      to: toEmail,
+      subject: title,
+      html,
+      attachments: pdf?.base64 && pdf?.filename
+        ? [
+            {
+              filename: pdf.filename,
+              content: Buffer.from(pdf.base64, "base64"),
+              contentType: pdf.contentType || "application/pdf",
+            },
+          ]
+        : undefined,
+    };
+
+    // 9) Enviar
+    const info: SentMessageInfo = await transporter.sendMail(mailOptions);
 
     return res.status(200).json({
       message: "Informe de diagnóstico enviado correctamente",

@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
 import { Button } from "../shared/ui/button";
 import SecurityScoreWidget from "./SecurityScoreWidget";
 import EmailPdfBar from "./EmailPdfBar";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Info } from "lucide-react";
+import { useAuth } from '../auth/AuthContext';
+import { Ban } from 'lucide-react';
 
 // Pequeño separador visual reutilizable mejorado
 function SectionDivider({ label, info }: { label: string; info?: React.ReactNode }) {
@@ -833,9 +835,24 @@ export default function SecurityDiagnosticoPanel({
             {/* Reemplazado: solo mostrar el botón/enlace al histórico completo con el mismo estilo que Diagnóstico */}
             {showInlineHistoryLink && url && (
               <div className="mt-2">
-                <Link to={`/security-history?url=${encodeURIComponent(url)}`} className="back-link">
-                  Ver histórico de esta URL
-                </Link>
+                {(() => {
+                  const { user } = useAuth();
+                  const isCliente = user?.role === 'cliente';
+                  return isCliente ? (
+                    <button
+                      type="button"
+                      className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1"
+                      title="Acceso restringido para clientes"
+                      aria-disabled
+                    >
+                      <Ban size={16} /> Histórico no disponible
+                    </button>
+                  ) : (
+                    <Link to={`/security-history?url=${encodeURIComponent(url)}`} className="back-link">
+                      Ver histórico de esta URL
+                    </Link>
+                  );
+                })()}
               </div>
             )}
 

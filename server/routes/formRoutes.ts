@@ -9,6 +9,7 @@ import {
   sendDiagnostic,     // POST /api/audit/send-diagnostic
   getSecurityHistory, // GET /api/security/history
 } from "../controllers/FormController.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -16,15 +17,35 @@ const router = Router();
 router.get("/audit", auditPing);
 
 // Auditoría
-router.post("/audit", guardarDatos);
-router.get("/audit/history", getAuditHistory); // <- definir antes que :id
-router.get("/audit/:id", getAuditById);
+router.post(
+  "/audit",
+  requireAuth as any,
+  // Ahora también permite 'cliente'
+  requireRole('admin','operario','tecnico','otro_tecnico','cliente') as any,
+  guardarDatos
+);
 
-// Seguridad
-router.get("/security/history", getSecurityHistory);
+// Lecturas protegidas
+// Histórico de auditorías: solo roles no-cliente
+router.get(
+  "/audit/history",
+  requireAuth as any,
+  requireRole('admin','operario','tecnico','otro_tecnico') as any,
+  getAuditHistory
+);
+// Detalle: permitido para todos los autenticados; el controlador debe validar propiedad para clientes
+router.get("/audit/:id", requireAuth as any, getAuditById);
 
-// Emailing
-router.post("/audit/send-diagnostic", sendDiagnostic);
-router.post("/audit/send-report", sendReport);
+// Seguridad (histórico) solo no-cliente
+router.get(
+  "/security/history",
+  requireAuth as any,
+  requireRole('admin','operario','tecnico','otro_tecnico') as any,
+  getSecurityHistory
+);
+
+// Emailing (requiere sesión)
+router.post("/audit/send-diagnostic", requireAuth as any, sendDiagnostic);
+router.post("/audit/send-report", requireAuth as any, sendReport);
 
 export default router;

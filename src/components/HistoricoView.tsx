@@ -9,6 +9,8 @@ import { z } from 'zod';
 // shadcn/ui (padres)
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/ui/card';
 import { Button } from '../shared/ui/button';
+import { useAuth } from '../auth/AuthContext';
+import { Ban } from 'lucide-react';
 
 function useQuery(): URLSearchParams {
   return new URLSearchParams(useLocation().search);
@@ -111,7 +113,7 @@ const HistoryArraySchema = z.array(HistoryItemSchema);
 // 🔒 Parseo seguro con Zod: nunca lanza
 async function safeParse(res: Response): Promise<any[]> {
   const txt = await res.text();
-  let raw: any[];
+  let raw: any;
   try { raw = JSON.parse(txt || '[]'); } catch { raw = []; }
   const parsed = HistoryArraySchema.safeParse(raw);
   return parsed.success ? parsed.data : raw;
@@ -121,6 +123,8 @@ export default function HistoricoView() {
   const query      = useQuery();
   const url        = query.get('url') || '';
   const navigate   = useNavigate();
+  const { user }   = useAuth();
+  const isCliente  = user?.role === 'cliente';
   const [history, setHistory] = useState<any[] | null>(null);
   const [err, setErr]         = useState<string>('');
   const [sending, setSending] = useState<boolean>(false);
@@ -128,15 +132,16 @@ export default function HistoricoView() {
   const metricKeys: MetricKey[] = ['performance','fcp','lcp','tbt','si','ttfb'];
   const [currentIndex, setCurrentIndex] = useState<number[]>([]);
 
-  // Si el URL está vacío o es inválido → volver
-  const urlIsValid = QuerySchema.safeParse({ url }).success;
-  if (!url || !urlIsValid) return <Navigate to="/" replace />;
+  // Si el URL está vacío o es inválido → NO redirigir (evita bucle con '/')
+  const urlIsValid = !!url && QuerySchema.safeParse({ url }).success;
 
   useEffect(() => {
+    if (!urlIsValid) return;
+    if (isCliente) return; // clientes no cargan histórico
     (async () => {
       try {
-        const res  = await fetch(`/api/audit/history?url=${encodeURIComponent(url)}`);
-        const data = await safeParse(res); // ← blindado + Zod
+        const res  = await fetch(`/api/audit/history?url=${encodeURIComponent(url)}`, { credentials: 'include' });
+        const data = await safeParse(res);
         if (!res.ok) throw new Error((data as any)?.error || `Error ${res.status}`);
         setHistory(Array.isArray(data) ? (data as any[]) : []);
         setCurrentIndex(Array(metricKeys.length).fill(0));
@@ -144,9 +149,38 @@ export default function HistoricoView() {
         setErr(e?.message || 'Error cargando histórico');
       }
     })();
-  }, [url]);
+  }, [url, urlIsValid, isCliente]);
+
+  // Bloqueo visual para clientes
+  if (isCliente) return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center gap-2 text-slate-600 mb-3">
+          <Ban size={18} />
+          <span>Acceso al histórico restringido para clientes.</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link to="/" className="back-link">Volver</Link>
+          <Button onClick={() => navigate('/')} variant="outline">Ir al diagnóstico</Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   // ---- Estados tempranos con Card (padre shadcn) ----
+  if (!urlIsValid) return (
+    <Card>
+      <CardContent className="p-6">
+        <h2 className="diagnostico-title">Histórico</h2>
+        <p>Selecciona una URL desde el formulario de diagnóstico para ver su histórico.</p>
+        <div className="mt-3 flex items-center gap-3">
+          <Link to="/" className="back-link">Ir al formulario</Link>
+          <Button onClick={() => navigate('/')} variant="outline">Abrir formulario</Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   if (err) return (
     <Card>
       <CardContent className="p-6">
@@ -289,6 +323,7 @@ export default function HistoricoView() {
                 const resp = await fetch('/api/audit/send-report', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
                   body: JSON.stringify({
                     url,
                     email: (history[history.length - 1] as any)?.email || "" // último email registrado

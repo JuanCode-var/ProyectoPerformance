@@ -35,6 +35,10 @@ function sanitizeUrl(raw: string): string {
       "gclid",
       "fbclid",
       "msclkid",
+      // 👇 muy comunes en MSN/News
+      "ocid",
+      "cvid",
+      "ei",
     ].forEach((p) => u.searchParams.delete(p));
     return u.toString();
   } catch {
@@ -175,6 +179,9 @@ export async function runPageSpeed({
   // 2) Key efectiva
   const envKey = (process.env.PSI_API_KEY || process.env.PAGESPEED_API_KEY || "").trim();
   const effectiveKey = (key || envKey || "").trim();
+  if (!effectiveKey) {
+    console.warn("[micro] PSI sin API key (PSI_API_KEY). Podrías recibir 403/REQUEST_DENIED.");
+  }
 
   // 3) (REMOVIDO) Preflight WAF — siempre intentamos PSI primero
   
@@ -213,16 +220,20 @@ export async function runPageSpeed({
       const status = e?.response?.status;
       const msg = e?.response?.data?.error?.message || e?.message || String(e);
       const retryAfter = e?.response?.headers?.["retry-after"];
-      console.log(`[micro] PSI fail (attempt ${attempt}): ${status || 429} Request failed with status code ${status || 429}`);
-      console.log(`[micro] PSI retry in ${[2000, 5000, 10000][attempt] || 10000}ms`);
-      
-      if (retryAfter) console.error("[micro] Retry-After header:", retryAfter);
 
-      if ((status === 429 || (status >= 500 && status <= 599)) && attempt < 3) {
-        const waitMs = retryAfter ? Number(retryAfter) * 1000 : [2000, 5000, 10000][attempt];
-        console.log("[micro] PSI retry in %dms", waitMs);
-        await sleep(waitMs);
-        continue;
+      // Logs claros según condición
+      if (status === 429 || (status >= 500 && status <= 599)) {
+        const wait = [2000, 5000, 10000][attempt] || 10000;
+        console.warn(`[micro] PSI fail (attempt ${attempt}) status=${status} msg=${msg}`);
+        if (retryAfter) console.warn("[micro] Retry-After:", retryAfter);
+        if (attempt < 3) {
+          console.log(`[micro] PSI retry in ${wait}ms`);
+          await sleep(wait);
+          continue;
+        }
+      } else {
+        // 4xx no-retry (403, 400, etc.)
+        console.warn(`[micro] PSI non-retryable status=${status} msg=${msg}`);
       }
       break; // cae a local
     }
@@ -321,7 +332,7 @@ async function runLocalLighthouse({
     };
 
     const t0 = Date.now();
-    const rr: any = await lighthouse(url, opts, config as any);
+    const rr: any = await lighthouse(url, opts, (config as any));
     const durationMs = Date.now() - t0;
 
     const lhr = rr?.lhr;

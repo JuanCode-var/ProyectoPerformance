@@ -1,6 +1,6 @@
 // src/components/Formulario.tsx
 import React, { useState, type ChangeEvent, type FormEvent } from 'react';
-import { Globe, Mail, User, ArrowRight, Info, CheckCircle } from 'lucide-react';
+import { Globe, ArrowRight, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { z } from 'zod';
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../shared/ui/card';
 import { Input } from '../shared/ui/input';
 import { Button } from '../shared/ui/button';
 import { Checkbox } from '../shared/ui/checkbox';
+import { useAuth } from '../auth/AuthContext';
 
 // --- Animations ---
 const containerVariants = {
@@ -44,8 +45,9 @@ const testInfos: Record<'pagespeed' | 'security', TestInfo> = {
 
 type Tests = { pagespeed: boolean; unlighthouse: boolean; security: boolean };
 type InfoKeys = keyof Tests;
-type FormData = { url: string; name: string; email: string };
-type FormErrors = Partial<Record<'url' | 'name' | 'email' | 'type' | 'submit', string>>;
+// Solo URL; nombre/email vienen de la sesión
+type FormData = { url: string };
+type FormErrors = Partial<Record<'url' | 'type' | 'submit', string>>;
 
 type ApiResponse = {
   _id?: string;
@@ -57,13 +59,11 @@ type ApiResponse = {
 const TestKeySchema = z.enum(['pagespeed', 'unlighthouse', 'security']);
 const RunAuditFormSchema = z.object({
   url: z.string().url('URL inválida'),
-  name: z.string().min(1, 'El nombre es requerido'),
-  email: z.string().email('Correo inválido'),
   type: z.array(TestKeySchema).min(1, 'Selecciona al menos una prueba'),
 });
 
 export default function Formulario() {
-  const [formData, setFormData] = useState<FormData>({ url: '', name: '', email: '' });
+  const [formData, setFormData] = useState<FormData>({ url: '' });
   const [tests, setTests] = useState<Tests>({ pagespeed: false, unlighthouse: false, security: false });
   const [infoOpen, setInfoOpen] = useState<Record<InfoKeys, boolean>>({
     pagespeed: false,
@@ -75,9 +75,11 @@ export default function Formulario() {
   const [errors, setErrors] = useState<FormErrors>({});
 
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Al menos una prueba seleccionada
   const hasAnySelected = Object.values(tests).some(Boolean);
+  const isCliente = user?.role === 'cliente';
 
   // --- Handlers ---
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -100,14 +102,13 @@ export default function Formulario() {
   const validateForm = () => {
     const newErrors: FormErrors = {};
     if (!formData.url) newErrors.url = 'La URL es requerida';
-    if (!formData.name.trim()) newErrors.name = 'El nombre es requerido';
-    if (!formData.email) newErrors.email = 'El correo es requerido';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // Eliminamos la restricción por rol: los clientes también pueden ejecutar
     if (!validateForm()) return;
 
     setIsLoading(true);
@@ -119,8 +120,6 @@ export default function Formulario() {
       // Validación con Zod ANTES de enviar
       const candidate = {
         url: formData.url,
-        name: formData.name,
-        email: formData.email,
         type: tipos,
       };
 
@@ -129,7 +128,7 @@ export default function Formulario() {
         const zErr: FormErrors = {};
         for (const issue of parsed.error.issues) {
           const field = issue.path[0];
-          if (field === 'url' || field === 'name' || field === 'email' || field === 'type') {
+          if (field === 'url' || field === 'type') {
             zErr[field] = issue.message;
           } else {
             zErr.submit = issue.message;
@@ -140,13 +139,11 @@ export default function Formulario() {
         return;
       }
 
-      // Construir payload compatible con backend
+      // Construir payload compatible con backend (name/email vienen de req.user)
       const strategy = 'mobile';
       const categories = ['performance'];
       const payload = {
         url: parsed.data.url,
-        name: parsed.data.name,
-        email: parsed.data.email,
         strategy,
         categories,
         type: parsed.data.type,
@@ -157,11 +154,23 @@ export default function Formulario() {
         response = await fetch('/api/audit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify(payload),
         });
       } catch (fetchErr) {
         console.error('[frontend] fetch failed:', fetchErr);
         throw new Error('No se pudo conectar con el backend (/api/audit)');
+      }
+
+      if (response.status === 401) {
+        // Redirigir a login manteniendo retorno
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        navigate(`/login?next=${next}`);
+        return;
+      }
+      if (response.status === 403) {
+        setErrors({ submit: 'Sin permisos para ejecutar diagnósticos con este usuario.' });
+        return;
       }
 
       const text = await response.text();
@@ -178,8 +187,8 @@ export default function Formulario() {
         throw new Error((apiPayload && (apiPayload.error as string)) || `Error ${response.status}`);
       }
 
-      if (apiPayload._id?.startsWith("temp_")) {
-        throw new Error("El diagnóstico no pudo ser persistido. Por favor, inténtalo nuevamente más tarde.");
+      if (apiPayload._id?.startsWith('temp_')) {
+        throw new Error('El diagnóstico no pudo ser persistido. Por favor, inténtalo nuevamente más tarde.');
       }
 
       // Determinar tipo de diagnóstico para mostrar
@@ -220,6 +229,11 @@ export default function Formulario() {
           </CardHeader>
 
           <CardContent>
+            {isCliente && (
+              <div className="mb-4 p-3 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-sm">
+                Tu rol es <strong>cliente</strong>. Puedes ejecutar diagnósticos y ver métricas; el acceso a históricos está deshabilitado.
+              </div>
+            )}
             {/* Formulario */}
             <motion.form className="modern-form" onSubmit={handleSubmit} variants={itemVariants}>
               {/* URL */}
@@ -241,44 +255,6 @@ export default function Formulario() {
                 {errors.url && <span className="field-error">{errors.url}</span>}
               </motion.div>
 
-              {/* Nombre */}
-              <motion.div className="form-field" variants={itemVariants}>
-                <label className="field-label">Nombre Completo</label>
-                <div className="input-container">
-                  <User className={`input-icon ${focusedField === 'name' ? 'focused' : ''}`} size={20} />
-                  <Input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    onFocus={() => setFocusedField('name')}
-                    onBlur={() => setFocusedField('')}
-                    placeholder="Tu nombre completo"
-                    className={`form-input ${focusedField === 'name' ? 'focused' : ''}`}
-                  />
-                </div>
-                {errors.name && <span className="field-error">{errors.name}</span>}
-              </motion.div>
-
-              {/* Email */}
-              <motion.div className="form-field" variants={itemVariants}>
-                <label className="field-label">Correo Electrónico</label>
-                <div className="input-container">
-                  <Mail className={`input-icon ${focusedField === 'email' ? 'focused' : ''}`} size={20} />
-                  <Input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    onFocus={() => setFocusedField('email')}
-                    onBlur={() => setFocusedField('')}
-                    placeholder="tu@correo.com"
-                    className={`form-input ${focusedField === 'email' ? 'focused' : ''}`}
-                  />
-                </div>
-                {errors.email && <span className="field-error">{errors.email}</span>}
-              </motion.div>
-
               {/* Selección de APIs (Checkbox de shadcn) */}
               <motion.div className="form-field" variants={itemVariants}>
                 <label className="field-label tests-label">¿Qué pruebas quieres ejecutar?</label>
@@ -287,8 +263,7 @@ export default function Formulario() {
                     const k = key as keyof typeof testInfos; // 'pagespeed' | 'security'
                     const checked = !!tests[k as keyof Tests];
 
-                    // Habilitar opción de seguridad
-                    const disabled = false;
+                    const disabled = false; // clientes ahora pueden seleccionar
 
                     return (
                       <motion.div
@@ -302,11 +277,12 @@ export default function Formulario() {
                         transition={{ delay: idx * 0.1 }}
                         aria-disabled={disabled}
                       >
-                        <label className="checkbox-label">
+                        <label className={`checkbox-label ${disabled ? 'opacity-60 pointer-events-none' : ''}`}>
                           <Checkbox
                             checked={checked}
-                            onCheckedChange={(v) => handleTestChange(k as keyof Tests, Boolean(v))}
+                            onCheckedChange={(v) => !disabled && handleTestChange(k as keyof Tests, Boolean(v))}
                             aria-label={`Seleccionar ${info.title}`}
+                            disabled={disabled}
                           />
                           <div className="checkbox-content">
                             <div className="checkbox-icon">{info.icon}</div>

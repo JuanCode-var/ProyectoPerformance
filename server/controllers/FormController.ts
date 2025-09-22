@@ -2,11 +2,10 @@
 import type { Request, Response } from "express";
 import axios from "axios";
 import nodemailer from "nodemailer";
-import Mail from "nodemailer/lib/mailer";
-import type { SentMessageInfo } from "nodemailer/lib/smtp-transport";
+import type { SendMailOptions, SentMessageInfo } from "nodemailer";
 
 import Audit from "../database/esquemaBD.js";
-import Security from "../database/securitySchema";
+import Security from "../database/securitySchema.js";
 import { readMetrics, extractOpportunities } from "../utils/lh.js";
 
 // =====================
@@ -200,6 +199,7 @@ export async function guardarDatos(req: Request, res: Response) {
             err?.message ||
             "error";
           const status = err?.response?.status ?? null;
+          console.error("[pagespeed] fail:", { status, msg, code: err?.code });
           return { [t]: { error: msg, status } } as Record<string, unknown>;
         }
       }
@@ -207,13 +207,23 @@ export async function guardarDatos(req: Request, res: Response) {
       try {
         const base = String(MICROSERVICES.security.endpoint || "").replace(/\/+$/, "");
         const endpoint = /\/api\//.test(base) ? base : `${base}/api/analyze`;
+        console.log(`[security] calling micro → ${endpoint}`);
+
+        const http = await import('http');
+        const https = await import('https');
+        const httpAgent = new (http as any).Agent({ keepAlive: true });
+        const httpsAgent = new (https as any).Agent({ keepAlive: true });
 
         const r = await callWithRetry(
-          async () => axios.post(endpoint, { url }, { timeout: SECURITY_TIMEOUT_MS }),
+          async () => axios.post(endpoint, { url }, {
+            timeout: SECURITY_TIMEOUT_MS,
+            httpAgent,
+            httpsAgent,
+            proxy: false,
+          }),
           { label: "security analyze", retries: SECURITY_RETRIES, backoffMs: SECURITY_RETRY_BACKOFF_MS }
         );
 
-        // Devolver el payload completo del micro de seguridad para no perder campos (headers, cookies, summary, etc.)
         const securityData = (r as any).data;
         return { [t]: securityData };
       } catch (err: any) {
@@ -224,8 +234,7 @@ export async function guardarDatos(req: Request, res: Response) {
           err?.message ||
           "error";
         const status = err?.response?.status ?? null;
-        console.error("❌ Error en llamada al microservicio de seguridad:", err);
-        console.error("❌ Detalles del error:", err?.response?.data || err?.message || err);
+        console.error("[security] fail:", { status, msg, code: err?.code });
         return { [t]: { error: msg, status } };
       }
     };
@@ -261,8 +270,9 @@ export async function guardarDatos(req: Request, res: Response) {
         url,
         type: (tipos as string[])[0],
         tipos,
-        name,
-        email,
+        name: req.user?.name || name,
+        email: req.user?.email || email,
+        userId: req.user?._id ? (req as any).user._id : undefined,
         strategy,
         audit,
         performance: onlyPagespeedOk ? perfResolved : undefined,
@@ -344,6 +354,14 @@ export async function getAuditById(req: Request, res: Response) {
     const doc = await Audit.findById(id);
     if (!doc) return res.status(404).json({ error: "No encontrado" });
 
+    // 🔒 Clientes solo pueden ver sus propios diagnósticos
+    if (req.user?.role === 'cliente') {
+      const owner = (doc as any).userId ? String((doc as any).userId) : null;
+      if (!owner || owner !== req.user._id) {
+        return res.status(403).json({ error: 'Sin permisos' });
+      }
+    }
+
     const docObj: any = doc.toObject();
     docObj.ok = true;
     docObj.isLocal = docObj?.audit?.pagespeed?.meta?.source === "local";
@@ -405,9 +423,14 @@ export async function getAuditHistory(req: Request, res: Response) {
     const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const rxBase = new RegExp("^" + esc(base) + "/?$", "i");
 
-    const filter = {
+    const filter: any = {
       $or: [{ url: decoded }, { url: base }, { url: base + "/" }, { url: { $regex: rxBase } }],
     };
+
+    // 🔒 Clientes: restringir a sus propios diagnósticos
+    if (req.user?.role === 'cliente') {
+      filter.userId = req.user._id;
+    }
 
     const docs = await Audit.find(filter).sort({ fecha: 1 }).lean();
 
@@ -532,7 +555,13 @@ export async function sendReport(req: Request, res: Response) {
     const { url, email } = (req.body || {}) as { url?: string; email?: string };
     if (!url || !email) return res.status(400).json({ error: "Falta parámetro url o email" });
 
-    const docs = await Audit.find({ url }).sort({ fecha: 1 });
+    const query: any = { url };
+    // 🔒 Clientes: solo pueden enviar histórico de sus propios diagnósticos
+    if (req.user?.role === 'cliente') {
+      query.userId = req.user._id;
+    }
+
+    const docs = await Audit.find(query).sort({ fecha: 1 });
     if (!docs.length) return res.status(404).json({ error: "No hay datos previos para esa URL" });
 
     const toSec1 = (ms: number | null | undefined) =>
@@ -625,10 +654,10 @@ export async function sendReport(req: Request, res: Response) {
 
     const transporter = nodemailer.createTransport({
       service: "gmail",
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      auth: { user: process.env.EMAIL_USER as string, pass: process.env.EMAIL_PASS as string },
     });
 
-    const mailOptions: Mail.Options = {
+    const mailOptions: SendMailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
       subject: `Informe Histórico de ${url}`,
@@ -657,9 +686,22 @@ export async function sendDiagnostic(req: Request, res: Response) {
     if (!id && !url) return res.status(400).json({ error: "Falta id o url" });
 
     let doc: any = null;
-    if (id) doc = await Audit.findById(id).lean();
-    else doc = await Audit.findOne({ url }).sort({ fecha: -1 }).lean();
-    if (!doc) return res.status(404).json({ error: "No hay diagnóstico para ese criterio" });
+    if (id) {
+      doc = await Audit.findById(id).lean();
+      if (!doc) return res.status(404).json({ error: "No hay diagnóstico para ese criterio" });
+      // 🔒 Clientes solo pueden enviar diagnósticos propios
+      if (req.user?.role === 'cliente') {
+        const owner = doc?.userId ? String(doc.userId) : null;
+        if (!owner || owner !== req.user._id) {
+          return res.status(403).json({ error: 'Sin permisos' });
+        }
+      }
+    } else {
+      const q: any = { url };
+      if (req.user?.role === 'cliente') q.userId = req.user._id;
+      doc = await Audit.findOne(q).sort({ fecha: -1 }).lean();
+      if (!doc) return res.status(404).json({ error: "No hay diagnóstico para ese criterio" });
+    }
 
     let toEmail = (email || doc.email || "").trim();
     if (!toEmail) return res.status(400).json({ error: "No hay email disponible" });
@@ -713,34 +755,30 @@ export async function sendDiagnostic(req: Request, res: Response) {
 
     const transporter = nodemailer.createTransport({
       service: "gmail",
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      auth: { user: process.env.EMAIL_USER as string, pass: process.env.EMAIL_PASS as string },
     });
 
-    const filenameSafe = (url || doc.url || "sitio")
-      .replace(/[^a-z0-9]+/gi, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 60);
-    const filename = (pdf as any)?.filename || `diagnostico_${filenameSafe}.pdf`;
-
-    const mailOptions: Mail.Options = {
+    const mailOptions: SendMailOptions = {
       from: process.env.EMAIL_USER,
       to: toEmail,
       subject: title,
       html,
-      attachments:
-        pdf?.base64
-          ? [
-              {
-                filename,
-                content: Buffer.from(pdf.base64, "base64"),
-                contentType: pdf.contentType || "application/pdf",
-              },
-            ]
-          : undefined,
+      attachments: pdf?.base64 && pdf?.filename
+        ? [
+            {
+              filename: pdf.filename,
+              content: Buffer.from(pdf.base64, "base64"),
+              contentType: pdf.contentType || "application/pdf",
+            },
+          ]
+        : undefined,
     };
 
     const info: SentMessageInfo = await transporter.sendMail(mailOptions);
-    return res.status(200).json({ message: "Informe de diagnóstico enviado correctamente", messageId: info.messageId });
+    return res.status(200).json({
+      message: "Informe de diagnóstico enviado correctamente",
+      messageId: info.messageId,
+    });
   } catch (e: any) {
     console.error("❌ Error en sendDiagnostic:", e); // eslint-disable-line no-console
     return res.status(500).json({ error: "Error al enviar el diagnóstico", detail: e.message });

@@ -6,12 +6,13 @@ import ActionPlanPanel from "./ActionPlanPanel";
 import EmailSendBar from "./EmailPdfBar";
 import SecurityScoreWidget from "./SecurityScoreWidget"; // show gauge also in main view
 import SecurityDiagnosticoPanel from "./SecurityDiagnosticoPanel";
-import { Info } from "lucide-react";
+import { Info, Ban } from "lucide-react";
 
 // shadcn/ui padres
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "../shared/ui/tabs";
 import { Button } from "../shared/ui/button";
+import { useAuth } from '../auth/AuthContext';
 
 // i18n (usamos alias para no chocar con funciones locales)
 import {
@@ -999,6 +1000,10 @@ export default function DiagnosticoView() {
   const id: string | null =
     (params as any)?.id || new URLSearchParams(location.search).get("id");
 
+  // Rol del usuario para condicionar UI de histórico
+  const { user } = useAuth();
+  const isCliente = user?.role === 'cliente';
+
 
   // NUEVO: estrategia (Móvil/Ordenador)
   const qs = new URLSearchParams(location.search);
@@ -1233,13 +1238,23 @@ export default function DiagnosticoView() {
         <CardContent className="p-6">
           <Link to="/" className="back-link">← Nuevo diagnóstico</Link>
           {url && (
-            <Link
-              to={`/historico?url=${encodeURIComponent(url as string)}`}
-              className="back-link"
-              style={{ marginLeft: "1rem" }}
-            >
-              Ver histórico de esta URL
-            </Link>
+            isCliente ? (
+              <button
+                type="button"
+                className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1 ml-4"
+                title="Acceso restringido para clientes"
+                aria-disabled
+              >
+                <Ban size={16} /> Histórico no disponible
+              </button>
+            ) : (
+              <Link
+                to={`/historico?url=${encodeURIComponent(url as string)}`}
+                className="back-link ml-4"
+              >
+                Ver histórico de esta URL
+              </Link>
+            )
           )}
           <h2 className="diagnostico-title">
             Diagnóstico de: <span className="url">{url}</span>
@@ -1575,6 +1590,10 @@ export default function DiagnosticoView() {
   };
 
   // =================== UI ===================
+  // Rol del usuario para condicionar UI de histórico
+  // const { user } = useAuth(); // moved to top
+  // const isCliente = user?.role === 'cliente';
+
   return (
     <Card>
       <CardContent>
@@ -1582,20 +1601,42 @@ export default function DiagnosticoView() {
           <div className="flex items-center gap-4 mb-2">
             <Link to="/" className="back-link">Nuevo diagnóstico</Link>
             {!!url && activeDiag === 'performance' && (
-              <Link
-                to={`/historico?url=${encodeURIComponent(url as string)}`}
-                className="back-link"
-              >
-                Ver histórico de esta URL
-              </Link>
+              isCliente ? (
+                <button
+                  type="button"
+                  className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1 ml-4"
+                  title="Acceso restringido para clientes"
+                  aria-disabled
+                >
+                  <Ban size={16} /> Histórico no disponible
+                </button>
+              ) : (
+                <Link
+                  to={`/historico?url=${encodeURIComponent(url as string)}`}
+                  className="back-link ml-4"
+                >
+                  Ver histórico de esta URL
+                </Link>
+              )
             )}
             {!!url && activeDiag === 'security' && (
-              <Link
-                to={`/security-history?url=${encodeURIComponent(url as string)}`}
-                className="back-link"
-              >
-                Ver histórico de esta URL
-              </Link>
+              isCliente ? (
+                <button
+                  type="button"
+                  className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1"
+                  title="Acceso restringido para clientes"
+                  aria-disabled
+                >
+                  <Ban size={16} /> Histórico no disponible
+                </button>
+              ) : (
+                <Link
+                  to={`/security-history?url=${encodeURIComponent(url as string)}`}
+                  className="back-link"
+                >
+                  Ver histórico de esta URL
+                </Link>
+              )
             )}
           </div>
 
@@ -1635,13 +1676,15 @@ export default function DiagnosticoView() {
               variant="outline"
             >
               Ver diagnóstico de Seguridad
+
+
             </Button>
-          </div>
-          )}
+          </div>)
+          }
 
           {/* Botón de resumen combinado centrado */}
           {bothMode && (audit as any)?.security && activeApi && (
-            <div className="flex justify-center mb-4">
+            <div className="flex w-full justify-center mb-4">
               <Button
                 style={{
                   background: showCombinedSummary ? 'linear-gradient(to right, #3b82f6, #2563eb)' : '#ffffff',

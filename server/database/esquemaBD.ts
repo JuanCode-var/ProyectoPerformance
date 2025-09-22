@@ -30,6 +30,7 @@ export interface AuditDoc extends mongoose.Document {
   strategy: "mobile" | "desktop" | (string & {});
   name?: string;
   email?: string;
+  userId?: mongoose.Types.ObjectId | null;
   performance?: number;
   metrics?: Metric | null;
   raw?: unknown;
@@ -47,6 +48,7 @@ const AuditSchema = new mongoose.Schema<AuditDoc>(
     strategy: { type: String, enum: ["mobile", "desktop"], default: "mobile" },
     name: { type: String },
     email: { type: String },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
     performance: Number,
     metrics: MetricSchema,
     raw: Object,

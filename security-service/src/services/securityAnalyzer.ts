@@ -1,5 +1,13 @@
 import axios from 'axios';
 import type { AxiosResponse } from 'axios';
+import http from 'http';
+import https from 'https';
+
+const httpAgent = new http.Agent({ keepAlive: true });
+const httpsAgent = new https.Agent({ keepAlive: true });
+
+const REQ_TIMEOUT_MS = Number(process.env.SECURITY_REQ_TIMEOUT_MS || 45000);
+const MAX_REDIRECTS = Number(process.env.SECURITY_MAX_REDIRECTS || 10);
 
 export type SecurityFinding = {
   id: string;
@@ -119,14 +127,19 @@ async function requestHeaders(url: string, method: 'HEAD'|'GET', extra: any = {}
   return axios.request({
     url,
     method,
-    maxRedirects: 5,
-    timeout: 15000,
+    maxRedirects: MAX_REDIRECTS,
+    timeout: REQ_TIMEOUT_MS,
     validateStatus: () => true, // we want headers even on 4xx/5xx
+    httpAgent,
+    httpsAgent,
+    decompress: true,
     headers: {
+      'Connection': 'keep-alive',
       'User-Agent':
         process.env.SECURITY_UA ||
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
     },
     ...extra,
   });
