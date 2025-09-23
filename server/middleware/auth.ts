@@ -40,7 +40,19 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 export function requireRole(...roles: AuthUser['role'][]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ error: 'No autenticado' });
-    if (!roles.includes(req.user.role)) return res.status(403).json({ error: 'Sin permisos' });
+    
+    // Debug: log para diagnosticar el problema
+    console.log('🔍 [DEBUG] requireRole check:');
+    console.log('   User role:', req.user.role);
+    console.log('   Allowed roles:', roles);
+    console.log('   Role included:', roles.includes(req.user.role));
+    
+    if (!roles.includes(req.user.role)) {
+      console.log('❌ [DEBUG] Role rejected:', req.user.role, 'not in', roles);
+      return res.status(403).json({ error: 'Sin permisos' });
+    }
+    
+    console.log('✅ [DEBUG] Role accepted:', req.user.role);
     return next();
   };
 }

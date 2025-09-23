@@ -463,6 +463,10 @@ export default function SecurityDiagnosticoPanel({
   // NEW: reference to capture this panel as PDF
   const captureRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
+  
+  // Auth (role-based UI)
+  const { user } = useAuth();
+  const isCliente = user?.role === 'cliente';
 
   const fetchHistory = async (theUrl: string) => {
     try {
@@ -729,105 +733,121 @@ export default function SecurityDiagnosticoPanel({
                   </h3>
                 </div>
                 
-                {/* Estado de pruebas */}
-                <div className="rounded-lg border p-4 bg-white">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                      📊 Estado de Pruebas
-                    </h4>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Histórico</span>
-                      <div className="relative tooltip-container">
-                        <button
-                          type="button"
-                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
-                          title="Información sobre el estado de pruebas"
-                          onClick={() => setShowTestsTooltip(!showTestsTooltip)}
-                        >
-                          <Info size={12} strokeWidth={2.4} />
-                        </button>
-                        {showTestsTooltip && (
-                          <div className="absolute right-0 top-6 z-50 w-72 p-3 bg-slate-900 text-white text-xs rounded-lg shadow-lg border">
-                            <div className="font-semibold mb-2">Estado de Pruebas de Seguridad</div>
-                            <div className="space-y-1 leading-relaxed">
-                              <div><strong className="text-green-300">Revisadas:</strong> Pruebas que cumplieron los criterios de seguridad</div>
-                              <div><strong className="text-amber-300">Avisos:</strong> Configuraciones que requieren atención</div>
-                              <div><strong className="text-red-300">Mejoras por revisar:</strong> Elementos que necesitan corrección</div>
-                            </div>
-                            <div className="absolute -top-1 right-3 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-slate-900"></div>
-                          </div>
-                        )}
+                {isCliente ? (
+                  <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                        <Ban size={16} />
+                      </div>
+                      <div className="text-sm">
+                        <div className="font-semibold mb-1">Acceso limitado al histórico</div>
+                        <p>Con el rol cliente verás un resumen. El detalle del histórico está restringido.</p>
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Revisadas</span>
-                      <span className="font-bold text-green-600 text-lg">
-                        {securityResult?.summary?.passed ??
-                          securityResult?.passCount ??
-                          (Array.isArray(securityResult?.findings)
-                            ? securityResult.findings.filter((f: any) => f?.passed).length
-                            : '-')}
-                      </span>
+                ) : (
+                  <>
+                    {/* Estado de pruebas */}
+                    <div className="rounded-lg border p-4 bg-white">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                          📊 Estado de Pruebas
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Histórico</span>
+                          <div className="relative tooltip-container">
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
+                              title="Información sobre el estado de pruebas"
+                              onClick={() => setShowTestsTooltip(!showTestsTooltip)}
+                            >
+                              <Info size={12} strokeWidth={2.4} />
+                            </button>
+                            {showTestsTooltip && (
+                              <div className="absolute right-0 top-6 z-50 w-72 p-3 bg-slate-900 text-white text-xs rounded-lg shadow-lg border">
+                                <div className="font-semibold mb-2">Estado de Pruebas de Seguridad</div>
+                                <div className="space-y-1 leading-relaxed">
+                                  <div><strong className="text-green-300">Revisadas:</strong> Pruebas que cumplieron los criterios de seguridad</div>
+                                  <div><strong className="text-amber-300">Avisos:</strong> Configuraciones que requieren atención</div>
+                                  <div><strong className="text-red-300">Mejoras por revisar:</strong> Elementos que necesitan corrección</div>
+                                </div>
+                                <div className="absolute -top-1 right-3 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-slate-900"></div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Revisadas</span>
+                          <span className="font-bold text-green-600 text-lg">
+                            {securityResult?.summary?.passed ??
+                              securityResult?.passCount ??
+                              (Array.isArray(securityResult?.findings)
+                                ? securityResult.findings.filter((f: any) => f?.passed).length
+                                : '-')}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Avisos</span>
+                          <span className="font-bold text-amber-600 text-lg">
+                            {securityResult?.summary?.warnings ?? securityResult?.warningCount ?? '-'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Mejoras por revisar</span>
+                          <span className="font-bold text-red-600 text-lg">
+                            {securityResult?.summary?.failed ??
+                              securityResult?.failCount ??
+                              (Array.isArray(securityResult?.findings)
+                                ? securityResult.findings.filter((f: any) => !f?.passed).length
+                                : '-')}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Avisos</span>
-                      <span className="font-bold text-amber-600 text-lg">
-                        {securityResult?.summary?.warnings ?? securityResult?.warningCount ?? '-'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">Mejoras por revisar</span>
-                      <span className="font-bold text-red-600 text-lg">
-                        {securityResult?.summary?.failed ??
-                          securityResult?.failCount ??
-                          (Array.isArray(securityResult?.findings)
-                            ? securityResult.findings.filter((f: any) => !f?.passed).length
-                            : '-')}
-                      </span>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Título fuera del cuadro indicando que es del histórico */}
-                <h3 className="text-lg font-semibold text-slate-700 mb-2">📊 Datos del histórico</h3>
-                
-                {/* Estado de encabezados */}
-                <div className="rounded-lg border p-4 bg-white">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                      🔒 Estado de Encabezados
-                    </h4>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Histórico</span>
-                      <div className="relative tooltip-container">
-                        <button
-                          type="button"
-                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
-                          title="Información sobre encabezados de seguridad"
-                          onClick={() => setShowHeadersTooltip(!showHeadersTooltip)}
-                        >
-                          <Info size={12} strokeWidth={2.4} />
-                        </button>
-                        {showHeadersTooltip && (
-                          <div className="absolute right-0 top-6 z-50 w-80 p-3 bg-slate-900 text-white text-xs rounded-lg shadow-lg border">
-                            <div className="font-semibold mb-2">Estado de Encabezados de Seguridad</div>
-                            <div className="space-y-1 leading-relaxed">
-                              <div>Analiza la presencia y configuración de encabezados HTTP críticos para la seguridad:</div>
-                              <div><strong className="text-blue-300">CSP:</strong> Content Security Policy - Previene XSS</div>
-                              <div><strong className="text-emerald-300">HSTS:</strong> Strict Transport Security - Fuerza HTTPS</div>
-                              <div><strong className="text-purple-300">X-Frame-Options:</strong> Previene clickjacking</div>
-                              <div className="text-slate-300 mt-1">Y otros encabezados de protección importantes</div>
-                            </div>
-                            <div className="absolute -top-1 right-3 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-slate-900"></div>
+                    {/* Título fuera del cuadro indicando que es del histórico */}
+                    <h3 className="text-lg font-semibold text-slate-700 mb-2">📊 Datos del histórico</h3>
+                    
+                    {/* Estado de encabezados */}
+                    <div className="rounded-lg border p-4 bg-white">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                          🔒 Estado de Encabezados
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Histórico</span>
+                          <div className="relative tooltip-container">
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition"
+                              title="Información sobre encabezados de seguridad"
+                              onClick={() => setShowHeadersTooltip(!showHeadersTooltip)}
+                            >
+                              <Info size={12} strokeWidth={2.4} />
+                            </button>
+                            {showHeadersTooltip && (
+                              <div className="absolute right-0 top-6 z-50 w-80 p-3 bg-slate-900 text-white text-xs rounded-lg shadow-lg border">
+                                <div className="font-semibold mb-2">Estado de Encabezados de Seguridad</div>
+                                <div className="space-y-1 leading-relaxed">
+                                  <div>Analiza la presencia y configuración de encabezados HTTP críticos para la seguridad:</div>
+                                  <div><strong className="text-blue-300">CSP:</strong> Content Security Policy - Previene XSS</div>
+                                  <div><strong className="text-emerald-300">HSTS:</strong> Strict Transport Security - Fuerza HTTPS</div>
+                                  <div><strong className="text-purple-300">X-Frame-Options:</strong> Previene clickjacking</div>
+                                  <div className="text-slate-300 mt-1">Y otros encabezados de protección importantes</div>
+                                </div>
+                                <div className="absolute -top-1 right-3 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-slate-900"></div>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </div>
+                      <HeaderStatusBars headers={securityResult?.headers} />
                     </div>
-                  </div>
-                  <HeaderStatusBars headers={securityResult?.headers} />
-                </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -835,24 +855,20 @@ export default function SecurityDiagnosticoPanel({
             {/* Reemplazado: solo mostrar el botón/enlace al histórico completo con el mismo estilo que Diagnóstico */}
             {showInlineHistoryLink && url && (
               <div className="mt-2">
-                {(() => {
-                  const { user } = useAuth();
-                  const isCliente = user?.role === 'cliente';
-                  return isCliente ? (
-                    <button
-                      type="button"
-                      className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1"
-                      title="Acceso restringido para clientes"
-                      aria-disabled
-                    >
-                      <Ban size={16} /> Histórico no disponible
-                    </button>
-                  ) : (
-                    <Link to={`/security-history?url=${encodeURIComponent(url)}`} className="back-link">
-                      Ver histórico de esta URL
-                    </Link>
-                  );
-                })()}
+                {isCliente ? (
+                  <button
+                    type="button"
+                    className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1"
+                    title="Acceso restringido para clientes"
+                    aria-disabled
+                  >
+                    <Ban size={16} /> Histórico no disponible
+                  </button>
+                ) : (
+                  <Link to={`/security-history?url=${encodeURIComponent(url)}`} className="back-link">
+                    Ver histórico de esta URL
+                  </Link>
+                )}
               </div>
             )}
 

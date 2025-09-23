@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from "react"
 import {
   AlertTriangle, AlertCircle, Info, CheckCircle2,
-  ChevronDown, ChevronUp, ListChecks, SortDesc, Eye, EyeOff
+  ChevronDown, ChevronUp, ListChecks, SortDesc, Eye, EyeOff, Ban
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card"
 import { Button } from "../shared/ui/button"
+import { useAuth } from "../auth/AuthContext"
 
 /* ==== Tipos ==== */
 type SeverityLevel = "high" | "mid" | "low"
@@ -26,6 +27,7 @@ type SortKind = "impact_desc" | "impact_asc"
 type Props = { opportunities?: PlanItem[]; performance?: number | null }
 
 export default function ActionPlanPanel({ opportunities = [], performance = null }: Props) {
+  const { user, loading } = useAuth();
   const [done, setDone] = useState<Record<string, boolean>>({})
   const [filter, setFilter] = useState<FilterKind>("all")
   const [sort, setSort] = useState<SortKind>("impact_desc")
@@ -76,6 +78,59 @@ export default function ActionPlanPanel({ opportunities = [], performance = null
 
   const errors = data.filter((o) => o.sev.lvl === "high")
   const improvements = data.filter((o) => o.sev.lvl !== "high")
+
+  // Vista resumida para cliente: top N por impacto, sin detalles
+  if (loading) {
+    return (
+      <Card className="ap-panel">
+        <CardHeader>
+          <CardTitle>⚠ Problemas detectados</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8 text-slate-600">Verificando permisos…</div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (user?.role === 'cliente') {
+    const top = [...data]
+      .sort((a,b)=> (b.impactScore || 0) - (a.impactScore || 0))
+      .slice(0, 10)
+    return (
+      <Card className="ap-panel">
+        <CardHeader>
+          <CardTitle>⚠ Plan de acción (resumen para cliente)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-sm text-slate-600 mb-4">
+            Vista resumida con recomendaciones priorizadas. Los detalles completos están disponibles para roles con permisos.
+          </div>
+          {top.length === 0 ? (
+            <div className="ap-muted">Sin recomendaciones disponibles.</div>
+          ) : (
+            <ul className="space-y-3">
+              {top.map((o)=>{
+                const { lvl, Icon } = o.sev
+                const color = lvl === 'high' ? '#b91c1c' : lvl === 'mid' ? '#92400e' : '#2563eb'
+                return (
+                  <li key={`sum-${o._k}`} className="flex items-start gap-3 p-3 rounded-md border bg-white">
+                    <Icon size={18} color={color} />
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-800 truncate">{o.title}</div>
+                      <div className="text-xs text-slate-600">
+                        {o.savingsLabel ? `Ahorro estimado: ${o.savingsLabel}` : 'Recomendación priorizada'}
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
 
   const pendingMarkdown = (): string => {
     const lines = data

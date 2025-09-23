@@ -8,6 +8,7 @@ import RunAuditPage from "./pages/run-audit";
 import DiagnosticsPage from "./pages/diagnostics";
 import HistoryPage from "./pages/history";
 import SecurityHistoryPage from "./pages/security-history";
+import SettingsPage from "./pages/settings";
 import LoginPage from "./pages/auth/Login";
 import RegisterPage from "./pages/auth/Register";
 import { useAuth } from './auth/AuthContext';
@@ -22,41 +23,51 @@ function Protected({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function NonClienteOnly({ children }: { children: React.ReactNode }) {
+function AdminOnly({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`} replace />;
-  if (user.role === 'cliente') return <Navigate to="/historico" replace />;
+  if (user.role !== 'admin') return <Navigate to="/" replace />; // Solo los admins pueden acceder
+  return <>{children}</>;
+}
+
+function TecnicoOnly({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`} replace />;
+  if (user.role !== 'tecnico') return <Navigate to="/" replace />; // Solo los técnicos pueden acceder
   return <>{children}</>;
 }
 
 export default function App() {
   return (
-    <div className="min-h-screen w-full bg-gray-50">
-      <Navbar />
-      <main className="w-full">
-        <div className="w-full">
-          <Routes>
-            {/* Home = página FSD con shadcn */}
-            {/* Permitir a todos los roles autenticados abrir el formulario. El componente Formulario ya deshabilita acciones para 'cliente'. */}
-            <Route path="/" element={<Protected><RunAuditPage /></Protected>} />
-            {/* Auth */}
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/verify-email" element={<VerifyEmailPage />} />
-            {/* Detalle del diagnóstico */}
-            <Route path="/diagnostico/:id" element={<Protected><DiagnosticsPage /></Protected>} />
-            {/* Histórico */}
-            <Route path="/historico" element={<Protected><HistoryPage /></Protected>} />
-            {/* Histórico de Seguridad */}
-            <Route path="/security-history" element={<Protected><SecurityHistoryPage /></Protected>} />
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+    <Routes>
+      {/* Auth routes without layout */}
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
+      
+      {/* Main app routes with layout */}
+      <Route path="/*" element={
+        <div className="min-h-screen w-full bg-gray-50">
+          <Navbar />
+          <main className="w-full">
+            <div className="w-full">
+              <Routes>
+                <Route path="/" element={<Protected><RunAuditPage /></Protected>} />
+                <Route path="/diagnostico/:id" element={<Protected><DiagnosticsPage /></Protected>} />
+                <Route path="/historico" element={<Protected><HistoryPage /></Protected>} />
+                <Route path="/security-history" element={<Protected><SecurityHistoryPage /></Protected>} />
+                <Route path="/settings" element={<AdminOnly><SettingsPage /></AdminOnly>} />
+                <Route path="/otros" element={<TecnicoOnly><div className="p-8"><h1 className="text-2xl font-bold">Sección Técnicos</h1><p>Contenido exclusivo para técnicos.</p></div></TecnicoOnly>} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
+          </main>
         </div>
-      </main>
-    </div>
+      } />
+    </Routes>
   );
 }

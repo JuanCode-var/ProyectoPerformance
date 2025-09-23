@@ -137,7 +137,6 @@ export default function HistoricoView() {
 
   useEffect(() => {
     if (!urlIsValid) return;
-    if (isCliente) return; // clientes no cargan histórico
     (async () => {
       try {
         const res  = await fetch(`/api/audit/history?url=${encodeURIComponent(url)}`, { credentials: 'include' });
@@ -149,23 +148,7 @@ export default function HistoricoView() {
         setErr(e?.message || 'Error cargando histórico');
       }
     })();
-  }, [url, urlIsValid, isCliente]);
-
-  // Bloqueo visual para clientes
-  if (isCliente) return (
-    <Card>
-      <CardContent className="p-6">
-        <div className="flex items-center gap-2 text-slate-600 mb-3">
-          <Ban size={18} />
-          <span>Acceso al histórico restringido para clientes.</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link to="/" className="back-link">Volver</Link>
-          <Button onClick={() => navigate('/')} variant="outline">Ir al diagnóstico</Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
+  }, [url, urlIsValid]);
 
   // ---- Estados tempranos con Card (padre shadcn) ----
   if (!urlIsValid) return (

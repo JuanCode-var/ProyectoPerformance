@@ -45,7 +45,6 @@ const testInfos: Record<'pagespeed' | 'security', TestInfo> = {
 
 type Tests = { pagespeed: boolean; unlighthouse: boolean; security: boolean };
 type InfoKeys = keyof Tests;
-// Solo URL; nombre/email vienen de la sesión
 type FormData = { url: string };
 type FormErrors = Partial<Record<'url' | 'type' | 'submit', string>>;
 
@@ -55,7 +54,7 @@ type ApiResponse = {
   [k: string]: unknown;
 };
 
-// --- Zod schemas (valida payload antes de enviar) ---
+// --- Zod schemas ---
 const TestKeySchema = z.enum(['pagespeed', 'unlighthouse', 'security']);
 const RunAuditFormSchema = z.object({
   url: z.string().url('URL inválida'),
@@ -77,7 +76,6 @@ export default function Formulario() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Al menos una prueba seleccionada
   const hasAnySelected = Object.values(tests).some(Boolean);
   const isCliente = user?.role === 'cliente';
 
@@ -108,7 +106,6 @@ export default function Formulario() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // Eliminamos la restricción por rol: los clientes también pueden ejecutar
     if (!validateForm()) return;
 
     setIsLoading(true);
@@ -117,7 +114,6 @@ export default function Formulario() {
     try {
       const tipos = (Object.keys(tests) as (keyof Tests)[]).filter(key => tests[key]);
 
-      // Validación con Zod ANTES de enviar
       const candidate = {
         url: formData.url,
         type: tipos,
@@ -139,7 +135,6 @@ export default function Formulario() {
         return;
       }
 
-      // Construir payload compatible con backend (name/email vienen de req.user)
       const strategy = 'mobile';
       const categories = ['performance'];
       const payload = {
@@ -163,13 +158,13 @@ export default function Formulario() {
       }
 
       if (response.status === 401) {
-        // Redirigir a login manteniendo retorno
         const next = encodeURIComponent(window.location.pathname + window.location.search);
         navigate(`/login?next=${next}`);
         return;
       }
       if (response.status === 403) {
-        setErrors({ submit: 'Sin permisos para ejecutar diagnósticos con este usuario.' });
+        console.error('[frontend] 403 error - Sin permisos para rol:', user?.role);
+        setErrors({ submit: `Sin permisos para ejecutar diagnósticos. Tu rol actual: ${user?.role}. Contacta al administrador.` });
         return;
       }
 
@@ -191,178 +186,220 @@ export default function Formulario() {
         throw new Error('El diagnóstico no pudo ser persistido. Por favor, inténtalo nuevamente más tarde.');
       }
 
-      // Determinar tipo de diagnóstico para mostrar
       const types = parsed.data.type;
       const initType = types.includes('pagespeed') && types.includes('security')
         ? 'both'
         : types.includes('security')
         ? 'security'
         : 'performance';
+
       navigate(`/diagnostico/${apiPayload._id}?type=${initType}`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error desconocido';
-      setErrors({ submit: msg });
+    } catch (e: any) {
+      console.error('[frontend] submit error:', e);
+      setErrors({ submit: e?.message || 'Error inesperado' });
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <motion.div initial="hidden" animate="visible" variants={containerVariants}>
-      {/* Card padre de shadcn */}
-      <motion.div variants={itemVariants}>
-        <Card className="rounded-2xl shadow-sm form-card">
-          <CardHeader>
-            <div className="form-header">
-              <motion.div className="logo-container" whileHover={{ rotate: 2, scale: 1.02 }}>
-                <img
-                  src="/LogoChoucair.png"
-                  alt="Choucair Business Centric Testing"
-                  className="logo-img-form"
-                />
-              </motion.div>
-              <CardTitle className="form-title">Diagnóstico de Rendimiento</CardTitle>
-              <p className="form-subtitle">
-                Aplicaciones Web • <span className="brand-highlight">Choucair Testing</span>
-              </p>
-            </div>
-          </CardHeader>
+    <div className="min-h-screen bg-white flex items-center justify-center p-0 m-0">
+      {/* Subtle animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <motion.div
+          animate={{ 
+            x: [0, 50, 0],
+            y: [0, -50, 0],
+            rotate: [0, 90, 180]
+          }}
+          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+          className="absolute top-1/4 left-1/4 w-24 h-24 bg-gray-100 rounded-full opacity-20"
+        />
+        <motion.div
+          animate={{ 
+            x: [0, -30, 0],
+            y: [0, 50, 0],
+            rotate: [0, -90, -180]
+          }}
+          transition={{ duration: 35, repeat: Infinity, ease: "linear" }}
+          className="absolute bottom-1/4 right-1/4 w-16 h-16 bg-gray-200 rounded-full opacity-20"
+        />
+      </div>
 
-          <CardContent>
-            {isCliente && (
-              <div className="mb-4 p-3 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-sm">
-                Tu rol es <strong>cliente</strong>. Puedes ejecutar diagnósticos y ver métricas; el acceso a históricos está deshabilitado.
-              </div>
-            )}
-            {/* Formulario */}
-            <motion.form className="modern-form" onSubmit={handleSubmit} variants={itemVariants}>
-              {/* URL */}
-              <motion.div className="form-field" variants={itemVariants}>
-                <label className="field-label">URL del Sitio Web</label>
-                <div className="input-container">
-                  <Globe className={`input-icon ${focusedField === 'url' ? 'focused' : ''}`} size={20} />
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="w-full max-w-2xl relative z-10 px-4"
+      >
+        <Card className="backdrop-blur-lg bg-white/95 border border-gray-300 shadow-2xl rounded-2xl overflow-hidden">
+          <CardHeader className="text-center pb-6 pt-8 bg-gradient-to-r from-gray-900 to-black text-white rounded-t-2xl">
+            <CardTitle className="text-3xl font-bold mb-3">
+              {isCliente ? `Bienvenido, ${user?.name}` : 'Diagnóstico de Performance'}
+            </CardTitle>
+            <p className="text-gray-200 text-base">
+              {isCliente ? 
+                'Como cliente, puedes ejecutar diagnósticos de performance y seguridad para cualquier sitio web.' :
+                'Ejecuta diagnósticos completos de performance y seguridad.'
+              }
+            </p>
+          </CardHeader>
+          <CardContent className="p-10">
+            {/* Icon moved to content area, centered */}
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+              className="mx-auto w-24 h-24 bg-gray-900/10 rounded-full flex items-center justify-center mb-10"
+            >
+              <Globe className="w-12 h-12 text-gray-900" />
+            </motion.div>
+            
+            <motion.form onSubmit={handleSubmit} variants={containerVariants} className="space-y-8">
+              {/* URL Field */}
+              <motion.div variants={itemVariants} className="space-y-3">
+                <label htmlFor="url" className="block text-base font-medium text-gray-700 mb-3">
+                  URL del sitio web
+                </label>
+                <div className="relative">
+                  <Globe className={`absolute left-4 top-1/2 transform -translate-y-1/2 w-6 h-6 transition-colors ${
+                    focusedField === 'url' ? 'text-slate-600' : 'text-gray-400'
+                  }`} />
                   <Input
-                    type="url"
+                    id="url"
                     name="url"
+                    type="url"
                     value={formData.url}
                     onChange={handleInputChange}
                     onFocus={() => setFocusedField('url')}
                     onBlur={() => setFocusedField('')}
                     placeholder="https://ejemplo.com"
-                    className={`form-input ${focusedField === 'url' ? 'focused' : ''}`}
+                    className="pl-12 pr-4 h-14 text-base border-2 rounded-xl transition-all duration-200 focus:border-slate-500 focus:ring-slate-500"
+                    required
                   />
                 </div>
-                {errors.url && <span className="field-error">{errors.url}</span>}
+                {errors.url && <span className="text-red-500 text-sm font-medium">{errors.url}</span>}
               </motion.div>
 
-              {/* Selección de APIs (Checkbox de shadcn) */}
-              <motion.div className="form-field" variants={itemVariants}>
-                <label className="field-label tests-label">¿Qué pruebas quieres ejecutar?</label>
-                <motion.div className="checkbox-group" variants={itemVariants}>
-                  {Object.entries(testInfos).map(([key, info], idx) => {
-                    const k = key as keyof typeof testInfos; // 'pagespeed' | 'security'
-                    const checked = !!tests[k as keyof Tests];
-
-                    const disabled = false; // clientes ahora pueden seleccionar
-
-                    return (
-                      <motion.div
-                        key={k}
-                        className={`checkbox-item ${checked ? 'checked' : ''} ${
-                          ''
-                        }`}
-                        variants={itemVariants}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.1 }}
-                        aria-disabled={disabled}
-                      >
-                        <label className={`checkbox-label ${disabled ? 'opacity-60 pointer-events-none' : ''}`}>
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(v) => !disabled && handleTestChange(k as keyof Tests, Boolean(v))}
-                            aria-label={`Seleccionar ${info.title}`}
-                            disabled={disabled}
-                          />
-                          <div className="checkbox-content">
-                            <div className="checkbox-icon">{info.icon}</div>
-                            <div className="checkbox-title">
-                              {info.title}
-                            </div>
-                          </div>
-                        </label>
-
-                        <motion.button
-                          type="button"
-                          className="info-toggle"
-                          onClick={() => toggleInfo(k as InfoKeys)}
-                          transition={{ type: 'spring', stiffness: 300 }}
-                          disabled={false}
-                        >
-                          <Info size={16} />
-                          <span>{infoOpen[k as InfoKeys] ? 'Ocultar' : '¿Qué es?'}</span>
-                        </motion.button>
-
-                        <AnimatePresence>
-                          {infoOpen[k as InfoKeys] && (
-                            <motion.div
-                              className="api-info"
-                              initial="hidden"
-                              animate="visible"
-                              exit="hidden"
-                              variants={infoVariants}
-                            >
-                              <p>{info.description}</p>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </motion.div>
-                    );
-                  })}
-                </motion.div>
-                {!hasAnySelected && (
-                  <div className="field-hint field-hint--danger">
-                    Selecciona al menos una prueba para continuar.
+              {/* Test Selection */}
+              <motion.div variants={itemVariants} className="space-y-4">
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">Tipos de análisis</h3>
+                    <p className="text-gray-500">
+                      Selecciona los análisis que deseas ejecutar
+                    </p>
                   </div>
-                )}
-                {errors.type && <span className="field-error">{errors.type}</span>}
+                  <motion.div className="space-y-4" variants={containerVariants}>
+                    {(Object.keys(testInfos) as Array<keyof typeof testInfos>).map((k) => {
+                      const info = testInfos[k];
+                      const checked = tests[k];
+                      const disabled = false;
+
+                      return (
+                        <motion.div
+                          key={k}
+                          variants={itemVariants}
+                          className={`relative group transition-all duration-200 ${
+                            checked 
+                              ? 'ring-2 ring-gray-500 bg-gray-50' 
+                              : 'hover:ring-2 hover:ring-gray-200 bg-white'
+                          } ${disabled ? 'opacity-60 pointer-events-none' : ''} rounded-xl border-2 border-gray-100 p-6`}
+                        >
+                          <label className={`flex items-center gap-4 cursor-pointer ${disabled ? 'opacity-60 pointer-events-none' : ''}`}>
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(v) => !disabled && handleTestChange(k as keyof Tests, Boolean(v))}
+                              aria-label={`Seleccionar ${info.title}`}
+                              disabled={disabled}
+                              className="w-5 h-5"
+                            />
+                            <div className="flex items-center gap-4 flex-1">
+                              <div className="text-3xl">{info.icon}</div>
+                              <div className="text-lg font-semibold text-gray-700">
+                                {info.title}
+                              </div>
+                            </div>
+                          </label>
+
+                          <motion.button
+                            type="button"
+                            className="absolute top-6 right-6 flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800 font-medium transition-colors"
+                            onClick={() => toggleInfo(k as InfoKeys)}
+                            transition={{ type: 'spring', stiffness: 300 }}
+                            disabled={false}
+                          >
+                            <Info size={16} />
+                            <span>{infoOpen[k as InfoKeys] ? 'Ocultar' : '¿Qué es?'}</span>
+                          </motion.button>
+
+                          <AnimatePresence>
+                            {infoOpen[k as InfoKeys] && (
+                              <motion.div
+                                className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200"
+                                initial="hidden"
+                                animate="visible"
+                                exit="hidden"
+                                variants={infoVariants}
+                              >
+                                <p className="text-gray-600">{info.description}</p>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.div>
+                      );
+                    })}
+                  </motion.div>
+                  {!hasAnySelected && (
+                    <div className="text-center p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <span className="text-red-600 font-medium">
+                        Selecciona al menos una prueba para continuar.
+                      </span>
+                    </div>
+                  )}
+                  {errors.type && <span className="text-red-500 text-sm font-medium">{errors.type}</span>}
+                </div>
               </motion.div>
 
-              {/* Botón submit (Button de shadcn) */}
-              <motion.div whileTap={{ scale: 0.98 }}>
+              {/* Submit Button */}
+              <motion.div whileTap={{ scale: 0.98 }} className="pt-4">
                 <Button
                   type="submit"
                   disabled={isLoading || !hasAnySelected}
-                  className={`submit-button ${isLoading ? 'loading' : ''}`}
+                  className="w-full h-14 text-base bg-gradient-to-r from-gray-900 to-black hover:from-black hover:to-gray-800 text-white font-semibold rounded-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:scale-100"
                 >
                   {isLoading ? (
-                    <>
-                      <motion.div
-                        className="loading-spinner"
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                      />
-                      Ejecutando...
-                    </>
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      <span>Ejecutando...</span>
+                    </div>
                   ) : (
-                    <>
+                    <div className="flex items-center justify-center gap-3">
                       <span>Iniciar Diagnóstico</span>
-                      <ArrowRight size={18} />
-                    </>
+                      <ArrowRight size={20} />
+                    </div>
                   )}
                 </Button>
               </motion.div>
             </motion.form>
 
-            {/* Mensaje de error */}
+            {/* Error Message */}
             {errors.submit && (
-              <motion.div className="error-alert" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                <strong>Error:</strong> {errors.submit}
+              <motion.div 
+                className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl"
+                initial={{ opacity: 0, y: 10 }} 
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <div className="flex items-center gap-2 text-red-700">
+                  <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">!</div>
+                  <strong>Error:</strong> 
+                  <span>{errors.submit}</span>
+                </div>
               </motion.div>
             )}
           </CardContent>
         </Card>
       </motion.div>
-    </motion.div>
+    </div>
   );
 }

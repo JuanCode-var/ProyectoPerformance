@@ -12,6 +12,15 @@ function useQuery(): URLSearchParams {
   return new URLSearchParams(useLocation().search);
 }
 
+function loadUiFlagShowSecurityHistory(): boolean {
+  try {
+    const raw = localStorage.getItem('app.settings');
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return Boolean(parsed?.ui?.showSecurityHistoryToClients);
+  } catch { return false; }
+}
+
 async function safeParse(res: Response): Promise<any> {
   const txt = await res.text();
   try { return JSON.parse(txt || "{}"); } catch { return { _raw: txt }; }
@@ -232,6 +241,7 @@ export default function SecurityHistoricoView() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isCliente = user?.role === 'cliente';
+  const allowedForClient = !isCliente || loadUiFlagShowSecurityHistory();
 
   const [history, setHistory] = useState<SecurityHistoryPoint[] | null>(null);
   const [err, setErr] = useState<string>("");
@@ -239,7 +249,7 @@ export default function SecurityHistoricoView() {
   if (!url) return <Navigate to="/" replace />;
 
   useEffect(() => {
-    if (isCliente) return; // no cargar para cliente
+    if (!allowedForClient) return; // respetar flag desde settings
     (async () => {
       try {
         const r = await fetch(`/api/security/history?url=${encodeURIComponent(url)}`);
@@ -253,9 +263,9 @@ export default function SecurityHistoricoView() {
         setErr(e?.message || "Error cargando histórico de seguridad");
       }
     })();
-  }, [url, isCliente]);
+  }, [url, allowedForClient]);
 
-  if (isCliente) return (
+  if (!allowedForClient) return (
     <Card className="mt-4">
       <CardHeader>
         <CardTitle>Histórico de seguridad</CardTitle>
@@ -263,7 +273,7 @@ export default function SecurityHistoricoView() {
       <CardContent>
         <div className="flex items-center gap-2 text-slate-600 mb-3">
           <Ban size={18} />
-          <span>Acceso al histórico de seguridad restringido para clientes.</span>
+          <span>El administrador ha restringido el histórico de seguridad para clientes.</span>
         </div>
         <Button variant="outline" onClick={() => navigate(-1)} className="back-link">Volver al diagnóstico</Button>
       </CardContent>

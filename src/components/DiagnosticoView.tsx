@@ -1001,7 +1001,7 @@ export default function DiagnosticoView() {
     (params as any)?.id || new URLSearchParams(location.search).get("id");
 
   // Rol del usuario para condicionar UI de histórico
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const isCliente = user?.role === 'cliente';
 
 
@@ -1675,9 +1675,7 @@ export default function DiagnosticoView() {
               }} 
               variant="outline"
             >
-              Ver diagnóstico de Seguridad
-
-
+                                                     Ver diagnóstico de Seguridad
             </Button>
           </div>)
           }
