@@ -10,6 +10,8 @@ import { connectDB } from './database/mongo.js';      // 👈 mantén .js (NodeN
 import formRoutes from './routes/formRoutes.js';      // 👈 mantén .js (NodeNext)
 import securityRoutes from './routes/securityRoutes.js'; // 👈 mantén .js (NodeNext)
 import authRoutes from './routes/auth.js';
+import adminRoutes from './routes/admin.js';
+import { logRequest, recordVisit } from './controllers/admin.controller.js';
 
 // Evitar que TS incluya archivos fuera de rootDir durante build
 // (cargamos dinámicamente en runtime ESM)
@@ -49,10 +51,21 @@ app.use((req, _res, next) => {
   next();
 });
 
+// Simple request log + telemetry for QA
+app.use((req, _res, next) => {
+  try { logRequest(req.method, req.url); } catch {}
+  // Record telemetry for GET HTML routes quickly (filter noisy assets)
+  if (req.method === 'GET' && /^\/(admin|historico|security-history|settings|diagnostico|login|register|$)/.test(req.path)) {
+    try { recordVisit(req.path, (req as any).user || null); } catch {}
+  }
+  next();
+});
+
 // Rutas
 app.use('/api', authRoutes);
 app.use('/api', formRoutes);
 app.use('/api', securityRoutes);
+app.use('/api', adminRoutes);
 app.get('/api/diagnostics/:rawUrl',               getDiagnosticsRaw as any);
 app.get('/api/diagnostics/:rawUrl/processed',     getDiagnosticsProcessed as any);
 app.get('/api/diagnostics/by-id/:id/processed',   getDiagnosticsProcessedById as any);

@@ -30,8 +30,15 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      await login(email, password);
-      navigate('/', { replace: true });
+      const user = await login(email, password);
+      const next = params.get('next');
+      if (user?.role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else if (next) {
+        navigate(next, { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
     } catch (e: any) {
       setError(e?.message || 'Credenciales incorrectas');
     } finally {

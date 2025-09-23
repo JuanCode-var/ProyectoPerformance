@@ -165,17 +165,62 @@ export async function guardarDatos(req: Request, res: Response) {
     try {
       const CACHE_TTL = 1000 * 60 * 60;
       const cutoff = new Date(Date.now() - CACHE_TTL);
-      const cached = await Audit.findOne({
+      // Asegurar que para clientes el cache solo devuelva documentos del mismo usuario
+      const cachedQuery: any = {
         url,
         tipos,
         strategy,
         fecha: { $gte: cutoff },
-      });
+      };
+      if ((req as any)?.user?.role === 'cliente' && (req as any)?.user?._id) {
+        cachedQuery.userId = (req as any).user._id;
+      }
+      const cached = await Audit.findOne(cachedQuery);
       if (!nocache && cached) {
         const resp: any = cached.toObject();
-        resp.ok = true;
-        resp.isLocal = resp?.audit?.pagespeed?.meta?.source === "local";
-        return res.json(resp);
+        // En lugar de devolver el cache directamente, registramos un nuevo documento para histórico
+        try {
+          const ownerId = (req as any)?.user?._id || (req as any)?.user?.id || undefined;
+          const typeVal = Array.isArray(resp?.tipos) && resp.tipos.length ? resp.tipos[0] : (resp?.type || (Array.isArray(tipos) ? (tipos as string[])[0] : String(type)));
+          const metricsVal = resp?.metrics ?? resp?.audit?.pagespeed?.metrics ?? undefined;
+          const perfVal = typeof resp?.performance === 'number' ? resp.performance : (
+            typeof resp?.audit?.pagespeed?.performance === 'number' ? Math.round(resp.audit.pagespeed.performance) : undefined
+          );
+
+          // Marca en el metadato que proviene de caché para trazabilidad
+          const auditClone = resp?.audit ? JSON.parse(JSON.stringify(resp.audit)) : {};
+          try {
+            if (auditClone?.pagespeed?.meta) {
+              auditClone.pagespeed.meta.cacheClone = true;
+              auditClone.pagespeed.meta.clonedAt = new Date().toISOString();
+            }
+          } catch {}
+
+          const newDoc = await Audit.create({
+            url,
+            type: typeVal,
+            tipos: Array.isArray(resp?.tipos) ? resp.tipos : Array.isArray(tipos) ? tipos as string[] : [String(typeVal)],
+            name: (req as any)?.user?.name || resp?.name,
+            email: (req as any)?.user?.email || resp?.email,
+            userId: ownerId ?? resp?.userId ?? undefined,
+            strategy,
+            audit: auditClone || resp?.audit || undefined,
+            performance: perfVal,
+            metrics: metricsVal,
+            security: resp?.security ?? undefined,
+            fecha: new Date(),
+          });
+
+          const out: any = newDoc.toObject();
+          out.ok = true;
+          out.isLocal = out?.audit?.pagespeed?.meta?.source === 'local';
+          return res.status(201).json(out);
+        } catch (cloneErr: any) {
+          console.warn('⚠️ Cache clone falló, devolviendo cache existente:', cloneErr?.message);
+          const respOut: any = { ...resp, ok: true };
+          respOut.isLocal = resp?.audit?.pagespeed?.meta?.source === 'local';
+          return res.json(respOut);
+        }
       }
     } catch (e: any) {
       console.warn("⚠️ Cache lookup falló:", e?.message); // eslint-disable-line no-console
@@ -272,7 +317,7 @@ export async function guardarDatos(req: Request, res: Response) {
         tipos,
         name: req.user?.name || name,
         email: req.user?.email || email,
-        userId: req.user?._id ? (req as any).user._id : undefined,
+        userId: req.user?._id ? (req as any).user._id : (req as any)?.user?.id || undefined,
         strategy,
         audit,
         performance: onlyPagespeedOk ? perfResolved : undefined,
@@ -357,7 +402,8 @@ export async function getAuditById(req: Request, res: Response) {
     // 🔒 Clientes solo pueden ver sus propios diagnósticos
     if (req.user?.role === 'cliente') {
       const owner = (doc as any).userId ? String((doc as any).userId) : null;
-      if (!owner || owner !== req.user._id) {
+      const uid = (req as any)?.user?._id || (req as any)?.user?.id || req.user._id;
+      if (!owner || owner !== String(uid)) {
         return res.status(403).json({ error: 'Sin permisos' });
       }
     }

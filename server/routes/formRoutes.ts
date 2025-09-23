@@ -51,11 +51,11 @@ router.post(
 );
 
 // Lecturas protegidas
-// Histórico de auditorías: solo roles no-cliente
+// Histórico de auditorías: permitir también a clientes (el controlador filtra por userId)
 router.get(
   "/audit/history",
   requireAuth as any,
-  requireRole('admin','operario','tecnico','otro_tecnico') as any,
+  requireRole('admin','operario','tecnico','otro_tecnico','cliente') as any,
   getAuditHistory
 );
 // Detalle: permitido para todos los autenticados; el controlador debe validar propiedad para clientes

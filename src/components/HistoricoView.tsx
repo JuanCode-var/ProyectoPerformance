@@ -132,6 +132,9 @@ export default function HistoricoView() {
   const metricKeys: MetricKey[] = ['performance','fcp','lcp','tbt','si','ttfb'];
   const [currentIndex, setCurrentIndex] = useState<number[]>([]);
 
+  // Si no hay URL → redirigir al formulario (comportamiento como SecurityHistoricoView)
+  if (!url) return <Navigate to="/" replace />;
+
   // Si el URL está vacío o es inválido → NO redirigir (evita bucle con '/')
   const urlIsValid = !!url && QuerySchema.safeParse({ url }).success;
 

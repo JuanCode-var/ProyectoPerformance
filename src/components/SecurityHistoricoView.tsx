@@ -283,7 +283,13 @@ export default function SecurityHistoricoView() {
   return (
     <Card className="mt-4">
       <CardHeader>
-        <CardTitle>Histórico de seguridad</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle>Histórico de seguridad</CardTitle>
+          <div className="flex items-center gap-2">
+            <Link to="/" className="back-link">Ir al formulario</Link>
+            <Button variant="outline" onClick={() => navigate(-1)} className="back-link">Volver</Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {/* ÚNICO botón: volver al diagnóstico (mismo estilo que Diagnóstico) */}
