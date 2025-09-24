@@ -10,6 +10,7 @@ import jwt from 'jsonwebtoken';
 const COOKIE_NAME = process.env.COOKIE_NAME || 'perf_token';
 const IN_PROD = process.env.NODE_ENV === 'production';
 const REQUIRE_EMAIL_VERIFICATION = process.env.REQUIRE_EMAIL_VERIFICATION === 'true';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/; // validación básica
 
 export async function register(req: Request, res: Response) {
   try {
@@ -23,7 +24,10 @@ export async function register(req: Request, res: Response) {
 
     if (!name || !email || !password) return res.status(400).json({ error: 'Faltan campos' });
 
-    const exists = await User.findOne({ email });
+    const normEmail = email.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(normEmail)) return res.status(400).json({ error: 'Email inválido' });
+
+    const exists = await User.findOne({ email: normEmail });
     if (exists) return res.status(409).json({ error: 'El correo ya está registrado' });
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -34,7 +38,7 @@ export async function register(req: Request, res: Response) {
     if (role && allowed.includes(role)) finalRole = role;
     const creatorPrivileged = false;
 
-    const user = await User.create({ name, email, passwordHash, role: finalRole, title });
+    const user = await User.create({ name, email: normEmail, passwordHash, role: finalRole, title });
 
     // Mongoose tipa _id como unknown en TS 5 + Mongoose 8; usar .id (string) o forzar a string
     const userId: string = (user as any).id ?? String((user as any)._id);
@@ -49,6 +53,8 @@ export async function register(req: Request, res: Response) {
         path: '/',
         maxAge: 24 * 60 * 60 * 1000,
       });
+      // También devolvemos el token para clientes SPA como respaldo (dev/proxy)
+      return res.status(201).json({ ok: true, token, user: { _id: userId, name: user.name, email: user.email, role: user.role, title: user.title } });
     }
 
     return res.status(201).json({ ok: true, user: { _id: userId, name: user.name, email: user.email, role: user.role, title: user.title } });
@@ -60,9 +66,21 @@ export async function register(req: Request, res: Response) {
 export async function login(req: Request, res: Response) {
   try {
     const { email, password } = (req.body || {}) as { email?: string; password?: string };
+    console.log('[auth/login] attempt', email);
     if (!email || !password) return res.status(400).json({ error: 'Faltan credenciales' });
 
-    const user = await User.findOne({ email });
+    const normEmail = email.trim().toLowerCase();
+    // RELAX: no rechazamos por regex aquí para permitir cuentas históricas mal formadas
+    // if (!EMAIL_REGEX.test(normEmail)) return res.status(401).json({ error: 'Credenciales inválidas' });
+
+    let user = await User.findOne({ email: normEmail });
+    if (!user) {
+      // fallback legacy: buscar exactamente lo que ingresó (trim), por si el email viejo quedó con TLD raro
+      const rawTrim = email.trim();
+      if (rawTrim !== normEmail) {
+        user = await User.findOne({ email: rawTrim });
+      }
+    }
     if (!user || !user.isActive) return res.status(401).json({ error: 'Credenciales inválidas' });
 
     if (REQUIRE_EMAIL_VERIFICATION && !user.emailVerified) {
@@ -86,9 +104,12 @@ export async function login(req: Request, res: Response) {
       path: '/',
       maxAge: 24 * 60 * 60 * 1000,
     });
+    console.log('[auth/login] success set cookie for', user.email, 'normEmail=', normEmail);
 
-    return res.json({ ok: true, user: { _id: userId, name: user.name, email: user.email, role: user.role, title: user.title } });
+    // Devolver también el token para permitir Authorization Bearer en el frontend (respaldo)
+    return res.json({ ok: true, token, user: { _id: userId, name: user.name, email: user.email, role: user.role, title: user.title } });
   } catch (e: any) {
+    console.error('[auth/login] error', e);
     return res.status(500).json({ error: e?.message || 'Error al iniciar sesión' });
   }
 }
@@ -96,9 +117,14 @@ export async function login(req: Request, res: Response) {
 export async function me(req: Request, res: Response) {
   try {
     const u = req.user;
-    if (!u) return res.status(401).json({ error: 'No autenticado' });
+    if (!u) {
+      console.log('[auth/me] no user (401)');
+      return res.status(401).json({ error: 'No autenticado' });
+    }
+    console.log('[auth/me] ok user', u.email);
     return res.json({ ok: true, user: u });
-  } catch {
+  } catch (e) {
+    console.error('[auth/me] error', e);
     return res.status(500).json({ error: 'Error' });
   }
 }

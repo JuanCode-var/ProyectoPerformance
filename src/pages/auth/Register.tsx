@@ -59,10 +59,10 @@ export default function RegisterPage() {
     },
     {
       value: 'otro_tecnico',
-      label: 'Otro técnico',
-      desc: 'Soporte y roles técnicos adicionales',
-      color: 'text-orange-600',
-      icon: <Shield className="w-5 h-5" />,
+      label: 'Técnico Especializado',
+      desc: 'Análisis técnico especializado',
+      color: 'text-indigo-600',
+      icon: <Settings className="w-5 h-5" />,
     },
     {
       value: 'admin',
@@ -94,6 +94,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-0 m-0">
+      {/* Logo superior eliminado para evitar duplicado; el logo queda solo dentro del Card */}
       {/* Elementos de fondo animados */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
@@ -124,6 +125,10 @@ export default function RegisterPage() {
       >
         <Card className="backdrop-blur-lg bg-white/95 border border-gray-300 shadow-2xl rounded-2xl overflow-hidden">
           <CardHeader className="text-center pb-6 pt-8 bg-gradient-to-r from-gray-900 to-black text-white rounded-t-2xl">
+            <div className="mx-auto mb-4 flex flex-col items-center gap-2">
+              <img src="/LogoChoucair.png" alt="Choucair" className="h-14 w-auto" />
+              <span className="text-[10px] tracking-[0.25em] text-gray-300 font-medium">BUSINESS CENTRIC TESTING</span>
+            </div>
             <CardTitle className="text-3xl font-bold mb-3">Crear nueva cuenta</CardTitle>
             <p className="text-gray-200 text-base">Únete a nuestra plataforma</p>
           </CardHeader>

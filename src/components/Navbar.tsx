@@ -1,22 +1,42 @@
 // src/components/Navbar.tsx
-import React from "react";
+import React, { useCallback } from "react";
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { LayoutDashboard, Shield, LogOut, User } from 'lucide-react';
+import { LayoutDashboard, Shield, LogOut, User, Play } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const onLogout = async () => {
-    await logout();
-    navigate('/login');
-  };
+  // onLogout memorizado y protegido contra propagación/submit accidental
+  const onLogout = useCallback(async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    console.log('[Navbar] onLogout invoked');
+    const confirmed = window.confirm('¿Seguro que quieres salir?');
+    if (!confirmed) {
+      console.log('[Navbar] logout cancelled by user');
+      return;
+    }
+
+    try {
+      // FORZAMOS el logout porque viene del usuario
+      await logout({ force: true } as any);
+      // blur para evitar Enter/focus residuals que puedan activar otros controles
+      try { (document.activeElement as HTMLElement | null)?.blur(); } catch (err) { /* noop */ }
+      navigate('/login', { replace: true });
+    } catch (err) {
+      console.error('[Navbar] logout error', err);
+    }
+  }, [logout, navigate]);
 
   const role = user?.role;
   const isCliente = role === 'cliente';
   const isAdmin = role === 'admin';
-  const isTecnico = role === 'tecnico';
+  const isTecnico = role === 'tecnico' || role === 'otro_tecnico';
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 w-full border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
@@ -29,9 +49,19 @@ export default function Navbar() {
             className="h-8 w-auto"
           />
         </Link>
+
         <div className="ml-auto flex items-center gap-4 text-sm">
           {user ? (
             <>
+              {/* Botón Ejecutar Diagnóstico para todos los usuarios autenticados */}
+              <Link 
+                to="/?form=true" 
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg"
+              >
+                <Play size={16} />
+                <span className="hidden sm:inline">Diagnóstico</span>
+              </Link>
+
               {/* Admin: mostrar Panel de control */}
               {isAdmin && (
                 <Link 
@@ -43,7 +73,7 @@ export default function Navbar() {
                 </Link>
               )}
 
-              {/* Técnico: mostrar Nuevo diagnóstico y (Otros) */}
+              {/* Técnico: mostrar (Otros) */}
               {isTecnico && (
                 <>
                   <Link 
@@ -64,8 +94,10 @@ export default function Navbar() {
               </div>
               
               {/* Botón de salir */}
-              <button 
-                onClick={onLogout} 
+              <button
+                type="button"
+                onClick={onLogout}
+                aria-label="Cerrar sesión"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-red-600 to-red-700 text-white hover:from-red-700 hover:to-red-800 transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg"
               >
                 <LogOut size={16} />

@@ -1,7 +1,7 @@
 // src/App.tsx
 import React, { useEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
-import Navbar from "./components/Navbar";
+import Navbar from "./components/Navbar"; // Restaurado
 
 // Wrappers FSD
 import RunAuditPage from "./pages/run-audit";
@@ -22,25 +22,25 @@ import AdminTelemetryPage from './pages/admin/Telemetry';
 import { trackRouteVisit } from './shared/telemetry';
 
 function Protected({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
+  const { user, loading, initialized } = useAuth();
+  if (!initialized || loading) return null;
   if (!user) return <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`} replace />;
   return <>{children}</>;
 }
 
 function AdminOnly({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
+  const { user, loading, initialized } = useAuth();
+  if (!initialized || loading) return null;
   if (!user) return <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`} replace />;
   if (user.role !== 'admin') return <Navigate to="/" replace />; // Solo los admins pueden acceder
   return <>{children}</>;
 }
 
 function TecnicoOnly({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
+  const { user, loading, initialized } = useAuth();
+  if (!initialized || loading) return null;
   if (!user) return <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`} replace />;
-  if (user.role !== 'tecnico') return <Navigate to="/" replace />; // Solo los técnicos pueden acceder
+  if (user.role !== 'tecnico' && user.role !== 'otro_tecnico') return <Navigate to="/" replace />; // Solo los técnicos pueden acceder
   return <>{children}</>;
 }
 
@@ -50,13 +50,15 @@ export default function App() {
 
   // Client-side telemetry to complement server middleware (SPA dev/prod)
   useEffect(() => {
-    if (user) {
-      // Debounce minimal with microtask to batch quick redirects
+    // Telemetría SOLO para clientes y con pequeño retraso para asegurar cookie/estado estable
+    if (user?.role === 'cliente') {
       const id = setTimeout(() => {
         trackRouteVisit(location.pathname).catch(() => {});
-      }, 0);
+      }, 80); // antes 0ms, ahora 80ms
       return () => clearTimeout(id);
     }
+    // Si no es cliente, no hacemos nada (evitamos eventos no requeridos)
+    return; // eslint-disable-line consistent-return
   }, [location.pathname, user?.role]);
 
   return (
@@ -68,7 +70,7 @@ export default function App() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       
-      {/* Main app routes with layout */}
+      {/* Main app routes with navbar */}
       <Route path="/*" element={
         <div className="min-h-screen w-full bg-gray-50">
           <Navbar />

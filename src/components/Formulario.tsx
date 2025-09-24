@@ -204,6 +204,7 @@ export default function Formulario() {
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-0 m-0">
+      {/* Logo flotante eliminado: mantener branding solo dentro del Card para evitar duplicados */}
       {/* Subtle animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
@@ -234,6 +235,10 @@ export default function Formulario() {
       >
         <Card className="backdrop-blur-lg bg-white/95 border border-gray-300 shadow-2xl rounded-2xl overflow-hidden">
           <CardHeader className="text-center pb-6 pt-8 bg-gradient-to-r from-gray-900 to-black text-white rounded-t-2xl">
+            <div className="mx-auto mb-4 flex flex-col items-center gap-2">
+              <img src="/LogoChoucair.png" alt="Choucair" className="h-14 w-auto" />
+              <span className="text-[10px] tracking-[0.25em] text-gray-300 font-medium">BUSINESS CENTRIC TESTING</span>
+            </div>
             <CardTitle className="text-3xl font-bold mb-3">
               {isCliente ? `Bienvenido, ${user?.name}` : 'Diagnóstico de Performance'}
             </CardTitle>
@@ -245,6 +250,23 @@ export default function Formulario() {
             </p>
           </CardHeader>
           <CardContent className="p-10">
+            {/* Back to Dashboard Button */}
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="mb-6 flex justify-center"
+            >
+              <Button
+                type="button"
+                onClick={() => navigate('/')}
+                variant="outline"
+                className="text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-50 border-gray-300"
+              >
+                ← Volver al Dashboard
+              </Button>
+            </motion.div>
+            
             {/* Icon moved to content area, centered */}
             <motion.div
               initial={{ scale: 0 }}

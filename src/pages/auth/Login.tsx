@@ -1,5 +1,4 @@
-// src/pages/auth/Login.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from '../../shared/ui/button';
@@ -9,39 +8,77 @@ import { useAuth } from '../../auth/AuthContext';
 import { Eye, EyeOff, Mail, Lock, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, initialized, refresh } = useAuth();
   const navigate = useNavigate();
   const loc = useLocation();
   const params = useMemo(() => new URLSearchParams(loc.search), [loc.search]);
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [focusedField, setFocusedField] = React.useState<string | null>(null);
+
+  const submittingRef = React.useRef(false);
 
   // Validation states
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const passwordValid = password.length >= 6;
 
-  const onSubmit = async (e: React.FormEvent) => {
+  // Verifica que la sesión está efectiva (cookie aplicada o Bearer activo) antes de navegar
+  const verifySession = async (retries = 5, delayMs = 120) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const u = await refresh();
+        if (u) return true;
+      } catch {}
+      await new Promise((res) => setTimeout(res, delayMs));
+    }
+    return false;
+  };
+
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (loading || submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     setError(null);
+
     try {
-      const user = await login(email, password);
+      console.trace('[Login] onSubmit trace - invoked by:');
+
+      // Leer valores desde el DOM (soporta autofill del navegador)
+      const fd = new FormData(e.currentTarget);
+      const emailDom = String(fd.get('email') || '').trim();
+      const passwordDom = String(fd.get('password') || '');
+
+      // Sincroniza estado si difiere (solo para UI/validaciones visuales)
+      if (emailDom && emailDom !== email) setEmail(emailDom);
+      if (passwordDom && passwordDom !== password) setPassword(passwordDom);
+
+      const user = await login(emailDom || email, passwordDom || password);
+
+      // blur element focused to avoid residual Enter/clicks
+      try { (document.activeElement as HTMLElement | null)?.blur(); } catch (err) {}
+
+      // Confirmar sesión antes de navegar (evita rebote si la cookie tarda en aplicarse)
+      await verifySession();
+
       const next = params.get('next');
       if (user?.role === 'admin') {
+        // navegación SPA para preservar estado y evitar problemas de cookie/refresh
         navigate('/admin', { replace: true });
       } else if (next) {
         navigate(next, { replace: true });
       } else {
         navigate('/', { replace: true });
       }
-    } catch (e: any) {
-      setError(e?.message || 'Credenciales incorrectas');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Credenciales incorrectas';
+      setError(msg);
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -74,10 +111,14 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="w-full max-w-lg relative z-10 px-4"
+        className="w-full max-w-2xl relative z-10 px-4"
       >
         <Card className="backdrop-blur-lg bg-white/95 border border-gray-300 shadow-2xl rounded-2xl overflow-hidden">
           <CardHeader className="text-center pb-6 pt-8 bg-gradient-to-r from-gray-900 to-black text-white rounded-t-2xl">
+            <div className="mx-auto mb-4 flex flex-col items-center gap-2">
+              <img src="/LogoChoucair.png" alt="Choucair" className="h-14 w-auto" />
+              <span className="text-[10px] tracking-[0.25em] text-gray-300 font-medium">BUSINESS CENTRIC TESTING</span>
+            </div>
             <CardTitle className="text-3xl font-bold mb-3">Bienvenido</CardTitle>
             <p className="text-gray-200 text-base">Accede a tu panel de control</p>
           </CardHeader>
@@ -91,7 +132,17 @@ export default function LoginPage() {
             >
               <Lock className="w-12 h-12 text-gray-900" />
             </motion.div>
-            <form onSubmit={onSubmit} className="space-y-8">
+            <form
+              onSubmit={onSubmit}
+              onKeyDown={(e) => {
+                // evita que Enter dispare otro submit si ya estamos procesando
+                if (e.key === 'Enter' && (loading || submittingRef.current)) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
+              className="space-y-8"
+            >
               {/* Email Field */}
               <motion.div
                 initial={{ x: -20, opacity: 0 }}
@@ -106,14 +157,16 @@ export default function LoginPage() {
                     focusedField === 'email' ? 'text-slate-600' : 'text-gray-400'
                   }`} />
                   <Input
+                    name="email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    onBlur={() => { setFocusedField(null); }}
                     onFocus={() => setFocusedField('email')}
-                    onBlur={() => setFocusedField(null)}
                     className="pl-12 pr-12 h-14 text-base border-2 rounded-xl transition-all duration-200 focus:border-slate-500 focus:ring-slate-500"
                     placeholder="tu@email.com"
                     required
+                    autoComplete="email"
                   />
                   {email && (
                     <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
@@ -141,6 +194,7 @@ export default function LoginPage() {
                     focusedField === 'password' ? 'text-slate-600' : 'text-gray-400'
                   }`} />
                   <Input
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -149,10 +203,12 @@ export default function LoginPage() {
                     className="pl-12 pr-12 h-14 text-base border-2 rounded-xl transition-all duration-200 focus:border-slate-500 focus:ring-slate-500"
                     placeholder="••••••••"
                     required
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                   >
                     {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
