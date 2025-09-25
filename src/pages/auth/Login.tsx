@@ -7,6 +7,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/card';
 import { useAuth } from '../../auth/AuthContext';
 import { Eye, EyeOff, Mail, Lock, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
 
+const AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
+function sanitizeNext(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    // Only allow same-origin absolute paths
+    const decoded = decodeURIComponent(raw);
+    if (!decoded.startsWith('/')) return null;
+    // Prevent loops to auth pages
+    if (AUTH_ROUTES.some((p) => decoded.startsWith(p))) return null;
+    // Disallow protocol-relative or suspicious patterns
+    if (decoded.startsWith('//')) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
 export default function LoginPage() {
   const { login, initialized, refresh } = useAuth();
   const navigate = useNavigate();
@@ -65,9 +82,9 @@ export default function LoginPage() {
       // Confirmar sesión antes de navegar (evita rebote si la cookie tarda en aplicarse)
       await verifySession();
 
-      const next = params.get('next');
-      if (next) {
-        navigate(next, { replace: true });
+      const safeNext = sanitizeNext(params.get('next'));
+      if (safeNext) {
+        navigate(safeNext, { replace: true });
       } else {
         navigate('/', { replace: true });
       }

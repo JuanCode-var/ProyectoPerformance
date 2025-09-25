@@ -155,15 +155,15 @@ export default function Dashboard() {
   const roleInfo = getRoleInfo();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 pt-16">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
       {/* Header Section */}
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         transition={{ duration: 0.6 }}
-        className="bg-gradient-to-r from-green-700 to-black hover:from-green-900 hover:to-black text-white py-12"
+        className="bg-gradient-to-r from-green-700 to-black text-white pb-12"
       >
-        <div className="max-w-4xl mx-auto px-6">
+        <div className="max-w-4xl mx-auto px-6 pt-[calc(3rem+env(safe-area-inset-top))]">
           <div className="flex items-center gap-4 mb-4">
             <img
               src="/LogoChoucair.png"

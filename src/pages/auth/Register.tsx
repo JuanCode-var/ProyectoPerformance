@@ -17,7 +17,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [title, setTitle] = useState('');
-  const [role, setRole] = useState<'admin' | 'operario' | 'tecnico' | 'otro_tecnico' | 'cliente'>('cliente');
+  const [role, setRole] = useState<'admin' | 'operario' | 'tecnico' | 'cliente'>('cliente');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,13 +55,6 @@ export default function RegisterPage() {
       label: 'Técnico',
       desc: 'Análisis técnico y configuración',
       color: 'text-purple-600',
-      icon: <Settings className="w-5 h-5" />,
-    },
-    {
-      value: 'otro_tecnico',
-      label: 'Técnico Especializado',
-      desc: 'Análisis técnico especializado',
-      color: 'text-indigo-600',
       icon: <Settings className="w-5 h-5" />,
     },
     {
@@ -284,26 +277,26 @@ export default function RegisterPage() {
                 animate={{ x: 0, opacity: 1 }}
                 transition={{ delay: 0.5 }}
               >
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2 text-center w-full">
                   Rol en la organización
                 </label>
                 <Select value={role} onValueChange={(v) => setRole(v as any)}>
-                  <SelectTrigger className="h-12 border-2 rounded-xl transition-all duration-200 focus:border-slate-500">
+                  <SelectTrigger className="h-12 border-2 rounded-xl transition-all duration-200 focus:border-slate-500 text-center justify-center">
                     <SelectValue placeholder="Selecciona tu rol" />
                   </SelectTrigger>
                   <SelectContent className="bg-white border-2 border-gray-200 rounded-xl shadow-xl z-[70]">
-                    <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-500 font-medium">
+                    <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-500 font-medium text-center">
                       Roles disponibles
                     </div>
                     {rolesData.map((r) => (
                       <SelectItem
                         key={r.value}
                         value={r.value}
-                        className="py-3 px-3 data-[highlighted]:bg-gray-50 data-[state=checked]:bg-slate-50 rounded-lg mx-1 my-1"
+                        className="py-3 pl-10 pr-10 justify-center text-center w-full data-[highlighted]:bg-gray-50 data-[state=checked]:bg-slate-50 rounded-lg mx-1 my-1"
                       >
-                        <div className="flex items-start gap-3">
+                        <div className="flex items-center justify-center gap-3 w-full text-center">
                           <span className={`mt-0.5 shrink-0 ${r.color}`}>{r.icon}</span>
-                          <div className="min-w-0">
+                          <div className="min-w-0 text-center">
                             <div className="font-medium leading-5 text-gray-800">{r.label}</div>
                             <div className="text-xs text-gray-500 leading-4">{r.desc}</div>
                           </div>

@@ -1,33 +1,43 @@
 // Shared Settings model and helpers
-export type Role = 'cliente' | 'tecnico' | 'admin'
+export type Role = 'cliente' | 'tecnico' | 'operario' | 'admin'
 
 export type UiFlags = {
+  // Clientes
   showSecurityHistoryToClients: boolean
   enableActionPlanDetailsForClients: boolean
-  // New: technician-specific controls
+  showRisksAndImprovementsToClients: boolean
+  allowRunDiagnosticsByClients: boolean
+  // Técnicos
   showSecurityHistoryToTechnicians: boolean
   enableActionPlanDetailsForTechnicians: boolean
+  allowRunDiagnosticsByTechnicians: boolean
+  // Operarios
+  showSecurityHistoryToOperators: boolean
+  enableActionPlanDetailsForOperators: boolean
+  allowRunDiagnosticsByOperators: boolean
 }
 
 export type SettingsModel = {
-  defaultRole: Role
-  psiApiKey?: string
-  securityTimeoutMs: number
   ui: UiFlags
 }
 
 export const SETTINGS_STORAGE_KEY = 'app.settings'
 
 export const DEFAULT_SETTINGS: SettingsModel = {
-  defaultRole: 'cliente',
-  psiApiKey: '',
-  securityTimeoutMs: 45000,
   ui: {
+    // Clientes (por defecto limitados)
     showSecurityHistoryToClients: false,
     enableActionPlanDetailsForClients: false,
-    // Defaults for technicians: enabled by default
+    showRisksAndImprovementsToClients: false,
+    allowRunDiagnosticsByClients: false,
+    // Técnicos (por defecto habilitados)
     showSecurityHistoryToTechnicians: true,
     enableActionPlanDetailsForTechnicians: true,
+    allowRunDiagnosticsByTechnicians: true,
+    // Operarios (alineado a técnicos por defecto)
+    showSecurityHistoryToOperators: true,
+    enableActionPlanDetailsForOperators: true,
+    allowRunDiagnosticsByOperators: true,
   },
 }
 
@@ -40,9 +50,6 @@ export function loadSettings(): SettingsModel {
     const merged: SettingsModel = {
       ...DEFAULT_SETTINGS,
       ...parsed,
-      securityTimeoutMs: Number.isFinite(Number(parsed?.securityTimeoutMs))
-        ? Number(parsed.securityTimeoutMs)
-        : DEFAULT_SETTINGS.securityTimeoutMs,
       ui: { ...DEFAULT_SETTINGS.ui, ...(parsed?.ui || {}) },
     }
     return merged

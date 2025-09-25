@@ -1,7 +1,8 @@
 // src/App.tsx
-import React, { useEffect } from "react";
+import React, { useEffect, useLayoutEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Navbar from "./components/Navbar"; // Restaurado
+import ScrollToTop from "./components/ScrollToTop";
 
 // Wrappers FSD
 import RunAuditPage from "./pages/run-audit";
@@ -21,17 +22,40 @@ import AdminLogsPage from './pages/admin/Logs';
 import AdminTelemetryPage from './pages/admin/Telemetry';
 import { trackRouteVisit } from './shared/telemetry';
 
+// Helper to build a safe login redirection, avoiding next=/login and other auth routes
+const AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
+function getLoginRedirectElement() {
+  try {
+    const url = new URL(window.location.href);
+    const currentPath = url.pathname;
+    // If we're on an auth route, do not carry any next param
+    if (AUTH_ROUTES.some((p) => currentPath.startsWith(p))) {
+      return <Navigate to="/login" replace />;
+    }
+    // Strip any existing next from query
+    const search = new URLSearchParams(url.search);
+    search.delete('next');
+    const qs = search.toString();
+    const nextPath = currentPath + (qs ? `?${qs}` : '');
+    // If next would be root, you may omit it; requirement is to avoid next=/login specifically
+    const to = nextPath && nextPath !== '/' ? `/login?next=${encodeURIComponent(nextPath)}` : '/login';
+    return <Navigate to={to} replace />;
+  } catch {
+    return <Navigate to="/login" replace />;
+  }
+}
+
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading, initialized } = useAuth();
   if (!initialized || loading) return null;
-  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`} replace />;
+  if (!user) return getLoginRedirectElement();
   return <>{children}</>;
 }
 
 function AdminOnly({ children }: { children: React.ReactNode }) {
   const { user, loading, initialized } = useAuth();
   if (!initialized || loading) return null;
-  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`} replace />;
+  if (!user) return getLoginRedirectElement();
   if (user.role !== 'admin') return <Navigate to="/" replace />; // Solo los admins pueden acceder
   return <>{children}</>;
 }
@@ -39,7 +63,7 @@ function AdminOnly({ children }: { children: React.ReactNode }) {
 function TecnicoOnly({ children }: { children: React.ReactNode }) {
   const { user, loading, initialized } = useAuth();
   if (!initialized || loading) return null;
-  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`} replace />;
+  if (!user) return getLoginRedirectElement();
   if (user.role !== 'tecnico' && user.role !== 'otro_tecnico') return <Navigate to="/" replace />; // Solo los técnicos pueden acceder
   return <>{children}</>;
 }
@@ -47,6 +71,23 @@ function TecnicoOnly({ children }: { children: React.ReactNode }) {
 export default function App() {
   const { user } = useAuth();
   const location = useLocation();
+
+  // Disable browser scroll restoration (so SPA controls it)
+  useEffect(() => {
+    try {
+      if ('scrollRestoration' in window.history) {
+        window.history.scrollRestoration = 'manual';
+      }
+    } catch {}
+  }, []);
+
+  // Scroll to top BEFORE paint on route change (prevents initial mid-page position)
+  useLayoutEffect(() => {
+    try { if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'; } catch {}
+    try { window.scrollTo(0, 0); } catch {}
+    try { (document.scrollingElement || document.documentElement).scrollTop = 0; } catch {}
+    try { document.body.scrollTop = 0; } catch {}
+  }, [location.pathname, location.search, location.hash]);
 
   // Client-side telemetry to complement server middleware (SPA dev/prod)
   useEffect(() => {
@@ -74,6 +115,7 @@ export default function App() {
       <Route path="/*" element={
         <div className="min-h-screen w-full bg-gray-50">
           <Navbar />
+          <ScrollToTop />
           <main className="w-full">
             <div className="w-full">
               <Routes>

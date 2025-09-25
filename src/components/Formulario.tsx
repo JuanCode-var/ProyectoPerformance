@@ -158,8 +158,24 @@ export default function Formulario() {
       }
 
       if (response.status === 401) {
-        const next = encodeURIComponent(window.location.pathname + window.location.search);
-        navigate(`/login?next=${next}`);
+        // Build safe login redirect
+        try {
+          const url = new URL(window.location.href);
+          const AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
+          const currentPath = url.pathname;
+          if (AUTH_ROUTES.some((p) => currentPath.startsWith(p))) {
+            navigate('/login');
+            return;
+          }
+          const search = new URLSearchParams(url.search);
+          search.delete('next');
+          const qs = search.toString();
+          const nextPath = currentPath + (qs ? `?${qs}` : '');
+          const to = nextPath && nextPath !== '/' ? `/login?next=${encodeURIComponent(nextPath)}` : '/login';
+          navigate(to);
+        } catch {
+          navigate('/login');
+        }
         return;
       }
       if (response.status === 403) {
@@ -204,23 +220,7 @@ export default function Formulario() {
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-0 m-0">
-      {/* Botón flotante fijo en esquina superior izquierda (bajo la navbar) */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="fixed top-16 left-0 sm:top-16 sm:left-0 z-[60] pointer-events-auto"
-      >
-        <Button
-          type="button"
-          onClick={() => navigate('/')}
-          variant="outline"
-          className="text-sm text-gray-700 border-gray-300 hover:bg-gray-50 shadow-sm rounded-lg"
-        >
-          ← Volver al Dashboard
-        </Button>
-      </motion.div>
-
+      {/* Removed floating back button; now handled in Navbar only when on the form */}
       {/* Logo flotante eliminado: mantener branding solo dentro del Card para evitar duplicados */}
       {/* Subtle animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -259,12 +259,6 @@ export default function Formulario() {
             <CardTitle className="text-3xl font-bold mb-3">
               {isCliente ? `Bienvenido, ${user?.name}` : 'Diagnóstico de Performance'}
             </CardTitle>
-            <p className="text-gray-200 text-base">
-              {isCliente ? 
-                'Como cliente, puedes ejecutar diagnósticos de performance y seguridad para cualquier sitio web.' :
-                'Ejecuta diagnósticos completos de performance y seguridad.'
-              }
-            </p>
           </CardHeader>
           <CardContent className="p-10">
             {/* Icon moved to content area, centered */}

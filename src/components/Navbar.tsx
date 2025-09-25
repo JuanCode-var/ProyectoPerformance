@@ -1,12 +1,24 @@
 // src/components/Navbar.tsx
 import React, { useCallback } from "react";
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { LayoutDashboard, Shield, LogOut, User, Play } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Detect if we are on the Formulario route (home with ?form=true)
+  const isOnForm = (() => {
+    try {
+      if (location.pathname !== '/') return false;
+      const params = new URLSearchParams(location.search || '');
+      return params.get('form') === 'true';
+    } catch {
+      return false;
+    }
+  })();
 
   // onLogout memorizado y protegido contra propagación/submit accidental
   const onLogout = useCallback(async (e?: React.MouseEvent<HTMLButtonElement>) => {
@@ -53,14 +65,15 @@ export default function Navbar() {
         <div className="ml-auto flex items-center gap-4 text-sm">
           {user ? (
             <>
-              {/* Botón Ejecutar Diagnóstico para todos los usuarios autenticados */}
-              {/* <Link 
-                to="/?form=true" 
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg"
-              >
-                <Play size={16} />
-                <span className="hidden sm:inline">Diagnóstico</span>
-              </Link> */}
+              {/* Volver al Dashboard: visible solo en el formulario */}
+              {isOnForm && (
+                <Link
+                  to="/"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-700 to-black text-white hover:from-green-800 hover:to-black transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg"
+                >
+                  ← Volver al Dashboard
+                </Link>
+              )}
 
               {/* Admin: mostrar Panel de control */}
               {isAdmin && (
@@ -72,19 +85,6 @@ export default function Navbar() {
                   <span className="hidden sm:inline">Panel de control</span>
                 </Link>
               )}
-
-              {/* Técnico: mostrar (Otros) */}
-              {/* {isTecnico && (
-                <>
-                  <Link 
-                    to="/otros" 
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-300 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg"
-                  >
-                    <Shield size={16} />
-                    <span className="hidden sm:inline">(Otros)</span>
-                  </Link>
-                </>
-              )} */}
 
               {/* Información del usuario */}
               <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 text-gray-700">
