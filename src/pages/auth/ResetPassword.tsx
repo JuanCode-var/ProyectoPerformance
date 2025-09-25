@@ -46,10 +46,10 @@ export default function ResetPasswordPage() {
   return (
     <div className="w-full flex justify-center pt-24 px-4">
       <Card className="w-full max-w-md rounded-2xl">
-        <CardHeader>
+        <CardHeader className="text-center pb-6 pt-8 bg-gradient-to-r from-green-700 to-black text-white rounded-t-2xl">
           <CardTitle>Restablecer contraseña</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {done ? (
             <div className="text-green-700">Contraseña actualizada. Redirigiendo...</div>
           ) : (
@@ -63,7 +63,7 @@ export default function ResetPasswordPage() {
                 <Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required />
               </div>
               {error && <div className="text-red-600 text-sm">{error}</div>}
-              <Button type="submit" disabled={loading} className="w-full">
+              <Button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-green-700 to-black hover:from-green-900 hover:to-black text-white">
                 {loading ? 'Guardando...' : 'Guardar'}
               </Button>
             </form>

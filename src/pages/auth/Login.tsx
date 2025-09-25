@@ -66,10 +66,7 @@ export default function LoginPage() {
       await verifySession();
 
       const next = params.get('next');
-      if (user?.role === 'admin') {
-        // navegación SPA para preservar estado y evitar problemas de cookie/refresh
-        navigate('/admin', { replace: true });
-      } else if (next) {
+      if (next) {
         navigate(next, { replace: true });
       } else {
         navigate('/', { replace: true });
@@ -114,7 +111,7 @@ export default function LoginPage() {
         className="w-full max-w-2xl relative z-10 px-4"
       >
         <Card className="backdrop-blur-lg bg-white/95 border border-gray-300 shadow-2xl rounded-2xl overflow-hidden">
-          <CardHeader className="text-center pb-6 pt-8 bg-gradient-to-r from-gray-900 to-black text-white rounded-t-2xl">
+          <CardHeader className="text-center pb-6 pt-8 bg-gradient-to-r from-green-700 to-black hover:from-green-900 hover:to-black text-white rounded-t-2xl">
             <div className="mx-auto mb-4 flex flex-col items-center gap-2">
               <img src="/LogoChoucair.png" alt="Choucair" className="h-14 w-auto" />
               <span className="text-[10px] tracking-[0.25em] text-gray-300 font-medium">BUSINESS CENTRIC TESTING</span>
@@ -237,7 +234,7 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   disabled={loading || !emailValid || !passwordValid}
-                  className="w-full h-14 text-base bg-gradient-to-r from-gray-900 to-black hover:from-black hover:to-gray-800 text-white font-semibold rounded-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:scale-100"
+                  className="w-full h-14 text-base bg-gradient-to-r from-green-700 to-black hover:from-green-900 hover:to-black text-white font-semibold rounded-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:scale-100"
                 >
                   {loading ? (
                     <div className="flex items-center gap-2">

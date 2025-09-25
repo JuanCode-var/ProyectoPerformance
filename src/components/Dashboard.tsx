@@ -59,7 +59,7 @@ export default function Dashboard() {
             text: 'Ejecutar Diagnóstico',
             icon: Play,
             onClick: () => navigate('/?form=true'),
-            color: 'from-red-600 to-red-700 hover:from-red-700 hover:to-red-800'
+            color: 'from-green-500 to-black hover:from-green-900 hover:to-black'
           },
           secondaryActions: [
             {
@@ -87,19 +87,19 @@ export default function Dashboard() {
       case 'otro_tecnico':
         return {
           title: 'Panel Técnico',
-          description: 'Como técnico, puedes realizar análisis técnicos avanzados, configurar parámetros especializados y acceder a herramientas técnicas.',
+          description: 'Como técnico, puedes realizar pruebas de performance y de seguridad con todos sus permisos, ver los historicos, y enviar PDF de los resultados. Ademas de eso tendrás acceso a herramientas técnicas.',
           capabilities: [
-            'Ejecutar diagnósticos técnicos avanzados',
-            'Configurar parámetros técnicos',
-            'Acceso a herramientas especializadas',
+            'Ejecutar diagnósticos',
+            'Ver históricos',
             'Análisis de performance y seguridad',
-            'Generar reportes técnicos detallados'
+            'Enviar diagnósticos por email en PDF',
+            'Acceso a herramientas técnicas'
           ],
           primaryAction: {
             text: 'Ejecutar Diagnóstico',
             icon: Play,
             onClick: () => navigate('/?form=true'),
-            color: 'from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800'
+            color: 'from-green-500 to-black hover:from-green-900 hover:to-black'
           },
           secondaryActions: [
             {
@@ -108,31 +108,24 @@ export default function Dashboard() {
               onClick: () => navigate('/otros'),
               color: 'from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800'
             },
-            {
-              text: 'Historial de Seguridad',
-              icon: Shield,
-              onClick: () => navigate('/security-history'),
-              color: 'from-green-600 to-green-700 hover:from-green-700 hover:to-green-800'
-            }
-          ]
+         ]
         };
 
       case 'operario':
         return {
           title: 'Panel de Operaciones',
-          description: 'Como operario, puedes ejecutar pruebas y operaciones diarias, acceder a diagnósticos y gestionar reportes operativos.',
+          description: 'Como operario, puedes realizar pruebas de performance y de seguridad con todos sus permisos, ver los historicos, y enviar PDF de los resultados.',
           capabilities: [
-            'Ejecutar diagnósticos de performance',
-            'Acceder a análisis de seguridad básicos',
-            'Generar reportes operativos',
-            'Monitorear métricas básicas',
-            'Enviar reportes por email'
+            'Ejecutar diagnósticos',
+            'Ver históricos',
+            'Análisis de performance y seguridad',
+            'Enviar diagnósticos por email en PDF'
           ],
           primaryAction: {
             text: 'Ejecutar Diagnóstico',
             icon: Play,
             onClick: () => navigate('/?form=true'),
-            color: 'from-green-600 to-green-700 hover:from-green-700 hover:to-green-800'
+            color: 'from-green-500 to-black hover:from-green-900 hover:to-black'
           },
           secondaryActions: []
         };
@@ -141,19 +134,18 @@ export default function Dashboard() {
       default:
         return {
           title: 'Bienvenido a tu Panel',
-          description: 'Como cliente, puedes ejecutar diagnósticos de performance y seguridad para cualquier sitio web.',
+          description: 'Como cliente, puedes ejecutar diagnósticos de performance y seguridad para cualquier sitio web. Ademas, tendrás acceso a un plan de accion sugerido que varia dependiendo de las necesidades del sitio web para mejorar el rendimiento y la seguridad.',
           capabilities: [
-            'Ejecutar diagnósticos de performance',
-            'Realizar análisis de seguridad',
+            'Ejecutar diagnósticos de performance y seguridad',
             'Visualizar métricas detalladas',
-            'Generar reportes personalizados',
-            'Enviar diagnósticos por email'
+            'Acceso a un plan de acción sugerido',
+            'Enviar diagnósticos por email en PDF'
           ],
           primaryAction: {
             text: 'Ejecutar Diagnóstico',
             icon: Play,
             onClick: () => navigate('/?form=true'),
-            color: 'from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800'
+            color: 'from-green-500 to-black hover:from-green-900 hover:to-black'
           },
           secondaryActions: []
         };
@@ -169,7 +161,7 @@ export default function Dashboard() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="bg-gradient-to-r from-gray-900 to-black text-white py-12"
+        className="bg-gradient-to-r from-green-700 to-black hover:from-green-900 hover:to-black text-white py-12"
       >
         <div className="max-w-4xl mx-auto px-6">
           <div className="flex items-center gap-4 mb-4">

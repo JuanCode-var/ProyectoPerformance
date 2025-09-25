@@ -47,17 +47,17 @@ export default function VerifyEmailPage() {
   return (
     <div className="w-full flex justify-center pt-24 px-4">
       <Card className="w-full max-w-md rounded-2xl">
-        <CardHeader>
+        <CardHeader className="text-center pb-6 pt-8 bg-gradient-to-r from-green-700 to-black text-white rounded-t-2xl">
           <CardTitle>Verificación de correo</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <div className="space-y-3">
             <div className="text-sm">Correo: <b>{email || '(no especificado)'}</b></div>
             <div>
-              <Button onClick={onVerify}>Verificar</Button>
+              <Button onClick={onVerify} className="bg-gradient-to-r from-green-700 to-black hover:from-green-900 hover:to-black text-white">Verificar</Button>
             </div>
             <div>
-              <Button variant="outline" onClick={onResend}>Reenviar enlace</Button>
+              <Button variant="outline" onClick={onResend} className="border-gray-300">Reenviar enlace</Button>
             </div>
             {message && (
               <div className={status === 'error' ? 'text-red-600 text-sm' : 'text-green-700 text-sm'}>{message}</div>

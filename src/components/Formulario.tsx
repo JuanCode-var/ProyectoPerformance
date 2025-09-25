@@ -204,6 +204,23 @@ export default function Formulario() {
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-0 m-0">
+      {/* Botón flotante fijo en esquina superior izquierda (bajo la navbar) */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="fixed top-16 left-0 sm:top-16 sm:left-0 z-[60] pointer-events-auto"
+      >
+        <Button
+          type="button"
+          onClick={() => navigate('/')}
+          variant="outline"
+          className="text-sm text-gray-700 border-gray-300 hover:bg-gray-50 shadow-sm rounded-lg"
+        >
+          ← Volver al Dashboard
+        </Button>
+      </motion.div>
+
       {/* Logo flotante eliminado: mantener branding solo dentro del Card para evitar duplicados */}
       {/* Subtle animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -234,7 +251,7 @@ export default function Formulario() {
         className="w-full max-w-2xl relative z-10 px-4"
       >
         <Card className="backdrop-blur-lg bg-white/95 border border-gray-300 shadow-2xl rounded-2xl overflow-hidden">
-          <CardHeader className="text-center pb-6 pt-8 bg-gradient-to-r from-gray-900 to-black text-white rounded-t-2xl">
+          <CardHeader className="relative text-center pb-6 pt-8 bg-gradient-to-r from-green-700 to-black hover:from-green-900 hover:to-black text-white rounded-t-2xl">
             <div className="mx-auto mb-4 flex flex-col items-center gap-2">
               <img src="/LogoChoucair.png" alt="Choucair" className="h-14 w-auto" />
               <span className="text-[10px] tracking-[0.25em] text-gray-300 font-medium">BUSINESS CENTRIC TESTING</span>
@@ -250,23 +267,6 @@ export default function Formulario() {
             </p>
           </CardHeader>
           <CardContent className="p-10">
-            {/* Back to Dashboard Button */}
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="mb-6 flex justify-center"
-            >
-              <Button
-                type="button"
-                onClick={() => navigate('/')}
-                variant="outline"
-                className="text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-50 border-gray-300"
-              >
-                ← Volver al Dashboard
-              </Button>
-            </motion.div>
-            
             {/* Icon moved to content area, centered */}
             <motion.div
               initial={{ scale: 0 }}
@@ -388,7 +388,7 @@ export default function Formulario() {
                 <Button
                   type="submit"
                   disabled={isLoading || !hasAnySelected}
-                  className="w-full h-14 text-base bg-gradient-to-r from-gray-900 to-black hover:from-black hover:to-gray-800 text-white font-semibold rounded-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:scale-100"
+                  className="w-full h-14 text-base bg-gradient-to-r from-green-700 to-black hover:from-green-900 hover:to-black text-white font-semibold rounded-xl transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:scale-100"
                 >
                   {isLoading ? (
                     <div className="flex items-center justify-center gap-3">

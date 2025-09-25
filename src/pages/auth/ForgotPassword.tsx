@@ -33,10 +33,10 @@ export default function ForgotPasswordPage() {
   return (
     <div className="w-full flex justify-center pt-24 px-4">
       <Card className="w-full max-w-md rounded-2xl">
-        <CardHeader>
+        <CardHeader className="text-center pb-6 pt-8 bg-gradient-to-r from-green-700 to-black text-white rounded-t-2xl">
           <CardTitle>Olvidé mi contraseña</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {sent ? (
             <div className="text-green-700 text-sm">Si el correo existe, enviamos un enlace de recuperación.</div>
           ) : (
@@ -46,7 +46,7 @@ export default function ForgotPasswordPage() {
                 <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
               </div>
               {error && <div className="text-red-600 text-sm">{error}</div>}
-              <Button type="submit" disabled={loading} className="w-full">
+              <Button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-green-700 to-black hover:from-green-900 hover:to-black text-white">
                 {loading ? 'Enviando...' : 'Enviar enlace'}
               </Button>
             </form>

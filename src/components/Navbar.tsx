@@ -54,13 +54,13 @@ export default function Navbar() {
           {user ? (
             <>
               {/* Botón Ejecutar Diagnóstico para todos los usuarios autenticados */}
-              <Link 
+              {/* <Link 
                 to="/?form=true" 
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg"
               >
                 <Play size={16} />
                 <span className="hidden sm:inline">Diagnóstico</span>
-              </Link>
+              </Link> */}
 
               {/* Admin: mostrar Panel de control */}
               {isAdmin && (
@@ -74,7 +74,7 @@ export default function Navbar() {
               )}
 
               {/* Técnico: mostrar (Otros) */}
-              {isTecnico && (
+              {/* {isTecnico && (
                 <>
                   <Link 
                     to="/otros" 
@@ -84,7 +84,7 @@ export default function Navbar() {
                     <span className="hidden sm:inline">(Otros)</span>
                   </Link>
                 </>
-              )}
+              )} */}
 
               {/* Información del usuario */}
               <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 text-gray-700">
