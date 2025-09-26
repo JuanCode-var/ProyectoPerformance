@@ -3,14 +3,32 @@ import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
+import fs from 'fs';
+import path from 'path';
 import User, { type UserRole } from '../database/user.js';
 import { signToken, JWT_SECRET } from '../middleware/auth.js';
 import jwt from 'jsonwebtoken';
 
 const COOKIE_NAME = process.env.COOKIE_NAME || 'perf_token';
 const IN_PROD = process.env.NODE_ENV === 'production';
-const REQUIRE_EMAIL_VERIFICATION = process.env.REQUIRE_EMAIL_VERIFICATION === 'true';
+const REQUIRE_EMAIL_VERIFICATION = false; // Deshabilitado (eliminada verificación por ahora)
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/; // validación básica
+
+function sanitizeBaseUrl(raw: string | undefined): string {
+  let b = raw?.trim() || '';
+  if (!b) return 'http://localhost:5173';
+  // Si viene solo puerto (ej: 5173) o empieza con ':')
+  if (/^:?\d{2,5}$/.test(b)) {
+    b = `http://localhost:${b.replace(':','')}`;
+  }
+  // Si no tiene protocolo, asumir http
+  if (!/^https?:\/\//i.test(b)) {
+    b = 'http://' + b.replace(/^\/*/, '');
+  }
+  // Quitar trailing slash extra
+  b = b.replace(/\/$/, '');
+  return b;
+}
 
 export async function register(req: Request, res: Response) {
   try {
@@ -83,10 +101,6 @@ export async function login(req: Request, res: Response) {
     }
     if (!user || !user.isActive) return res.status(401).json({ error: 'Credenciales inválidas' });
 
-    if (REQUIRE_EMAIL_VERIFICATION && !user.emailVerified) {
-      return res.status(403).json({ error: 'Debes verificar tu correo antes de iniciar sesión' });
-    }
-
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: 'Credenciales inválidas' });
 
@@ -141,7 +155,8 @@ export async function requestPasswordReset(req: Request, res: Response) {
     const { email } = (req.body || {}) as { email?: string };
     if (!email) return res.status(400).json({ error: 'Falta email' });
 
-    const user = await User.findOne({ email });
+    const normEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: normEmail });
     if (!user) return res.json({ ok: true }); // do not reveal
 
     const token = crypto.randomBytes(32).toString('hex');
@@ -150,19 +165,60 @@ export async function requestPasswordReset(req: Request, res: Response) {
     user.resetPasswordExpires = expires;
     await user.save();
 
-    const baseUrl = process.env.APP_BASE_URL || 'http://localhost:5173';
-    const link = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+    const baseUrl = sanitizeBaseUrl(process.env.APP_BASE_URL);
+    const link = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(normEmail)}`;
+
+    console.log('[auth/requestPasswordReset] Link generado =>', link);
 
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
       const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: { user: process.env.EMAIL_USER as string, pass: process.env.EMAIL_PASS as string },
       });
+
+      const logoDiskPath = path.join(process.cwd(), 'public', 'LogoChoucair.png');
+      const hasLogo = fs.existsSync(logoDiskPath);
+      const logoTag = hasLogo
+        ? '<img src="cid:logoChoucair" alt="Choucair" style="max-height:64px;display:block;margin:0 auto 10px;" />'
+        : '<div style="font-size:26px;font-weight:600;color:#ffffff;margin:0 0 6px 0;">Choucair</div>';
+
       await transporter.sendMail({
         from: process.env.EMAIL_USER,
-        to: email,
-        subject: 'Recuperar contraseña',
-        html: `<p>Para restablecer tu contraseña, haz clic en el siguiente enlace:</p><p><a href="${link}">Restablecer contraseña</a></p><p>Este enlace expira en 30 minutos.</p>`,
+        to: normEmail,
+        subject: 'Solicitud de restablecimiento de contraseña',
+        html: `<!DOCTYPE html>
+<html lang="es">
+<head><meta charSet="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Restablecer contraseña</title></head>
+<body style="margin:0;padding:0;background:#f5f7fa;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f5f7fa;padding:40px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+        <tr>
+          <td style="background:linear-gradient(90deg,#0f5132,#000);padding:28px 30px;text-align:center;">
+            ${logoTag}
+            <div style="font-size:11px;letter-spacing:3px;color:#d1d5db;font-weight:500;">BUSINESS CENTRIC TESTING</div>
+          </td>
+        </tr>
+        <tr><td style="padding:34px 40px 10px 40px;">
+          <h1 style="margin:0 0 18px 0;font-size:22px;line-height:1.25;color:#111827;font-weight:600;">Restablecimiento de contraseña</h1>
+          <p style="margin:0 0 14px 0;font-size:15px;line-height:1.5;color:#374151;">Hola,<br/>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta asociada al correo <strong style="color:#111827;">${normEmail}</strong>.</p>
+          <p style="margin:0 0 18px 0;font-size:15px;line-height:1.5;color:#374151;">Si realizaste esta solicitud, haz clic en el botón a continuación para crear una nueva contraseña. Este enlace es válido durante <strong>30 minutos</strong>.</p>
+          <div style="text-align:center;margin:34px 0;">
+            <a href="${link}" style="display:inline-block;background:linear-gradient(90deg,#0f5132,#000);color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 28px;border-radius:30px;letter-spacing:.5px;">Restablecer contraseña</a>
+          </div>
+          <p style="margin:0 0 16px 0;font-size:13px;line-height:1.5;color:#6b7280;">Si no solicitaste este cambio, puedes ignorar este mensaje. Tu contraseña actual seguirá funcionando.</p>
+          <p style="margin:0 0 6px 0;font-size:12px;line-height:1.4;color:#9ca3af;">Por motivos de seguridad: no compartas este correo ni reenvíes el enlace.</p>
+        </td></tr>
+        <tr><td style="padding:24px 40px 36px 40px;">
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 22px 0;"/>
+          <p style="margin:0;font-size:11px;line-height:1.5;color:#9ca3af;text-align:center;">© ${new Date().getFullYear()} Choucair. Todos los derechos reservados.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+        attachments: hasLogo ? [{ filename: 'LogoChoucair.png', path: logoDiskPath, cid: 'logoChoucair' }] : []
       });
     }
 
@@ -174,10 +230,19 @@ export async function requestPasswordReset(req: Request, res: Response) {
 
 export async function resetPassword(req: Request, res: Response) {
   try {
-    const { email, token, password } = (req.body || {}) as { email?: string; token?: string; password?: string };
-    if (!email || !token || !password) return res.status(400).json({ error: 'Faltan parámetros' });
+    let { email, token, password } = (req.body || {}) as { email?: string; token?: string; password?: string };
+    if (!token || !password) return res.status(400).json({ error: 'Faltan parámetros' });
+    const normEmail = email?.trim().toLowerCase();
 
-    const user = await User.findOne({ email, resetPasswordToken: token, resetPasswordExpires: { $gt: new Date() } });
+    let user = normEmail
+      ? await User.findOne({ email: normEmail, resetPasswordToken: token, resetPasswordExpires: { $gt: new Date() } })
+      : null;
+
+    if (!user) {
+      // Fallback: buscar solo por token válido (permite reset aunque el email param falte o esté mal)
+      user = await User.findOne({ resetPasswordToken: token, resetPasswordExpires: { $gt: new Date() } });
+    }
+
     if (!user) return res.status(400).json({ error: 'Token inválido o expirado' });
 
     user.passwordHash = await bcrypt.hash(password, 10);
@@ -191,57 +256,8 @@ export async function resetPassword(req: Request, res: Response) {
   }
 }
 
-// ---------- Optional email verification ----------
-export async function requestEmailVerification(req: Request, res: Response) {
-  try {
-    const { email } = (req.body || {}) as { email?: string };
-    if (!email) return res.status(400).json({ error: 'Falta email' });
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-    if (user.emailVerified) return res.json({ ok: true });
-
-    const token = crypto.randomBytes(32).toString('hex');
-    user.verificationToken = token;
-    user.verificationTokenExpires = new Date(Date.now() + 1000 * 60 * 60); // 1h
-    await user.save();
-
-    const baseUrl = process.env.APP_BASE_URL || 'http://localhost:5173';
-    const link = `${baseUrl}/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
-
-    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: process.env.EMAIL_USER as string, pass: process.env.EMAIL_PASS as string },
-      });
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: 'Verifica tu correo',
-        html: `<p>Verifica tu correo haciendo clic aquí:</p><p><a href="${link}">Verificar correo</a></p>`,
-      });
-    }
-
-    return res.json({ ok: true });
-  } catch (e: any) {
-    return res.status(500).json({ error: e?.message || 'Error al enviar verificación' });
-  }
-}
-
-export async function verifyEmail(req: Request, res: Response) {
-  try {
-    const { email, token } = (req.body || {}) as { email?: string; token?: string };
-    if (!email || !token) return res.status(400).json({ error: 'Faltan parámetros' });
-
-    const user = await User.findOne({ email, verificationToken: token, verificationTokenExpires: { $gt: new Date() } });
-    if (!user) return res.status(400).json({ error: 'Token inválido o expirado' });
-
-    user.emailVerified = true;
-    user.verificationToken = null;
-    user.verificationTokenExpires = null;
-    await user.save();
-
-    return res.json({ ok: true });
-  } catch (e: any) {
-    return res.status(500).json({ error: e?.message || 'Error al verificar correo' });
-  }
-}
+// ---------- Email verification (ELIMINADO) ----------
+// Se ha eliminado la funcionalidad de verificación de correo por ahora.
+// Mantener campos en el esquema permite una futura reactivación sin migración.
+// export async function requestEmailVerification() { /* removed */ }
+// export async function verifyEmail() { /* removed */ }

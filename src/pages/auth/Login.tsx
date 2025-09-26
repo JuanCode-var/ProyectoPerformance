@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/card';
 import { useAuth } from '../../auth/AuthContext';
 import { Eye, EyeOff, Mail, Lock, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
 
-const AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
+const AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password'];
 function sanitizeNext(raw: string | null | undefined): string | null {
   if (!raw) return null;
   try {
@@ -289,13 +289,7 @@ export default function LoginPage() {
               </div>
               {email && (
                 <div className="text-gray-600">
-                  ¿No recibiste verificación?{' '}
-                  <Link
-                    to={`/verify-email?email=${encodeURIComponent(email)}`}
-                    className="text-gray-900 hover:text-black font-medium hover:underline transition-colors"
-                  >
-                    Reenviar verificación
-                  </Link>
+                  {/* Verificación de correo deshabilitada */}
                 </div>
               )}
             </motion.div>

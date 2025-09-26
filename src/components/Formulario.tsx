@@ -161,7 +161,7 @@ export default function Formulario() {
         // Build safe login redirect
         try {
           const url = new URL(window.location.href);
-          const AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
+          const AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password']; // removido '/verify-email'
           const currentPath = url.pathname;
           if (AUTH_ROUTES.some((p) => currentPath.startsWith(p))) {
             navigate('/login');

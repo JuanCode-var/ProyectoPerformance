@@ -2,7 +2,7 @@
 import React, { useCallback } from "react";
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { LayoutDashboard, Shield, LogOut, User, Play } from 'lucide-react';
+import { LayoutDashboard, Shield, LogOut, User, Play, UserCog } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -83,6 +83,17 @@ export default function Navbar() {
                 >
                   <LayoutDashboard size={16} />
                   <span className="hidden sm:inline">Panel de control</span>
+                </Link>
+              )}
+
+              {/* Nuevo: Herramientas Técnicas visible para roles técnicos */}
+              {isTecnico && (
+                <Link
+                  to="/otros"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg"
+                >
+                  <UserCog size={16} />
+                  <span className="hidden sm:inline">Herramientas</span>
                 </Link>
               )}
 

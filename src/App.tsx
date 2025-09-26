@@ -15,7 +15,6 @@ import RegisterPage from "./pages/auth/Register";
 import { useAuth } from './auth/AuthContext';
 import ForgotPasswordPage from './pages/auth/ForgotPassword';
 import ResetPasswordPage from './pages/auth/ResetPassword';
-import VerifyEmailPage from './pages/auth/VerifyEmail';
 import AdminDashboardPage from './pages/admin';
 import AdminUsersPage from './pages/admin/Users';
 import AdminLogsPage from './pages/admin/Logs';
@@ -23,7 +22,7 @@ import AdminTelemetryPage from './pages/admin/Telemetry';
 import { trackRouteVisit } from './shared/telemetry';
 
 // Helper to build a safe login redirection, avoiding next=/login and other auth routes
-const AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
+const AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password'];
 function getLoginRedirectElement() {
   try {
     const url = new URL(window.location.href);
@@ -109,7 +108,6 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/verify-email" element={<VerifyEmailPage />} />
       
       {/* Main app routes with navbar */}
       <Route path="/*" element={

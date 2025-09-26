@@ -94,6 +94,18 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 async function bootstrap() {
   try {
+    // Log APP_BASE_URL diagnóstico
+    const rawBase = process.env.APP_BASE_URL;
+    if (!rawBase) {
+      console.warn('[startup] APP_BASE_URL no establecido. Usará http://localhost:5173 en enlaces.');
+    } else {
+      console.log('[startup] APP_BASE_URL =', rawBase);
+      if (/^:?\d{2,5}$/.test(rawBase)) {
+        console.warn('[startup] APP_BASE_URL parece solo un puerto. Debe ser algo como http://localhost:' + rawBase.replace(':',''));
+      } else if (!/^https?:\/\//i.test(rawBase)) {
+        console.warn('[startup] APP_BASE_URL sin protocolo. Ejemplo correcto: http://localhost:5173');
+      }
+    }
     await Promise.resolve(connectDB());
     await connectRedisIfEnabled();
     console.log(`[startup] Redis: ${REDIS_ENABLED ? 'habilitado' : 'deshabilitado (fallback in-memory)'}`);
