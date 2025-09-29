@@ -5,6 +5,8 @@ import type { AuthUser } from '../middleware/auth.js';
 import AdminLog from '../database/adminLog.js';
 import AdminVisit from '../database/adminVisit.js';
 import crypto from 'crypto';
+import TelemetryEvent from '../database/telemetryEvent.js';
+import { hrTimer, emitTelemetry, hashUrl, categorizeError } from '../utils/telemetry.js';
 
 // In-memory buffers (simple, non-persistent)
 const LOG_BUFFER: Array<{ ts: string; level: 'info'|'warn'|'error'; message: string; context?: any }> = [];
@@ -31,11 +33,14 @@ function pushLog(row: { level: 'info'|'warn'|'error'; message: string; context?:
 }
 
 export function recordVisit(route: string, user?: AuthUser | null) {
-  const entry = { ts: new Date().toISOString(), route, userId: user?._id, role: user?.role };
-  VISIT_BUFFER.push(entry);
+  const now = new Date();
+  const entry = { ts: now.toISOString(), route, userId: user?._id, role: user?.role };
+  // Ya no se deduplica: cada invocación registra una visita (requisito actualizado)
+  VISIT_BUFFER.push(entry as any);
   if (VISIT_BUFFER.length > MAX_BUFFER) VISIT_BUFFER.shift();
   if (PERSIST_VISITS) {
-    void AdminVisit.create({ ts: new Date(entry.ts), route: entry.route, userId: entry.userId ?? null, role: entry.role ?? null, event: 'server_visit' }).catch(() => {});
+    const doc: any = { ts: now, route: entry.route, userId: entry.userId ?? null, role: entry.role ?? null, event: 'server_visit' };
+    void AdminVisit.create(doc).catch(() => {});
   }
 }
 
@@ -219,9 +224,207 @@ export async function clearTelemetry(req: Request, res: Response) {
   }
 }
 
+export async function getTelemetrySummary(req: Request, res: Response) {
+  try {
+    const days = Math.min(90, Math.max(1, Number(req.query.days) || 7));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const matchSince = { ts: { $gte: since } } as any;
+
+    // Agregaciones (actualizado: se elimina diag por tipo, añadimos urlSample y nombres de usuario)
+    const [diagTotals, microAgg, roleAgg, userAgg, urlAgg, pdfAgg, microFailAgg, errorCatAgg, emailTypeAgg, emailFailAgg, logLevels,
+      userDiagAgg, urlDiagAgg, visitRoleAgg, microCallsTotalAgg, recentDiagAgg, missingUrlAgg] = await Promise.all([
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.end', durationMs: { $ne: null } } },
+        { $group: { _id: null, avgTotalMs: { $avg: '$durationMs' }, total: { $sum: 1 } } },
+      ]),
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.micro_call', micro: { $ne: null }, durationMs: { $ne: null } } },
+        { $group: { _id: '$micro', avgMs: { $avg: '$durationMs' }, count: { $sum: 1 }, failCount: { $sum: { $cond: [{ $eq: ['$success', false] }, 1, 0] } } } },
+        { $sort: { _id: 1 } },
+      ]),
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.end' } },
+        { $group: { _id: '$role', count: { $sum: 1 } } },
+      ]),
+      // Usuarios top (solo conteo). Luego haremos lookup para nombres.
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.end', userId: { $ne: null } } },
+        { $group: { _id: '$userId', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 50 },
+      ]),
+      // URLs top: añadimos sample real (urlSample) más reciente
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.end', urlHash: { $ne: null } } },
+        { $group: { _id: '$urlHash', count: { $sum: 1 }, lastTs: { $max: '$ts' } } },
+        { $sort: { count: -1 } },
+        { $limit: 50 },
+      ]),
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'email.sent', emailType: 'diagnostic' } },
+        { $group: { _id: null, sent: { $sum: 1 }, withPdf: { $sum: { $cond: [ { $eq: ['$hasPdf', true] }, 1, 0 ] } }, avgPdfSizeKb: { $avg: '$pdfSizeKb' } } },
+      ]),
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.micro_call', success: false, micro: { $ne: null } } },
+        { $group: { _id: '$micro', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 },
+      ]),
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.micro_call', success: false, errorCategory: { $ne: null } } },
+        { $group: { _id: '$errorCategory', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]),
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'email.sent', emailType: { $ne: null } } },
+        { $group: { _id: '$emailType', count: { $sum: 1 } } },
+      ]),
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'email.sent', success: false } },
+        { $group: { _id: null, failures: { $sum: 1 } } },
+      ]),
+      AdminLog.aggregate([
+        { $match: { createdAt: { $gte: since } } },
+        { $group: { _id: '$level', count: { $sum: 1 } } },
+      ]),
+      // Diags por usuario (detalle)
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.end', userId: { $ne: null } } },
+        { $group: { _id: { userId: '$userId' }, total: { $sum: 1 } } },
+        { $project: { userId: '$_id.userId', total: 1 } },
+        { $limit: 200 },
+      ]),
+      // Diags por URL hash (detalle)
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.end', urlHash: { $ne: null } } },
+        { $group: { _id: '$urlHash', total: { $sum: 1 }, lastTs: { $max: '$ts' } } },
+        { $limit: 200 },
+      ]),
+      // Visitas por rol
+      AdminVisit.aggregate([
+        { $match: { ts: { $gte: since }, role: { $ne: null } } },
+        { $group: { _id: '$role', visits: { $sum: 1 } } },
+        { $sort: { visits: -1 } }
+      ]),
+      // total micro_calls
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.micro_call' } },
+        { $group: { _id: null, total: { $sum: 1 } } }
+      ]),
+      // últimos diagnósticos (lista reciente)
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.end' } },
+        { $sort: { ts: -1 } },
+        { $limit: 40 },
+        { $project: { _id: 0, ts: 1, userId: 1, role: 1, urlHash: 1, urlSample: 1, durationMs: 1 } }
+      ]),
+      // conteo diagnósticos sin URL
+      TelemetryEvent.aggregate([
+        { $match: { ...matchSince, kind: 'diagnostic.end', $or: [ { urlHash: null }, { urlHash: { $exists: false } } ] } },
+        { $group: { _id: null, count: { $sum: 1 } } }
+      ])
+    ]);
+
+    // Enriquecer usuarios con nombres
+    const userIds = userAgg.map(u => u._id).filter(Boolean);
+    const userDocs = userIds.length ? await User.find({ _id: { $in: userIds } }, { name: 1, role: 1 }).lean() : [];
+    const userNameMap = new Map<string, { name?: string; role?: string }>();
+    for (const u of userDocs) userNameMap.set(String((u as any)._id), { name: (u as any).name, role: (u as any).role });
+
+    // Enriquecer URLs con muestra (buscar último evento con ese hash)
+    const urlHashes = urlAgg.map(u => u._id).filter(Boolean);
+    const urlSamplesDocs = urlHashes.length ? await TelemetryEvent.aggregate([
+      { $match: { kind: 'diagnostic.end', urlHash: { $in: urlHashes } } },
+      { $sort: { ts: -1 } },
+      { $group: { _id: '$urlHash', sample: { $first: '$urlSample' } } }
+    ]) : [];
+    const urlSampleMap = new Map<string, string | null>();
+    for (const d of urlSamplesDocs) urlSampleMap.set(d._id, d.sample || null);
+
+    const diagTotalsObj = diagTotals[0] || { avgTotalMs: null, total: 0 };
+    const pdfObj = pdfAgg[0] || { sent: 0, withPdf: 0, avgPdfSizeKb: null };
+    const byRole: Record<string, number> = {};
+    for (const r of roleAgg) { byRole[r._id || 'unknown'] = r.count; }
+    // Asegurar roles existentes aunque sean 0
+    ['admin','tecnico','operario','cliente'].forEach(role => { if (!(role in byRole)) byRole[role] = 0; });
+
+    const visitsByRole = visitRoleAgg.map(v => ({ role: v._id || 'unknown', visits: v.visits }));
+    // Asegurar visitas también contengan roles faltantes
+    const visitsMap: Record<string, number> = {}; for (const v of visitsByRole) visitsMap[v.role] = v.visits;
+    ['admin','tecnico','operario','cliente'].forEach(role => { if (!(role in visitsMap)) visitsByRole.push({ role, visits: 0 }); });
+
+    const response = {
+      range: { from: since.toISOString(), to: new Date().toISOString(), days },
+      diagnostics: {
+        total: diagTotalsObj.total,
+        avgTotalMs: diagTotalsObj.avgTotalMs,
+        micros: microAgg.map(m => ({ micro: m._id, avgMs: m.avgMs, count: m.count, failCount: m.failCount })),
+        microCallsTotal: microCallsTotalAgg?.[0]?.total || 0,
+        byRole,
+        byUser: userAgg.map(u => ({ userId: u._id, count: u.count, name: userNameMap.get(u._id)?.name, role: userNameMap.get(u._id)?.role })),
+        byUrl: urlAgg.map(u => ({ urlHash: u._id, count: u.count, url: urlSampleMap.get(u._id) || null })),
+        pdf: { sent: pdfObj.sent, withPdf: pdfObj.withPdf, avgPdfSizeKb: pdfObj.avgPdfSizeKb },
+        errors: {
+          byCategory: errorCatAgg.map(e => ({ errorCategory: e._id, count: e.count })),
+          topMicroFailures: microFailAgg.map(e => ({ micro: e._id, count: e.count })),
+        },
+        detail: {
+          users: userDiagAgg.map(u => ({ userId: u.userId, total: u.total, name: userNameMap.get(u.userId || '')?.name })),
+          urls: urlDiagAgg.map(u => ({ urlHash: u._id, total: u.total, url: urlSampleMap.get(u._id) || null })),
+        },
+        visitsByRole,
+        recent: recentDiagAgg.map((d:any) => ({
+          ts: d.ts,
+          userId: d.userId || null,
+            name: d.userId ? (userNameMap.get(String(d.userId))?.name || null) : null,
+            role: d.role || userNameMap.get(String(d.userId||''))?.role || null,
+          url: d.urlSample || null,
+          durationMs: d.durationMs || null
+        })),
+        missingUrlCount: missingUrlAgg?.[0]?.count || 0,
+      },
+      emails: {
+        totalSent: emailTypeAgg.reduce((a, c) => a + c.count, 0),
+        byType: emailTypeAgg.map(e => ({ emailType: e._id, count: e.count })),
+        failures: (emailFailAgg[0]?.failures) || 0,
+      },
+      logs: { levels: logLevels.map(l => ({ level: l._id, count: l.count })) }
+    };
+    return res.json(response);
+  } catch (e: any) {
+    return res.status(500).json({ error: 'Error generando resumen', detail: e?.message });
+  }
+}
+
+export async function getLogSummary(req: Request, res: Response) {
+  try {
+    const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const [levels, lastErrors] = await Promise.all([
+      AdminLog.aggregate([
+        { $match: { createdAt: { $gte: since } } },
+        { $group: { _id: '$level', count: { $sum: 1 } } },
+      ]),
+      AdminLog.find({ level: 'error', createdAt: { $gte: since } }, { _id: 0, ts: 1, message: 1 })
+        .sort({ ts: -1 })
+        .limit(20)
+        .lean(),
+    ]);
+
+    return res.json({
+      range: { from: since.toISOString(), to: new Date().toISOString(), days },
+      levels: levels.map(l => ({ level: l._id, count: l.count })),
+      lastErrors: lastErrors.map(e => ({ ts: (e.ts as any)?.toISOString?.() ?? String(e.ts), message: e.message })),
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: 'Error generando resumen de logs', detail: e?.message });
+  }
+}
+
 // Request logger helper for server/index.ts
 export function logRequest(method: string, url: string) {
   pushLog({ level: 'info', message: `${method} ${url}` });
 }
 
-export default { listUsers, getLogs, getTelemetry, trackTelemetry, recordVisit, logRequest, clearLogs, clearTelemetry };
+export default { listUsers, getLogs, getTelemetry, trackTelemetry, recordVisit, logRequest, clearLogs, clearTelemetry, getTelemetrySummary, getLogSummary };

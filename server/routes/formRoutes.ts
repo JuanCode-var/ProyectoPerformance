@@ -23,7 +23,7 @@ const allowClientes = (req: any, res: any, next: any) => {
   console.log('🔍 [ALTERNATIVE] User role:', req.user.role);
   
   // Lista explícita de roles permitidos
-  const allowedRoles = ['admin', 'operario', 'tecnico', 'otro_tecnico', 'cliente'];
+  const allowedRoles = ['admin', 'operario', 'tecnico', 'cliente'];
   
   if (allowedRoles.includes(req.user.role)) {
     console.log('✅ [ALTERNATIVE] Role accepted:', req.user.role);
@@ -55,7 +55,7 @@ router.post(
 router.get(
   "/audit/history",
   requireAuth as any,
-  requireRole('admin','operario','tecnico','otro_tecnico','cliente') as any,
+  requireRole('admin','operario','tecnico','cliente') as any,
   getAuditHistory
 );
 // Detalle: permitido para todos los autenticados; el controlador debe validar propiedad para clientes
@@ -65,7 +65,7 @@ router.get("/audit/:id", requireAuth as any, getAuditById);
 router.get(
   "/security/history",
   requireAuth as any,
-  requireRole('admin','operario','tecnico','otro_tecnico') as any,
+  requireRole('admin','operario','tecnico') as any,
   getSecurityHistory
 );
 

@@ -54,9 +54,28 @@ app.use((req, _res, next) => {
 // Simple request log + telemetry for QA
 app.use((req, _res, next) => {
   try { logRequest(req.method, req.url); } catch {}
-  // Record telemetry for GET HTML routes quickly (filter noisy assets)
-  if (req.method === 'GET' && /^\/(admin|historico|security-history|settings|diagnostico|login|register|$)/.test(req.path)) {
-    try { recordVisit(req.path, (req as any).user || null); } catch {}
+  if (!req.user) {
+    try {
+      const COOKIE_NAME = process.env.COOKIE_NAME || 'perf_token';
+      const token = req.cookies?.[COOKIE_NAME];
+      if (token) {
+        // Cargar jwt síncrono (CommonJS compatibility) sin await
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { JWT_SECRET } = require('./middleware/auth.js');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const jwtLib = require('jsonwebtoken');
+        const decoded: any = jwtLib.verify(token, JWT_SECRET);
+        if (decoded && decoded._id) { (req as any).user = decoded; }
+      }
+    } catch {/* ignore decode errors */}
+  }
+  if (req.method === 'GET') {
+    const path = req.path;
+    const role = (req as any).user?.role;
+    const isProfile = (role === 'admin' && path === '/admin') || (role !== 'admin' && role && path === '/');
+    if (isProfile) {
+      try { recordVisit(path, (req as any).user || null); } catch {}
+    }
   }
   next();
 });

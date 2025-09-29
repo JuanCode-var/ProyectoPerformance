@@ -8,6 +8,8 @@ import path from 'path';
 import User, { type UserRole } from '../database/user.js';
 import { signToken, JWT_SECRET } from '../middleware/auth.js';
 import jwt from 'jsonwebtoken';
+import TelemetryEvent from '../database/telemetryEvent.js';
+import { recordVisit } from './admin.controller.js';
 
 const COOKIE_NAME = process.env.COOKIE_NAME || 'perf_token';
 const IN_PROD = process.env.NODE_ENV === 'production';
@@ -29,6 +31,14 @@ function sanitizeBaseUrl(raw: string | undefined): string {
   b = b.replace(/\/$/, '');
   return b;
 }
+
+function hrTimer() { const s = process.hrtime.bigint(); return () => Number(process.hrtime.bigint() - s)/1e6; }
+const METRICS_ENABLED = process.env.METRICS_ENABLED !== 'false';
+const METRICS_SAMPLE_RATE = Math.min(1, Math.max(0, Number(process.env.METRICS_SAMPLE_RATE || '1')));
+async function emitTelemetry(kind: string, base: Record<string, any>) {
+  try { if (!METRICS_ENABLED) return; if (METRICS_SAMPLE_RATE<1 && Math.random()>METRICS_SAMPLE_RATE) return; TelemetryEvent.create({ kind, ts:new Date(), ...base }).catch(()=>{}); } catch {}
+}
+function hashEmailPart(e?: string|null) { if(!e) return null; try { return crypto.createHash('sha256').update(e).digest('hex').slice(0,10);} catch { return null; } }
 
 export async function register(req: Request, res: Response) {
   try {
@@ -52,7 +62,7 @@ export async function register(req: Request, res: Response) {
 
     // Por ahora aceptamos el rol enviado en registro (si es válido). Luego podrás restringir según políticas.
     let finalRole: UserRole = 'cliente';
-    const allowed: UserRole[] = ['admin','operario','tecnico','otro_tecnico','cliente'];
+    const allowed: UserRole[] = ['admin','operario','tecnico','cliente'];
     if (role && allowed.includes(role)) finalRole = role;
     const creatorPrivileged = false;
 
@@ -82,6 +92,7 @@ export async function register(req: Request, res: Response) {
 }
 
 export async function login(req: Request, res: Response) {
+  const stop = hrTimer();
   try {
     const { email, password } = (req.body || {}) as { email?: string; password?: string };
     console.log('[auth/login] attempt', email);
@@ -99,10 +110,10 @@ export async function login(req: Request, res: Response) {
         user = await User.findOne({ email: rawTrim });
       }
     }
-    if (!user || !user.isActive) return res.status(401).json({ error: 'Credenciales inválidas' });
+    if (!user || !user.isActive) { await emitTelemetry('auth_login_fail', { emailHash: hashEmailPart(email), reason:'not_found_or_inactive', durationMs: stop() }); return res.status(401).json({ error: 'Credenciales inválidas' }); }
 
     const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: 'Credenciales inválidas' });
+    if (!ok) { await emitTelemetry('auth_login_fail', { emailHash: hashEmailPart(email), reason:'bad_password', durationMs: stop() }); return res.status(401).json({ error: 'Credenciales inválidas' }); }
 
     user.lastLogin = new Date();
     await user.save();
@@ -120,9 +131,16 @@ export async function login(req: Request, res: Response) {
     });
     console.log('[auth/login] success set cookie for', user.email, 'normEmail=', normEmail);
 
+    await emitTelemetry('auth_login_ok', { userId: userId, role: user.role, durationMs: stop() });
+    // Registrar visita de perfil tras login (una vez por día)
+    try {
+      const profileRoute = user.role === 'admin' ? '/admin' : '/';
+      recordVisit(profileRoute, { _id: userId, name: user.name, email: user.email, role: user.role } as any);
+    } catch {}
     // Devolver también el token para permitir Authorization Bearer en el frontend (respaldo)
     return res.json({ ok: true, token, user: { _id: userId, name: user.name, email: user.email, role: user.role, title: user.title } });
   } catch (e: any) {
+    await emitTelemetry('auth_login_fail', { emailHash: hashEmailPart((req.body as any)?.email), reason:'exception', durationMs: stop(), error: e?.message });
     console.error('[auth/login] error', e);
     return res.status(500).json({ error: e?.message || 'Error al iniciar sesión' });
   }
@@ -151,13 +169,14 @@ export async function logout(_req: Request, res: Response) {
 
 // ---------- Password recovery ----------
 export async function requestPasswordReset(req: Request, res: Response) {
+  const stop = hrTimer();
   try {
     const { email } = (req.body || {}) as { email?: string };
     if (!email) return res.status(400).json({ error: 'Falta email' });
 
     const normEmail = email.trim().toLowerCase();
     const user = await User.findOne({ email: normEmail });
-    if (!user) return res.json({ ok: true }); // do not reveal
+    if (!user) { await emitTelemetry('email.sent', { emailType:'password_reset', success:true, durationMs: stop() }); return res.json({ ok: true }); } // do not reveal
 
     const token = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 1000 * 60 * 30); // 30m
@@ -220,10 +239,13 @@ export async function requestPasswordReset(req: Request, res: Response) {
 </html>`,
         attachments: hasLogo ? [{ filename: 'LogoChoucair.png', path: logoDiskPath, cid: 'logoChoucair' }] : []
       });
+      await emitTelemetry('email.sent', { emailType:'password_reset', success:true, durationMs: stop() });
+    } else {
+      await emitTelemetry('email.sent', { emailType:'password_reset', success:false, durationMs: stop(), error:'smtp_not_configured' });
     }
-
     return res.json({ ok: true });
   } catch (e: any) {
+    await emitTelemetry('email.sent', { emailType:'password_reset', success:false, durationMs: stop(), error: e?.message });
     return res.status(500).json({ error: e?.message || 'Error al solicitar recuperación' });
   }
 }

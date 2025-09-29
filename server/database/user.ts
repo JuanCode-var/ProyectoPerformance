@@ -1,7 +1,7 @@
 // server/database/user.ts
 import mongoose from "mongoose";
 
-export type UserRole = 'admin' | 'operario' | 'tecnico' | 'otro_tecnico' | 'cliente';
+export type UserRole = 'admin' | 'operario' | 'tecnico' | 'cliente';
 
 export interface UserDoc extends mongoose.Document {
   name: string;
@@ -25,7 +25,7 @@ const UserSchema = new mongoose.Schema<UserDoc>({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, index: true },
   passwordHash: { type: String, required: true },
-  role: { type: String, enum: ['admin','operario','tecnico','otro_tecnico','cliente'], default: 'cliente', index: true },
+  role: { type: String, enum: ['admin','operario','tecnico','cliente'], default: 'cliente', index: true },
   title: { type: String },
   isActive: { type: Boolean, default: true },
   lastLogin: { type: Date, default: null },

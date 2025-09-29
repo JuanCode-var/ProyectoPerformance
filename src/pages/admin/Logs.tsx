@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/card'
 import { Button } from '../../shared/ui/button'
 import { Info } from 'lucide-react'
+import { useLogSummary } from './logs/useLogSummary'
 
 interface LogRow { ts: string; level: 'info'|'warn'|'error'; message: string; context?: any }
 
@@ -14,6 +15,7 @@ export default function AdminLogsPage() {
   const [error, setError] = useState<string>('')
   const [level, setLevel] = useState<string>('')
   const [openIdx, setOpenIdx] = useState<number | null>(null)
+  const summary = useLogSummary(7)
 
   useEffect(() => {
     setLoading(true)
@@ -41,6 +43,27 @@ export default function AdminLogsPage() {
 
   return (
     <div className="pt-16 px-4 max-w-5xl mx-auto">
+      {/* Resumen agregado de logs */}
+      {summary.data && (
+        <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="p-3 rounded border bg-white">
+            <div className="text-xs text-slate-500">Info</div>
+            <div className="text-xl font-semibold">{summary.data.levels.find(l=>l.level==='info')?.count || 0}</div>
+          </div>
+          <div className="p-3 rounded border bg-white">
+            <div className="text-xs text-slate-500">Warn</div>
+            <div className="text-xl font-semibold">{summary.data.levels.find(l=>l.level==='warn')?.count || 0}</div>
+          </div>
+            <div className="p-3 rounded border bg-white">
+              <div className="text-xs text-slate-500">Error</div>
+              <div className="text-xl font-semibold text-red-600">{summary.data.levels.find(l=>l.level==='error')?.count || 0}</div>
+            </div>
+            <div className="p-3 rounded border bg-white">
+              <div className="text-xs text-slate-500">Último error</div>
+              <div className="text-[11px] font-medium truncate" title={summary.data.lastErrors[0]?.message || '—'}>{summary.data.lastErrors[0]?.message || '—'}</div>
+            </div>
+        </div>
+      )}
       <Card>
         <CardHeader className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">

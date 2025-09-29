@@ -6,7 +6,7 @@ export interface AuthUser {
   _id: string;
   name: string;
   email: string;
-  role: 'admin' | 'operario' | 'tecnico' | 'otro_tecnico' | 'cliente';
+  role: 'admin' | 'operario' | 'tecnico' | 'cliente';
 }
 
 declare global {

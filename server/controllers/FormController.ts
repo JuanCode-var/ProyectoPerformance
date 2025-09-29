@@ -4,9 +4,12 @@ import axios from "axios";
 import nodemailer from "nodemailer";
 import type { SendMailOptions, SentMessageInfo } from "nodemailer";
 
+// import { log } from "../utils/logger.js";
 import Audit from "../database/esquemaBD.js";
 import Security from "../database/securitySchema.js";
+import TelemetryEvent from "../database/telemetryEvent.js";
 import { readMetrics, extractOpportunities } from "../utils/lh.js";
+import { hrTimer, hashUrl, emitTelemetry, categorizeError } from '../utils/telemetry.js';
 
 // =====================
 // Helpers/consts
@@ -125,27 +128,19 @@ export async function auditPing(_req: Request, res: Response) {
 
 // -------- Crear auditoría --------
 export async function guardarDatos(req: Request, res: Response) {
+  const diagStop = hrTimer();
+  const diagId = crypto.randomUUID().slice(0,8);
+  const userCtx = { userId: req.user?._id || null, role: req.user?.role || (req as any)?.user?.role || null };
+  let microsRun: string[] = [];
   const fail = (status: number, msg: string, extra: Record<string, unknown> = {}) =>
     res.status(status).json({ ok: false, error: msg, ...extra });
 
   try {
-    const {
-      url,
-      type = "pagespeed",
-      strategy = "mobile",
-      name,
-      email,
-      nocache,
-    } = (req.body || {}) as {
-      url?: string;
-      type?: "pagespeed" | "unlighthouse" | "all" | string | string[];
-      strategy?: "mobile" | "desktop" | (string & {});
-      name?: string;
-      email?: string;
-      nocache?: boolean;
-    };
-
+    const { url, type = "pagespeed", strategy = "mobile", name, email, nocache } = (req.body || {}) as any;
     if (!url || !/^https?:\/\//i.test(url)) return fail(400, "URL inválida");
+    const urlHash = hashUrl(url);
+    // tipos se define después de validar type, por eso lo reconstruimos luego en start
+    // Emitiremos start después de conocer "tipos"
 
     const MICROSERVICES: Record<"pagespeed" | "security", { endpoint: string }> = {
       pagespeed: { endpoint: withAudit(MS_PAGESPEED_URL) },
@@ -157,6 +152,8 @@ export async function guardarDatos(req: Request, res: Response) {
       : type === "all"
       ? (Object.keys(MICROSERVICES) as Array<keyof typeof MICROSERVICES>)
       : [type];
+
+    await emitTelemetry('diagnostic.start', { diagId, ...userCtx, urlHash, urlSample: url, domain: (()=>{ try { return new URL(url).hostname; } catch { return null; } })(), strategy, tipos });
 
     const invalid = tipos.filter((t) => !(t in MICROSERVICES));
     if (invalid.length) return fail(400, `Tipo(s) inválido(s): ${invalid.join(", ")}`);
@@ -228,59 +225,40 @@ export async function guardarDatos(req: Request, res: Response) {
 
     // Llamadas a microservicios
     const serviceCall = async (t: "pagespeed" | "security") => {
-      if (t === "pagespeed") {
-        try {
+      const stop = hrTimer();
+      let success = false; let status: number | null = null; let retriesUsed: number | null = null;
+      try {
+        if (t === "pagespeed") {
           const r = await axios.post(
             MICROSERVICES.pagespeed.endpoint,
             { url, strategy: strategy as string, categories: [...ALL_CATEGORIES] },
             { timeout: PAGESPEED_TIMEOUT_MS }
           );
+          success = true; status = r.status;
           return { [t]: r.data } as Record<string, unknown>;
-        } catch (err: any) {
-          const msg =
-            err?.response?.data?.detail ||
-            err?.response?.data?.error ||
-            err?.code ||
-            err?.message ||
-            "error";
-          const status = err?.response?.status ?? null;
-          console.error("[pagespeed] fail:", { status, msg, code: err?.code });
-          return { [t]: { error: msg, status } } as Record<string, unknown>;
         }
-      }
-      // security
-      try {
         const base = String(MICROSERVICES.security.endpoint || "").replace(/\/+$/, "");
         const endpoint = /\/api\//.test(base) ? base : `${base}/api/analyze`;
         console.log(`[security] calling micro → ${endpoint}`);
-
         const http = await import('http');
         const https = await import('https');
         const httpAgent = new (http as any).Agent({ keepAlive: true });
         const httpsAgent = new (https as any).Agent({ keepAlive: true });
-
+        let attempt = 0;
         const r = await callWithRetry(
-          async () => axios.post(endpoint, { url }, {
-            timeout: SECURITY_TIMEOUT_MS,
-            httpAgent,
-            httpsAgent,
-            proxy: false,
-          }),
+          async () => { attempt++; return axios.post(endpoint, { url }, { timeout: SECURITY_TIMEOUT_MS, httpAgent, httpsAgent, proxy: false }); },
           { label: "security analyze", retries: SECURITY_RETRIES, backoffMs: SECURITY_RETRY_BACKOFF_MS }
         );
-
-        const securityData = (r as any).data;
-        return { [t]: securityData };
+        success = true; status = (r as any).status; retriesUsed = attempt - 1;
+        return { [t]: (r as any).data };
       } catch (err: any) {
-        const msg =
-          err?.response?.data?.detail ||
-          err?.response?.data?.error ||
-          err?.code ||
-          err?.message ||
-          "error";
-        const status = err?.response?.status ?? null;
-        console.error("[security] fail:", { status, msg, code: err?.code });
-        return { [t]: { error: msg, status } };
+        status = err?.response?.status ?? null;
+        const cat = categorizeError(err);
+        emitTelemetry('diagnostic.micro_call', { diagId, ...userCtx, micro: t, urlHash, status, success: false, durationMs: stop(), retries: retriesUsed, errorCategory: cat });
+        return { [t]: { error: err?.message || 'error', status } } as Record<string, unknown>;
+      } finally {
+        if (success) emitTelemetry('diagnostic.micro_call', { diagId, ...userCtx, micro: t, urlHash, status, success: true, durationMs: stop(), retries: retriesUsed });
+        microsRun.push(t);
       }
     };
 
@@ -373,6 +351,10 @@ export async function guardarDatos(req: Request, res: Response) {
   } catch (e: any) {
     console.error("❌ Error inesperado en guardarDatos:", e?.message);
     return fail(500, e?.message || "Error interno");
+  } finally {
+    // Reunir breakdown de micro_call desde TelemetryEvent podría requerir query; aquí sólo total.
+    // Para primera iteración almacenamos total; breakdown se calcula en endpoint summary vía agregación de micro_call.
+    emitTelemetry('diagnostic.end', { diagId, ...userCtx, urlHash: (()=>{ try { return hashUrl((req.body as any)?.url); } catch { return null; } })(), urlSample: (req.body as any)?.url, micros: microsRun, durationMs: diagStop() });
   }
 }
 
@@ -597,9 +579,13 @@ export async function getDiagnosticsAudit(req: Request, res: Response) {
 
 // -------- Enviar histórico por email --------
 export async function sendReport(req: Request, res: Response) {
+  const sendStop = hrTimer();
+  const userCtx = { userId: req.user?._id || null, role: req.user?.role || null };
+  let urlHash: string | null = null;
   try {
     const { url, email } = (req.body || {}) as { url?: string; email?: string };
     if (!url || !email) return res.status(400).json({ error: "Falta parámetro url o email" });
+    urlHash = hashUrl(url);
 
     const query: any = { url };
     // 🔒 Clientes: solo pueden enviar histórico de sus propios diagnósticos
@@ -711,8 +697,10 @@ export async function sendReport(req: Request, res: Response) {
     };
 
     const info: SentMessageInfo = await transporter.sendMail(mailOptions);
+    emitTelemetry('email.sent', { ...userCtx, emailType: 'history', durationMs: sendStop(), success: true, urlHash });
     return res.status(200).json({ message: "Informe enviado correctamente", messageId: info.messageId });
   } catch (err: any) {
+    emitTelemetry('email.sent', { ...userCtx, emailType: 'history', durationMs: sendStop(), success: false, urlHash, error: err?.message });
     console.error("❌ Error al enviar el informe:", err); // eslint-disable-line no-console
     return res.status(500).json({ error: "Error al enviar el informe", detail: err.message });
   }
@@ -720,6 +708,9 @@ export async function sendReport(req: Request, res: Response) {
 
 // -------- Enviar diagnóstico individual --------
 export async function sendDiagnostic(req: Request, res: Response) {
+  const sendStop = hrTimer();
+  const userCtx = { userId: req.user?._id || null, role: req.user?.role || null };
+  let pdfSizeKb: number | null = null; let hasPdf = false; let urlHash: string | null = null;
   try {
     const { id, url, email, subject, pdf } = (req.body || {}) as {
       id?: string;
@@ -748,6 +739,9 @@ export async function sendDiagnostic(req: Request, res: Response) {
       doc = await Audit.findOne(q).sort({ fecha: -1 }).lean();
       if (!doc) return res.status(404).json({ error: "No hay diagnóstico para ese criterio" });
     }
+
+    // Calcular hash url para telemetría (siempre que tengamos doc.url)
+    try { urlHash = doc?.url ? hashUrl(doc.url) : (url ? hashUrl(url) : null); } catch {}
 
     let toEmail = (email || doc.email || "").trim();
     if (!toEmail) return res.status(400).json({ error: "No hay email disponible" });
@@ -799,6 +793,19 @@ export async function sendDiagnostic(req: Request, res: Response) {
       </div>
     `;
 
+    // Procesar PDF si viene adjunto
+    let attachments: any = undefined;
+    if (pdf?.base64 && pdf?.filename) {
+      try {
+        const buf = Buffer.from(pdf.base64, 'base64');
+        pdfSizeKb = Math.round(buf.length / 1024);
+        hasPdf = true;
+        attachments = [{ filename: pdf.filename, content: buf, contentType: pdf.contentType || 'application/pdf' }];
+      } catch (e:any) {
+        console.warn('⚠️ Error procesando PDF base64:', e?.message);
+      }
+    }
+
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: { user: process.env.EMAIL_USER as string, pass: process.env.EMAIL_PASS as string },
@@ -809,23 +816,18 @@ export async function sendDiagnostic(req: Request, res: Response) {
       to: toEmail,
       subject: title,
       html,
-      attachments: pdf?.base64 && pdf?.filename
-        ? [
-            {
-              filename: pdf.filename,
-              content: Buffer.from(pdf.base64, "base64"),
-              contentType: pdf.contentType || "application/pdf",
-            },
-          ]
-        : undefined,
+      attachments,
     };
 
     const info: SentMessageInfo = await transporter.sendMail(mailOptions);
+    emitTelemetry('email.sent', { ...userCtx, emailType: 'diagnostic', hasPdf, pdfSizeKb, durationMs: sendStop(), urlHash, success: true });
+    if (hasPdf) emitTelemetry('pdf.attached_to_email', { ...userCtx, pdfSizeKb, urlHash });
     return res.status(200).json({
       message: "Informe de diagnóstico enviado correctamente",
       messageId: info.messageId,
     });
   } catch (e: any) {
+    emitTelemetry('email.sent', { ...userCtx, emailType: 'diagnostic', success: false, durationMs: sendStop(), urlHash, error: e?.message });
     console.error("❌ Error en sendDiagnostic:", e); // eslint-disable-line no-console
     return res.status(500).json({ error: "Error al enviar el diagnóstico", detail: e.message });
   }
@@ -1012,3 +1014,7 @@ async function runSecurityMicro(url: string) {
   const { data } = await axios.post(endpoint, payload, { timeout: 120000 });
   return data;
 }
+
+// forward reference (already implemented below)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _runPagespeedViaMicroRef: (url: string, strategy: 'mobile'|'desktop') => Promise<any> = runPagespeedViaMicro as any;
