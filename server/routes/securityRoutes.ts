@@ -14,7 +14,33 @@ router.post('/security-analyze', async (req, res) => {
       headers: { 'Content-Type': 'application/json' },
       timeout: PROXY_TIMEOUT,
     });
-    res.status(response.status).json(response.data);
+    let data = response.data;
+    try {
+      // Derivar plan de acción sugerido (simple heurística local)
+      const headers = (data && typeof data === 'object' && (data as any).headers) || {};
+      const findings = Array.isArray((data as any)?.findings) ? (data as any).findings : [];
+      const plan: Array<{ id: string; title: string; recommendation: string; severity: string }> = [];
+      const push = (id:string,title:string,recommendation:string,severity:string) => {
+        if(!plan.find(p=>p.id===id)) plan.push({ id, title, recommendation, severity });
+      };
+      const want = (name:string) => headers && headers[name] && headers[name].present === true;
+      const ensureHeader = (h:string, rec:string, sev='high') => { if(!want(h)) push(`hdr:${h}`, `Configurar ${h}`, rec, sev); };
+      ensureHeader('content-security-policy','Definir CSP restrictiva (evitar unsafe-inline).');
+      ensureHeader('strict-transport-security','Habilitar HSTS con max-age≥31536000; includeSubDomains; preload.');
+      ensureHeader('x-frame-options','Agregar X-Frame-Options DENY para mitigar clickjacking.','medium');
+      ensureHeader('x-content-type-options','Agregar X-Content-Type-Options: nosniff.','medium');
+      ensureHeader('referrer-policy','Agregar Referrer-Policy para limitar exposición de URLs.','low');
+      ensureHeader('permissions-policy','Agregar Permissions-Policy limitando APIs (camera=(), geolocation=(), etc.).','medium');
+      // Findings críticos
+      for(const f of findings){
+        const sev = (f?.severity||'').toString().toLowerCase();
+        if(sev.includes('critical') || sev.includes('high')) {
+          push(`finding:${f.id||f.rule||f.title}`,(f.title||f.id||'Hallazgo crítico'), f.recommendation||f.message||'Revisar configuración.', 'high');
+        }
+      }
+      if(plan.length){ (data as any).suggestedActionPlan = plan.slice(0,15); }
+    } catch {}
+    res.status(response.status).json(data);
   } catch (err: any) {
     if (err.response) {
       res.status(err.response.status).json(err.response.data);

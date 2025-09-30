@@ -1,11 +1,12 @@
 // server/controllers/admin.controller.ts
 import type { Request, Response } from 'express';
-import User from '../database/user.js';
+import User, { type UserRole } from '../database/user.js';
 import type { AuthUser } from '../middleware/auth.js';
 import AdminLog from '../database/adminLog.js';
 import AdminVisit from '../database/adminVisit.js';
 import crypto from 'crypto';
 import TelemetryEvent from '../database/telemetryEvent.js';
+import RoleAudit from '../database/roleAudit.js';
 import { hrTimer, emitTelemetry, hashUrl, categorizeError } from '../utils/telemetry.js';
 
 // In-memory buffers (simple, non-persistent)
@@ -427,4 +428,104 @@ export function logRequest(method: string, url: string) {
   pushLog({ level: 'info', message: `${method} ${url}` });
 }
 
-export default { listUsers, getLogs, getTelemetry, trackTelemetry, recordVisit, logRequest, clearLogs, clearTelemetry, getTelemetrySummary, getLogSummary };
+export async function updateUser(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { name, role, isActive, resetPassword } = req.body || {};
+    const user = await User.findById(id);
+    if(!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const prevRole = user.role || null;
+    if(typeof name === 'string' && name.trim()) user.name = name.trim().slice(0,120);
+    let roleChanged = false;
+    // Validar rol permitido antes de asignar (removido otro_tecnico)
+    if (typeof role === 'string' && role !== user.role) {
+      const allowedRoles: UserRole[] = ['admin','tecnico','operario','cliente'];
+      if (!allowedRoles.includes(role as UserRole)) {
+        return res.status(400).json({ error: 'Rol inválido' });
+      }
+      user.role = role as UserRole;
+      roleChanged = true;
+    }
+    if(typeof isActive === 'boolean') user.isActive = isActive;
+    let tempPassword: string | undefined;
+    if(resetPassword === true) {
+      tempPassword = crypto.randomBytes(5).toString('hex');
+      (user as any).password = tempPassword; // asumiendo hash middleware pre-save
+    }
+    await user.save();
+    if(roleChanged) {
+      void RoleAudit.create({
+        ts: new Date(),
+        targetUserId: user._id,
+        targetUserName: user.name || null,
+        previousRole: prevRole,
+        newRole: user.role,
+        changedById: (req.user as any)?._id,
+        changedByName: (req.user as any)?.name || null,
+      }).catch(()=>{});
+      pushLog({ level: 'info', message: 'role_changed', context: { target: user._id, previousRole: prevRole, newRole: user.role, by: req.user?._id } });
+    }
+    return res.json({ ok: true, roleChanged, tempPassword });
+  } catch(e:any) {
+    pushLog({ level: 'error', message: 'updateUser failed', context: { error: e?.message } });
+    return res.status(500).json({ error: 'No se pudo actualizar usuario' });
+  }
+}
+
+export async function deleteUser(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const { reason } = (req.body || {}) as { reason?: string };
+    const user = await User.findById(id);
+    if(!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const allowedReasons = ['baja_voluntaria','inactividad','duplicado','fraude','otro'];
+    const reasonSafe = reason && allowedReasons.includes(reason) ? reason : 'otro';
+    const prevRole = user.role || null;
+    const name = user.name || null;
+    // Eliminación definitiva
+    await User.deleteOne({ _id: user._id });
+    pushLog({ level: 'warn', message: 'user_deleted', context: { target: user._id, by: req.user?._id, reason: reasonSafe } });
+    try {
+      await RoleAudit.create({
+        ts: new Date(),
+        targetUserId: user._id,
+        targetUserName: name,
+        previousRole: prevRole,
+        newRole: prevRole, // mantenemos rol previo para trazabilidad
+        changedById: (req.user as any)?._id,
+        changedByName: (req.user as any)?.name || null,
+        note: `delete:${reasonSafe}`
+      });
+    } catch {}
+    return res.json({ ok: true, deleted: true, reason: reasonSafe });
+  } catch(e:any) {
+    pushLog({ level: 'error', message: 'deleteUser failed', context: { error: e?.message } });
+    return res.status(500).json({ error: 'No se pudo eliminar usuario' });
+  }
+}
+
+export async function getRoleAudit(req: Request, res: Response) {
+  try {
+    const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+    const since = new Date(Date.now() - days*24*60*60*1000);
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
+    const rows = await RoleAudit.find({ ts: { $gte: since } })
+      .sort({ ts: -1 })
+      .limit(limit)
+      .lean();
+    return res.json({ range: { from: since.toISOString(), to: new Date().toISOString(), days }, total: rows.length, items: rows.map(r => ({
+      ts: (r.ts as any).toISOString?.() || String(r.ts),
+      targetUserId: r.targetUserId,
+      targetUserName: (r as any).targetUserName || null,
+      previousRole: r.previousRole,
+      newRole: r.newRole,
+      changedById: r.changedById,
+      changedByName: (r as any).changedByName || null,
+      note: (r as any).note || null,
+    })) });
+  } catch(e:any) {
+    return res.status(500).json({ error: 'No se pudo obtener auditoría', detail: e?.message });
+  }
+}
+
+export default { listUsers, getLogs, getTelemetry, trackTelemetry, recordVisit, logRequest, clearLogs, clearTelemetry, getTelemetrySummary, getLogSummary, updateUser, deleteUser, getRoleAudit };

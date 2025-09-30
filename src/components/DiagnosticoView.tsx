@@ -1032,10 +1032,10 @@ export default function DiagnosticoView() {
   const [perfLoading, setPerfLoading] = useState(false);
 
   // toggles de desgloses
-  const [showPerfDetails, setShowPerfDetails] = useState(true);
-  const [showAccDetails, setShowAccDetails] = useState(false);
-  const [showBPDetails, setShowBPDetails] = useState(false);
-  const [showSeoDetails, setShowSeoDetails] = useState(false);
+  const [showPerfDetails, setShowPerfDetails] = useState(!isCliente);
+  const [showAccDetails, setShowAccDetails] = useState(false && !isCliente);
+  const [showBPDetails, setShowBPDetails] = useState(false && !isCliente);
+  const [showSeoDetails, setShowSeoDetails] = useState(false && !isCliente);
   const [cardInfoOpen, setCardInfoOpen] = useState<Record<string, boolean>>({});
 
   const contenedorReporteRef = useRef<HTMLDivElement | null>(null);
@@ -1670,9 +1670,7 @@ export default function DiagnosticoView() {
                 borderRadius: '6px',
                 fontWeight: 500
               }}
-              onClick={() => {
-                setActiveDiag('security');
-              }} 
+              onClick={() => setActiveDiag('security')} 
               variant="outline"
             >
                                                      Ver diagnóstico de Seguridad
@@ -1707,7 +1705,8 @@ export default function DiagnosticoView() {
           </h2>
 
           {/* Show strategy tabs only for performance */}
-          {activeDiag === 'performance' && (
+          {!isCliente && (
+          <div className="flex flex-col gap-4">
             <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-3 mb-4 px-2">
               <Tabs value={strategy} onValueChange={(v)=>{ setPerfLoading(true); setStrategy((v as 'mobile'|'desktop')); }}>
                 <TabsList className="bg-[#e9eefb] rounded-xl p-1 w-full sm:w-auto">
@@ -1772,6 +1771,7 @@ export default function DiagnosticoView() {
                 </div>
               </div>
             </div>
+          </div>
           )}
 
           {/* Indicador de carga bajo las tabs cuando se están obteniendo métricas */}
@@ -1787,9 +1787,9 @@ export default function DiagnosticoView() {
           {/* Security content */}
           {activeDiag === 'security' && url && (
             <SecurityDiagnosticoPanel
-              url={url as string}
-              initialResult={(audit as any)?.security}
-              autoRunOnMount={!((audit as any)?.security)}
+               url={url as string}
+               initialResult={(audit as any)?.security}
+               autoRunOnMount={!((audit as any)?.security)}
             />
           )}
 
@@ -1850,7 +1850,7 @@ export default function DiagnosticoView() {
                 </div>
 
                 {/* Desglozes y captura */}
-                {(showPerfDetails || showAccDetails || showBPDetails || showSeoDetails) && (
+                {(showPerfDetails || showAccDetails || showBPDetails || showSeoDetails) && !isCliente && (
                   <SectionDivider
                     label="Desgloses y capturas"
                     info={
@@ -1863,7 +1863,7 @@ export default function DiagnosticoView() {
                 )}
 
                 {/* Desglose Performance — tipo SEO */}
-                {showPerfDetails && (
+                {showPerfDetails && !isCliente && (
                   <>
                     <PerfBreakdownGrid items={perfBreakItems as any} />
                     <ScreenshotPreview src={getFinalScreenshot(apiData)} />
@@ -1871,21 +1871,21 @@ export default function DiagnosticoView() {
                 )}
 
                 {/* Desglose Accesibilidad / Best Practices / SEO */}
-                {showAccDetails && (
+                {showAccDetails && !isCliente && (
                   <CategoryBreakdown
                     label="Accesibilidad"
                     items={accBreak.length ? accBreak : translateList((apiData as any)?.accessibility?.items)}
                   />
                 )}
 
-                {showBPDetails && (
+                {showBPDetails && !isCliente && (
                   <CategoryBreakdown
                     label="Prácticas recomendadas"
                     items={bpBreak.length ? bpBreak : translateList((apiData as any)?.["best-practices"]?.items)}
                   />
                 )}
 
-                {showSeoDetails && (
+                {showSeoDetails && !isCliente && (
                   <CategoryBreakdown
                     label="SEO"
                     items={seoBreak.length ? seoBreak : translateList((apiData as any)?.seo?.items)}
@@ -2011,6 +2011,13 @@ export default function DiagnosticoView() {
                       <p className="text-xs text-center text-slate-600 max-w-[260px] m-0">
                         Puntaje y métricas clave ({strategy === 'mobile' ? 'Móvil' : 'Ordenador'}).
                       </p>
+                      {/* Logo Choucair debajo de métricas de performance */}
+                      <img
+                        src={typeof window !== 'undefined' ? '/LogoChoucair.png' : 'LogoChoucair.png'}
+                        alt="Choucair"
+                        className="mt-4 w-40 opacity-90 hover:opacity-100 transition-opacity select-none"
+                        draggable={false}
+                      />
                     </div>
                   ) : (
                     <p className="text-sm text-slate-500">No hay métricas de performance.</p>

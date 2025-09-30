@@ -75,12 +75,12 @@ export default function AdminDashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><List size={18}/> Registros/Logs</CardTitle>
+            <CardTitle className="flex items-center gap-2"><List size={18}/> Modo Trazabilidad</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-slate-600 mb-4">Eventos del sistema, auditoría y visitas.</p>
+            <p className="text-sm text-slate-600 mb-4">Cambios de rol, eliminaciones y sus fechas.</p>
             <Link to="/admin/logs" state={{ from: '/admin' }}>
-              <Button className="w-full" variant="outline">Abrir logs</Button>
+              <Button className="w-full" variant="outline">Abrir trazabilidad</Button>
             </Link>
           </CardContent>
         </Card>
