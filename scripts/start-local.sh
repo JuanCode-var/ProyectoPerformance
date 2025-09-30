@@ -1,43 +1,55 @@
 #start-local.sh
 #Script para iniciar todos los servicios en modo desarrollo localmente
-# chmod +x scripts/start-local.sh - chmod +x scripts/*.sh (darle permisos a un documento para que sea local) 
-#ejecutarlo: ./scripts/start-local.sh
+# chmod +x scripts/start-local.sh
+# Ejecutar: npm run start:all
 
-echo "🚀 Iniciando microservicio PageSpeed en modo desarrollo..."
-cd microPagespeed
-npm run dev &
-PAGESPEED_PID=$!
-cd ..
-
-echo "🚀 Iniciando microservicio de seguridad en modo desarrollo..."
-cd security-service
-npm run dev &
-SECURITY_PID=$!
-cd ..
-
-echo "🔧 Iniciando backend en modo desarrollo..."
-cd server
-npm run dev &
-SERVER_PID=$!
-cd ..
-
-echo "🚀 Iniciando microservicio Frontend en modo desarrollo..."
-npm run dev &
-FRONTEND_PID=$!
-
-echo "✅ Todos los servicios iniciados!"
-echo "PIDs: PageSpeed=$PAGESPEED_PID Security=$SECURITY_PID Server=$SERVER_PID Frontend=$FRONTEND_PID"
-echo "Presiona Ctrl+C para detener todos los servicios"
-
-# Función para limpiar procesos al salir
-cleanup() {
-    echo "🛑 Deteniendo servicios..."
-    kill $PAGESPEED_PID $SECURITY_PID $SERVER_PID $FRONTEND_PID 2>/dev/null
-    exit
+# Función para lanzar un servicio con fallback de script
+run_service() {
+  local dir=$1
+  local script=$2
+  local pid_var=$3
+  if [ -f package.json ]; then
+    if npm run | grep -q " $script"; then
+      echo "→ Iniciando $dir con script $script"
+      npm run $script &
+    else
+      echo "⚠️  Script $script no encontrado en $dir, usando 'dev'"
+      npm run dev &
+    fi
+    eval $pid_var=$!
+  else
+    echo "❌ package.json no encontrado en $dir"
+  fi
 }
 
-# Capturar señal de interrupción
+echo "🚀 Iniciando microservicio PageSpeed..."
+cd microPagespeed
+run_service "microPagespeed" "dev:4g" PAGESPEED_PID
+cd ..
+
+echo "🚀 Iniciando microservicio de seguridad..."
+cd security-service
+run_service "security-service" "dev:4g" SECURITY_PID
+cd ..
+
+echo "🔧 Iniciando backend..."
+cd server
+run_service "server" "dev:4g" SERVER_PID
+cd ..
+
+echo "🚀 Iniciando Frontend..."
+run_service "frontend" "dev" FRONTEND_PID
+
+echo "✅ Servicios iniciados"
+echo "PIDs: PageSpeed=$PAGESPEED_PID Security=$SECURITY_PID Server=$SERVER_PID Frontend=$FRONTEND_PID"
+echo "Ctrl+C para detener"
+
+cleanup() {
+  echo "🛑 Deteniendo servicios..."
+  kill $PAGESPEED_PID $SECURITY_PID $SERVER_PID $FRONTEND_PID 2>/dev/null
+  exit
+}
+
 trap cleanup SIGINT SIGTERM
 
-# Esperar a que terminen los procesos
 wait

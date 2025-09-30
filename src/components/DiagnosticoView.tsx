@@ -1892,6 +1892,21 @@ export default function DiagnosticoView() {
                   />
                 )}
 
+                 {/* Aviso de acceso limitado para clientes (oculta desgloses) */}
+                 {isCliente && (
+                   <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6 mt-4">
+                     <div className="flex items-start gap-3">
+                       <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                         <Ban size={16} />
+                       </div>
+                       <div className="text-sm">
+                         <div className="font-semibold mb-1">Acceso limitado – Desgloses de rendimiento</div>
+                         <p>Los desgloses detallados de métricas (FCP, LCP, TBT, SI, TTFB, CLS), capturas y listas completas de hallazgos se reservan para roles internos. Contacte al equipo para ampliar permisos.</p>
+                       </div>
+                     </div>
+                      </div>
+                    )}
+
                 <SectionDivider
                   label="Plan de acción"
                   info={
@@ -1901,6 +1916,21 @@ export default function DiagnosticoView() {
                     </>
                   }
                 />
+
+                {/* Aviso de acceso limitado para clientes (oculta desgloses) */}
+                {isCliente && (
+                  <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6 mt-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                        <Ban size={16} />
+                      </div>
+                      <div className="text-sm">
+                        <div className="font-semibold mb-1">Acceso limitado – Plan de acción</div>
+                        <p>EL plan de acción detallado de riesgos y mejoras recomendadas (Riesgos y recomendaciones para mejorar el rendimiento del aplicativo), capturas y listas completas de hallazgos se reservan para roles internos. Contacte al equipo para ampliar permisos.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <ActionPlanPanel
                   opportunities={planItems}
                   performance={performance}
@@ -1927,6 +1957,7 @@ export default function DiagnosticoView() {
               </div>
             </div>
           )}
+          
         </div>
       </CardContent>
       {/* Modal de resumen combinado */}

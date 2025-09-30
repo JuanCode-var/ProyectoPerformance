@@ -5,6 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:4g": "cross-env NODE_OPTIONS=--max-old-space-size=4096 tsx watch src/index.ts",
+    "dev:6g": "cross-env NODE_OPTIONS=--max-old-space-size=6144 tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.json"
   },
@@ -27,6 +29,7 @@
     "@types/node": "^24.3.0",
     "pino-pretty": "^13.1.1",
     "tsx": "^4.20.4",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "cross-env": "^7.0.3"
   }
 }

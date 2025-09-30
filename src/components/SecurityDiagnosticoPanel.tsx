@@ -1078,6 +1078,19 @@ export default function SecurityDiagnosticoPanel({
               </div>
             )}
 
+            {/* Aviso encabezados para cliente */}
+            {isCliente && (
+              <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center"><Ban size={16} /></div>
+                  <div className="text-sm">
+                    <div className="font-semibold mb-1">Acceso limitado – Encabezados</div>
+                    <p>El detalle completo de los encabezados de seguridad (valores recomendados, configuraciones nginx/Apache/Express y presencia) está restringido. Solicite permisos ampliados para ver configuraciones específicas.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Hallazgos y mejoras */}
             {!isCliente && (
               <>
@@ -1179,6 +1192,30 @@ export default function SecurityDiagnosticoPanel({
                     </>
                   );
                 })()}
+              </>
+            )}
+
+            {/* Avisos limitados para cliente (Hallazgos y Plan de acción) */}
+            {isCliente && (
+              <>
+                <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center"><Ban size={16} /></div>
+                    <div className="text-sm">
+                      <div className="font-semibold mb-1">Acceso limitado – Hallazgos</div>
+                      <p>Los hallazgos detallados (fallos, avisos y severidades) se reservan para roles internos. Solicite ampliación de permisos para ver este contenido.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-10">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center"><Ban size={16} /></div>
+                    <div className="text-sm">
+                      <div className="font-semibold mb-1">Acceso limitado – Plan de acción</div>
+                      <p>La lista priorizada de acciones recomendadas para reforzar encabezados y configuraciones está restringida para el rol cliente.</p>
+                    </div>
+                  </div>
+                </div>
               </>
             )}
           </div>
