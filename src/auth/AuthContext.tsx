@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 export type UserRole = 'admin' | 'operario' | 'tecnico' | 'otro_tecnico' | 'cliente';
-export type User = { _id: string; name: string; email: string; role: UserRole; title?: string | null };
+export type User = { _id: string; name: string; email: string; role: UserRole; title?: string | null; permissions?: string[] };
 
 type AuthContextValue = {
   user: User | null;
@@ -11,6 +11,7 @@ type AuthContextValue = {
   register: (name: string, email: string, password: string, role?: UserRole, title?: string) => Promise<User>;
   logout: (opts?: { force?: boolean; origin?: 'ui' | 'auto' }) => Promise<void>;
   refresh: () => Promise<User | null>;
+  refreshPermissions: () => Promise<string[]>; // helper to fetch updated permissions
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -233,8 +234,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const refreshPermissions = async () => {
+    if(!userRef.current) return [] as string[];
+    try {
+      const res = await fetch('/api/auth/permissions', { credentials: 'include' });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data?.error||'Error');
+      const perms: string[] = data.permissions || [];
+      setUser(u => u ? { ...u, permissions: perms } : u);
+      return perms;
+    } catch { return [] as string[]; }
+  };
+
   const value = useMemo(
-    () => ({ user, loading, initialized, login, register, logout, refresh }),
+    () => ({ user, loading, initialized, login, register, logout, refresh, refreshPermissions }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user, loading, initialized]
   );

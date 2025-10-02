@@ -9,7 +9,7 @@ import {
   sendDiagnostic,     // POST /api/audit/send-diagnostic
   getSecurityHistory, // GET /api/security/history
 } from "../controllers/FormController.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth, requireRole, requirePermissions } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -61,13 +61,33 @@ router.get(
 // Detalle: permitido para todos los autenticados; el controlador debe validar propiedad para clientes
 router.get("/audit/:id", requireAuth as any, getAuditById);
 
-// Seguridad (histórico) solo no-cliente
+// Seguridad (histórico) ahora controlado por permiso granular
 router.get(
   "/security/history",
   requireAuth as any,
-  requireRole('admin','operario','tecnico') as any,
+  (req: any, res: any, next: any) => { if (process.env.DEBUG_PERMS === 'true') console.log('[route] /security/history user=%s role=%s', req.user?.email, req.user?.role); next(); },
+  requirePermissions('security.view_history') as any,
+  (req: any, res: any, next: any) => { if (process.env.DEBUG_PERMS === 'true') console.log('[route] /security/history passed perms role=%s', req.user?.role); next(); },
   getSecurityHistory
 );
+
+// Debug: ver permisos efectivos del usuario autenticado en runtime
+router.get('/security/debug/my-perms', requireAuth as any, async (req: any, res: any) => {
+  try {
+    const { defaultsForRole, PERMISSION_KEYS } = require('../utils/permissionsCatalog.js');
+    let effective: string[] = [];
+    try {
+      const RolePermissions = require('../database/rolePermissions.js').default;
+      const doc = await RolePermissions.findOne({ role: req.user.role }).lean();
+      effective = doc?.permissions || defaultsForRole(req.user.role);
+    } catch (e:any) {
+      effective = defaultsForRole(req.user.role);
+    }
+    return res.json({ role: req.user.role, effective, all: Array.from(PERMISSION_KEYS) });
+  } catch (e:any) {
+    return res.status(500).json({ error: 'debug_failed', detail: e?.message });
+  }
+});
 
 // Emailing (requiere sesión)
 router.post("/audit/send-diagnostic", requireAuth as any, sendDiagnostic);

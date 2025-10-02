@@ -10,6 +10,9 @@ import { signToken, JWT_SECRET } from '../middleware/auth.js';
 import jwt from 'jsonwebtoken';
 import TelemetryEvent from '../database/telemetryEvent.js';
 import { recordVisit } from './admin.controller.js';
+import RolePermissions from '../database/rolePermissions.js';
+import { PERMISSION_KEYS, defaultsForRole } from '../utils/permissionsCatalog.js';
+import { type AuthUser, } from '../middleware/auth.js';
 
 const COOKIE_NAME = process.env.COOKIE_NAME || 'perf_token';
 const IN_PROD = process.env.NODE_ENV === 'production';
@@ -39,6 +42,32 @@ async function emitTelemetry(kind: string, base: Record<string, any>) {
   try { if (!METRICS_ENABLED) return; if (METRICS_SAMPLE_RATE<1 && Math.random()>METRICS_SAMPLE_RATE) return; TelemetryEvent.create({ kind, ts:new Date(), ...base }).catch(()=>{}); } catch {}
 }
 function hashEmailPart(e?: string|null) { if(!e) return null; try { return crypto.createHash('sha256').update(e).digest('hex').slice(0,10);} catch { return null; } }
+
+async function effectivePermissionsForRole(role: string): Promise<string[]> {
+  try {
+    if (role === 'admin') return Array.from(PERMISSION_KEYS);
+    let RolePermissionsMod: any;
+    try {
+      RolePermissionsMod = RolePermissions; // prefer static import
+    } catch {
+      try { RolePermissionsMod = (await import('../database/rolePermissions.js')).default; } catch(err) {
+        console.error('[perms] dynamic import failed', err);
+      }
+    }
+    if (RolePermissionsMod) {
+      try {
+        const doc = await RolePermissionsMod.findOne({ role }).lean();
+        if (doc && Array.isArray((doc as any).permissions)) return (doc as any).permissions as string[];
+      } catch (e) {
+        console.error('[perms] query failed role=%s err=%s', role, (e as any)?.message);
+      }
+    }
+    return defaultsForRole(role);
+  } catch (e) {
+    console.error('[perms] fallback error role=%s err=%s', role, (e as any)?.message);
+    return defaultsForRole(role);
+  }
+}
 
 export async function register(req: Request, res: Response) {
   try {
@@ -137,8 +166,15 @@ export async function login(req: Request, res: Response) {
       const profileRoute = user.role === 'admin' ? '/admin' : '/';
       recordVisit(profileRoute, { _id: userId, name: user.name, email: user.email, role: user.role } as any);
     } catch {}
-    // Devolver también el token para permitir Authorization Bearer en el frontend (respaldo)
-    return res.json({ ok: true, token, user: { _id: userId, name: user.name, email: user.email, role: user.role, title: user.title } });
+    // Obtener permisos efectivos INCLUYENDO overrides de usuario
+    let perms: string[] = [];
+    try {
+      const { getUserEffectivePermissions } = await import('../middleware/auth.js');
+      perms = await getUserEffectivePermissions({ _id: userId, role: user.role, name: user.name, email: user.email } as any);
+    } catch {
+      perms = await effectivePermissionsForRole(user.role); // fallback solo por rol
+    }
+    return res.json({ ok: true, token, user: { _id: userId, name: user.name, email: user.email, role: user.role, title: user.title, permissions: perms } });
   } catch (e: any) {
     await emitTelemetry('auth_login_fail', { emailHash: hashEmailPart((req.body as any)?.email), reason:'exception', durationMs: stop(), error: e?.message });
     console.error('[auth/login] error', e);
@@ -154,9 +190,16 @@ export async function me(req: Request, res: Response) {
       return res.status(401).json({ error: 'No autenticado' });
     }
     console.log('[auth/me] ok user', u.email);
-    return res.json({ ok: true, user: u });
+    let perms: string[] = [];
+    try {
+      const { getUserEffectivePermissions } = await import('../middleware/auth.js');
+      perms = await getUserEffectivePermissions(u as any); // usa overrides + rol
+    } catch {
+      try { perms = await effectivePermissionsForRole(u.role); } catch {}
+    }
+    return res.json({ ok: true, user: { ...u, permissions: perms } });
   } catch (e) {
-    console.error('[auth/me] error', e);
+    console.error('[auth/me] unexpected error', e);
     return res.status(500).json({ error: 'Error' });
   }
 }
@@ -283,3 +326,28 @@ export async function resetPassword(req: Request, res: Response) {
 // Mantener campos en el esquema permite una futura reactivación sin migración.
 // export async function requestEmailVerification() { /* removed */ }
 // export async function verifyEmail() { /* removed */ }
+
+export async function myPermissions(req: Request, res: Response) {
+  try {
+    const u = req.user as AuthUser | undefined;
+    if(!u) return res.status(401).json({ error: 'No autenticado' });
+    // Cargar permisos efectivos incluyendo overrides de usuario reutilizando lógica del middleware
+    let getUserEffective: any;
+    try {
+      // dynamic import to avoid circular
+      ({ getUserEffectivePermissions: getUserEffective } = await import('../middleware/auth.js'));
+    } catch {
+      getUserEffective = null;
+    }
+    let perms: string[] = [];
+    if (getUserEffective) {
+      try { perms = await getUserEffective(u); } catch { perms = []; }
+    } else {
+      // fallback previo (solo por rol)
+      perms = await effectivePermissionsForRole(u.role);
+    }
+    return res.json({ ok: true, role: u.role, permissions: perms });
+  } catch(e:any){
+    return res.status(500).json({ error: 'No se pudieron obtener permisos', detail: e?.message });
+  }
+}

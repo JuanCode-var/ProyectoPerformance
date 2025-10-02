@@ -20,6 +20,8 @@ import AdminUsersPage from './pages/admin/Users';
 import AdminLogsPage from './pages/admin/Logs';
 import AdminTelemetryPage from './pages/admin/Telemetry';
 import TraceabilityPage from './pages/admin/Traceability';
+import PermissionsManagerPage from './pages/admin/PermissionsManager';
+import UserDetailOverridesPage from './pages/admin/UserDetailOverrides';
 import { trackRouteVisit } from './shared/telemetry';
 
 // Helper to build a safe login redirection, avoiding next=/login and other auth routes
@@ -122,6 +124,8 @@ export default function App() {
                 <Route path="/admin/users" element={<AdminOnly><AdminUsersPage /></AdminOnly>} />
                 <Route path="/admin/logs" element={<AdminOnly><TraceabilityPage /></AdminOnly>} />
                 <Route path="/admin/telemetry" element={<AdminOnly><AdminTelemetryPage /></AdminOnly>} />
+                <Route path="/admin/permissions" element={<AdminOnly><PermissionsManagerPage /></AdminOnly>} />
+                <Route path="/admin/users/:id/overrides" element={<AdminOnly><UserDetailOverridesPage /></AdminOnly>} />
                 <Route path="/" element={<Protected><RunAuditPage /></Protected>} />
                 <Route path="/diagnostico/:id" element={<Protected><DiagnosticsPage /></Protected>} />
                 <Route path="/historico" element={<Protected><HistoryPage /></Protected>} />

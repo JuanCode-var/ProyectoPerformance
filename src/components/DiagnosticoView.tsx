@@ -1003,7 +1003,14 @@ export default function DiagnosticoView() {
   // Rol del usuario para condicionar UI de histórico
   const { user, loading: authLoading } = useAuth();
   const isCliente = user?.role === 'cliente';
-
+  // NUEVO: permisos efectivos (si el backend ya los adjunta en user.permissions)
+  const perms = user?.permissions || [];
+  const can = (p: string) => (user?.role === 'admin') || perms.includes(p);
+  // Flags específicos usados en la UI
+  const canPerfHistory = can('performance.view_history');
+  const canPerfActionPlan = can('performance.view_action_plan');
+  const canPerfBreakdowns = can('performance.view_breakdowns');
+  const canSecurityHistory = can('security.view_history');
 
   // NUEVO: estrategia (Móvil/Ordenador)
   const qs = new URLSearchParams(location.search);
@@ -1011,16 +1018,14 @@ export default function DiagnosticoView() {
     (qs.get("strategy") === "desktop" ? "desktop" : "mobile") as "mobile" | "desktop";
   const [strategy, setStrategy] = useState<"mobile" | "desktop">(initialStrategy);
 
-  // Vista activa: solo 'performance' o 'security' (inicializada desde ?type=)
+  // Vista activa / both mode handling (updated)
   const typeParam = (qs.get("type") || "").toLowerCase();
-  const initialDiag = (typeParam === "security" ? "security" : "performance") as
-    | "performance"
-    | "security";
-  const [activeDiag, setActiveDiag] = useState<"performance" | "security">(initialDiag);
-
-  // NEW: mostrar botones de tabs (Performance/Security) solo cuando se pidieron ambas pruebas
-  const [bothMode, setBothMode] = useState<boolean>(typeParam === "both");
-  // NUEVO estado para modal de resumen combinado
+  const bothParam = typeParam === 'both';
+  const initialActiveDiag = bothParam
+    ? ((qs.get('active') as 'performance' | 'security') || 'performance')
+    : (typeParam === 'security' ? 'security' : 'performance');
+  const [activeDiag, setActiveDiag] = useState<"performance" | "security">(initialActiveDiag);
+  const [bothMode, setBothMode] = useState<boolean>(bothParam);
   const [showCombinedSummary, setShowCombinedSummary] = useState(false);
 
   const [auditData, setAuditData] = useState<AuditEnvelope | null>(null);
@@ -1032,10 +1037,10 @@ export default function DiagnosticoView() {
   const [perfLoading, setPerfLoading] = useState(false);
 
   // toggles de desgloses
-  const [showPerfDetails, setShowPerfDetails] = useState(!isCliente);
-  const [showAccDetails, setShowAccDetails] = useState(false && !isCliente);
-  const [showBPDetails, setShowBPDetails] = useState(false && !isCliente);
-  const [showSeoDetails, setShowSeoDetails] = useState(false && !isCliente);
+  const [showPerfDetails, setShowPerfDetails] = useState(canPerfBreakdowns);
+  const [showAccDetails, setShowAccDetails] = useState(false);
+  const [showBPDetails, setShowBPDetails] = useState(false);
+  const [showSeoDetails, setShowSeoDetails] = useState(false);
   const [cardInfoOpen, setCardInfoOpen] = useState<Record<string, boolean>>({});
 
   const contenedorReporteRef = useRef<HTMLDivElement | null>(null);
@@ -1049,13 +1054,19 @@ export default function DiagnosticoView() {
     window.history.replaceState(null, "", newUrl);
   }, [strategy, location.pathname, location.search]);
 
-  // NUEVO: sincroniza type en la URL al cambiar de vista
+  // NUEVO: sincroniza type en la URL al cambiar de vista (ahora soporta modo both)
   useEffect(() => {
     const p = new URLSearchParams(location.search);
-    p.set("type", activeDiag);
+    if (bothMode) {
+      p.set('type', 'both');
+      p.set('active', activeDiag);
+    } else {
+      p.set('type', activeDiag);
+      p.delete('active');
+    }
     const newUrl = `${location.pathname}?${p.toString()}`;
     window.history.replaceState(null, "", newUrl);
-  }, [activeDiag, location.pathname, location.search]);
+  }, [activeDiag, bothMode, location.pathname, location.search]);
 
   // Effect to fetch performance data when in performance view
   useEffect(() => {
@@ -1238,22 +1249,22 @@ export default function DiagnosticoView() {
         <CardContent className="p-6">
           <Link to="/" className="back-link">← Nuevo diagnóstico</Link>
           {url && (
-            isCliente ? (
-              <button
-                type="button"
-                className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1 ml-4"
-                title="Acceso restringido para clientes"
-                aria-disabled
-              >
-                <Ban size={16} /> Histórico no disponible
-              </button>
-            ) : (
+            canPerfHistory ? (
               <Link
                 to={`/historico?url=${encodeURIComponent(url as string)}`}
                 className="back-link ml-4"
               >
                 Ver histórico de esta URL
               </Link>
+            ) : (
+              <button
+                type="button"
+                className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1 ml-4"
+                title="Histórico no disponible para este rol"
+                aria-disabled
+              >
+                <Ban size={16} /> Histórico no disponible
+              </button>
             )
           )}
           <h2 className="diagnostico-title">
@@ -1496,7 +1507,7 @@ export default function DiagnosticoView() {
               {/* Escala completa siempre visible */}
               <div className="flex flex-wrap justify-center gap-1 text-xs">
                 <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                  item.value != null && item.value < 50 
+                  (performance ?? 0) < 50 
                     ? 'bg-red-50 border-red-200 text-red-700 font-medium' 
                     : 'bg-slate-50 border-slate-200 text-slate-600'
                 }`}>
@@ -1504,7 +1515,7 @@ export default function DiagnosticoView() {
                   <span>Malo (0-49)</span>
                 </div>
                 <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                  item.value != null && item.value >= 50 && item.value < 90 
+                  (performance ?? 0) >= 50 && (performance ?? 0) < 90 
                     ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium' 
                     : 'bg-slate-50 border-slate-200 text-slate-600'
                 }`}>
@@ -1512,7 +1523,7 @@ export default function DiagnosticoView() {
                   <span>Medio (50-89)</span>
                 </div>
                 <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                  item.value != null && item.value >= 90 
+                  (performance ?? 0) >= 90 
                     ? 'bg-green-50 border-green-200 text-green-700 font-medium' 
                     : 'bg-slate-50 border-slate-200 text-slate-600'
                 }`}>
@@ -1601,118 +1612,55 @@ export default function DiagnosticoView() {
           <div className="flex items-center gap-4 mb-2">
             <Link to="/" className="back-link">Nuevo diagnóstico</Link>
             {!!url && activeDiag === 'performance' && (
-              isCliente ? (
-                <button
-                  type="button"
-                  className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1 ml-4"
-                  title="Acceso restringido para clientes"
-                  aria-disabled
-                >
-                  <Ban size={16} /> Histórico no disponible
-                </button>
-              ) : (
+              canPerfHistory ? (
                 <Link
                   to={`/historico?url=${encodeURIComponent(url as string)}`}
                   className="back-link ml-4"
                 >
                   Ver histórico de esta URL
                 </Link>
-              )
-            )}
-            {!!url && activeDiag === 'security' && (
-              isCliente ? (
+              ) : (
                 <button
                   type="button"
-                  className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1"
-                  title="Acceso restringido para clientes"
+                  className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1 ml-4"
+                  title="Histórico no disponible para este rol"
                   aria-disabled
                 >
                   <Ban size={16} /> Histórico no disponible
                 </button>
-              ) : (
+              )
+            )}
+            {!!url && activeDiag === 'security' && (
+              canSecurityHistory ? (
                 <Link
                   to={`/security-history?url=${encodeURIComponent(url as string)}`}
                   className="back-link"
                 >
                   Ver histórico de esta URL
                 </Link>
+              ) : (
+                <button
+                  type="button"
+                  className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1"
+                                   title="Histórico no disponible para este rol"
+                  aria-disabled
+                >
+                  <Ban size={16} /> Histórico no disponible
+                </button>
               )
             )}
           </div>
 
           {/* UI Buttons for diagnostics (centrado arriba del título) */}
-          {bothMode && (
-          <div className="diagnostico-btn-group justify-center text-center">
-            <Button 
-              style={{
-                background: activeDiag === 'performance' ? 'linear-gradient(to right, #3b82f6, #2563eb)' : '#ffffff',
-                color: activeDiag === 'performance' ? '#ffffff' : '#2563eb',
-                border: 'none',
-                transition: 'all 0.3s ease',
-                padding: '10px 20px',
-                borderRadius: '6px',
-                fontWeight: 500
-              }}
-              onClick={() => {
-                setActiveDiag('performance');
-              }} 
-              variant="outline"
-            >
-              Ver diagnóstico Performance
-            </Button>
-            <Button 
-              style={{
-                background: activeDiag === 'security' ? 'linear-gradient(to right, #3b82f6, #2563eb)' : '#ffffff',
-                color: activeDiag === 'security' ? '#ffffff' : '#2563eb',
-                border: 'none',
-                transition: 'all 0.3s ease',
-                padding: '10px 20px',
-                borderRadius: '6px',
-                fontWeight: 500
-              }}
-              onClick={() => setActiveDiag('security')} 
-              variant="outline"
-            >
-                                                     Ver diagnóstico de Seguridad
-            </Button>
-          </div>)
-          }
-
-          {/* Botón de resumen combinado centrado */}
-          {bothMode && (audit as any)?.security && activeApi && (
-            <div className="flex w-full justify-center mb-4">
-              <Button
-                style={{
-                  background: showCombinedSummary ? 'linear-gradient(to right, #3b82f6, #2563eb)' : '#ffffff',
-                  color: showCombinedSummary ? '#ffffff' : '#2563eb',
-                  border: 'none',
-                  transition: 'all 0.3s ease',
-                  padding: '10px 20px',
-                  borderRadius: '6px',
-                  fontWeight: 500
-                }}
-                onClick={() => setShowCombinedSummary(true)}
-                variant="outline"
-                disabled={perfLoading}
-              >
-                Resumen combinado
-              </Button>
-            </div>
-          )}
-
-          <h2 className="diagnostico-title">
-            Diagnóstico de: <span className="url">{url}</span>
-          </h2>
-
-          {/* Show strategy tabs only for performance */}
-          {!isCliente && (
-          <div className="flex flex-col gap-4">
-            <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-3 mb-4 px-2">
-              <Tabs value={strategy} onValueChange={(v)=>{ setPerfLoading(true); setStrategy((v as 'mobile'|'desktop')); }}>
-                <TabsList className="bg-[#e9eefb] rounded-xl p-1 w-full sm:w-auto">
-                  <TabsTrigger
-                    value="mobile"
-                    className="flex-1 sm:w-32 lg:w-40 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs sm:text-sm"
+          {(canPerfActionPlan || canPerfBreakdowns) && (
+            <div className="flex flex-col gap-4">
+              {canPerfActionPlan && (
+                <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-3 mb-4 px-2">
+                  <Tabs value={strategy} onValueChange={(v)=>{ setPerfLoading(true); setStrategy((v as 'mobile'|'desktop')); }}>
+                    <TabsList className="bg-[#e9eefb] rounded-xl p-1 w-full sm:w-auto">
+                      <TabsTrigger
+                        value="mobile"
+                        className="flex-1 sm:w-32 lg:w-40 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs sm:text-sm"
                     disabled={perfLoading}
                   >
                     <span role="img" aria-label="mobile" className="mr-1 sm:mr-2">📱</span>
@@ -1736,50 +1684,59 @@ export default function DiagnosticoView() {
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
-              
-              {/* Info icon para explicar las estrategias de testing */}
-              <div 
-                className="relative group cursor-help flex-shrink-0"
-                title="Información sobre las estrategias de testing"
-              >
-                <Info 
-                  size={18} 
-                  className="text-blue-600 hover:text-blue-700 transition-colors" 
-                />
-                <div className="strategy-tooltip absolute left-1/2 -translate-x-1/2 top-full mt-2 p-4 bg-slate-900 text-white text-sm rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-[999]">
-                  <div className="font-semibold mb-2 text-sm">🔍 Estrategias de Testing - Google PageSpeed API</div>
-                  <div className="space-y-2 text-xs leading-relaxed">
-                    <div>
-                      <strong className="text-blue-300">📱 Móvil:</strong>
-                      <br />• Simula un Moto G4 con conexión 3G lenta
-                      <br />• Viewport: 412x823px, densidad 2.625x
-                      <br />• Throttling: CPU 4x más lento, red 3G (1.6Mbps down, 750Kbps up)
-                      <br />• Métricas más estrictas para reflejar dispositivos reales
-                    </div>
-                    <div>
-                      <strong className="text-orange-300">🖥 Ordenador:</strong>
-                      <br />• Simula un desktop con conexión rápida
-                      <br />• Viewport: 1350x940px
-                      <br />• Sin throttling de CPU, conexión de escritorio típica
-                      <br />• Umbrales más permisivos para LCP, FCP, etc.
-                    </div>
-                    <div className="pt-2 border-t border-slate-700">
-                      <strong className="text-green-300">💡 Tip:</strong> Google recomienda priorizar la experiencia móvil ya que representa ~60% del tráfico web.
-                    </div>
-                  </div>
-                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-slate-900"></div>
-                </div>
               </div>
-            </div>
+            )}
+            {!canPerfActionPlan && canPerfBreakdowns && (
+              <div className="text-xs text-slate-600 text-center -mb-2">Vista fija (estrategia {strategy}) – requiere performance.view_action_plan para cambiar entre móvil / ordenador.</div>
+            )}
           </div>
           )}
 
-          {/* Indicador de carga bajo las tabs cuando se están obteniendo métricas */}
-          {activeDiag === 'performance' && perfLoading && (
-            <div className="w-full flex justify-center my-3">
-              <div className="flex items-center gap-3 text-slate-600">
-                <div className="spinner" />
-                <span>Cargando métricas {strategy === 'desktop' ? 'de Ordenador' : 'Móvil'}…</span>
+          <h2 className="diagnostico-title">
+            Diagnóstico de: <span className="url">{url}</span>
+          </h2>
+
+          {/* Tabs para cambiar entre Performance / Seguridad cuando existe ambos */}
+          {bothMode && (
+            <div className="w-full flex items-center justify-center mb-8 mt-4">
+              <div className="flex items-stretch justify-center gap-4 flex-wrap">
+                {/* Botón Performance */}
+                <Button
+                  variant={activeDiag === 'performance' ? 'default' : 'outline'}
+                  className={`h-12 px-6 text-sm font-semibold tracking-wide flex items-center gap-2 rounded-xl shadow-sm transition-all ${activeDiag === 'performance' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-white'} `}
+                  onClick={()=> setActiveDiag('performance')}
+                  aria-pressed={activeDiag === 'performance'}
+                >
+                  ⚡ <span className="hidden sm:inline">Performance</span><span className="sm:hidden">Perf</span>
+                </Button>
+
+                {/* Botón grande de Resumen combinado */}
+                <Button
+                  variant="outline"
+                  disabled={!(audit as any)?.security || !activeApi}
+                  onClick={()=> setShowCombinedSummary(true)}
+                  className={`relative h-14 px-10 text-sm sm:text-base font-bold rounded-2xl border-2 flex items-center gap-3 shadow-md transition-all 
+                    ${(audit as any)?.security && activeApi ? 'bg-gradient-to-r from-indigo-500 via-blue-600 to-cyan-500 text-white hover:brightness-105 border-indigo-600' : 'opacity-60 cursor-not-allowed'}
+                  `}
+                  title={!(audit as any)?.security || !activeApi ? 'Se requieren datos de Performance y Seguridad para el resumen' : 'Abrir resumen combinado'}
+                >
+                  <span className="text-lg">📊</span>
+                  <span className="leading-tight text-center">
+                    Resumen
+                    <br className="hidden sm:block" />
+                    combinado
+                  </span>
+                </Button>
+
+                {/* Botón Seguridad */}
+                <Button
+                  variant={activeDiag === 'security' ? 'default' : 'outline'}
+                  className={`h-12 px-6 text-sm font-semibold tracking-wide flex items-center gap-2 rounded-xl shadow-sm transition-all ${activeDiag === 'security' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-white'} `}
+                  onClick={()=> setActiveDiag('security')}
+                  aria-pressed={activeDiag === 'security'}
+                >
+                  🛡️ <span className="hidden sm:inline">Seguridad</span><span className="sm:hidden">Sec</span>
+                </Button>
               </div>
             </div>
           )}
@@ -1850,7 +1807,7 @@ export default function DiagnosticoView() {
                 </div>
 
                 {/* Desglozes y captura */}
-                {(showPerfDetails || showAccDetails || showBPDetails || showSeoDetails) && !isCliente && (
+                {(showPerfDetails || showAccDetails || showBPDetails || showSeoDetails) && canPerfBreakdowns && (
                   <SectionDivider
                     label="Desgloses y capturas"
                     info={
@@ -1863,7 +1820,7 @@ export default function DiagnosticoView() {
                 )}
 
                 {/* Desglose Performance — tipo SEO */}
-                {showPerfDetails && !isCliente && (
+                {showPerfDetails && canPerfBreakdowns && (
                   <>
                     <PerfBreakdownGrid items={perfBreakItems as any} />
                     <ScreenshotPreview src={getFinalScreenshot(apiData)} />
@@ -1871,29 +1828,29 @@ export default function DiagnosticoView() {
                 )}
 
                 {/* Desglose Accesibilidad / Best Practices / SEO */}
-                {showAccDetails && !isCliente && (
+                {showAccDetails && canPerfBreakdowns && (
                   <CategoryBreakdown
                     label="Accesibilidad"
                     items={accBreak.length ? accBreak : translateList((apiData as any)?.accessibility?.items)}
                   />
                 )}
 
-                {showBPDetails && !isCliente && (
+                {showBPDetails && canPerfBreakdowns && (
                   <CategoryBreakdown
                     label="Prácticas recomendadas"
                     items={bpBreak.length ? bpBreak : translateList((apiData as any)?.["best-practices"]?.items)}
                   />
                 )}
 
-                {showSeoDetails && !isCliente && (
+                {showSeoDetails && canPerfBreakdowns && (
                   <CategoryBreakdown
                     label="SEO"
                     items={seoBreak.length ? seoBreak : translateList((apiData as any)?.seo?.items)}
                   />
                 )}
 
-                 {/* Aviso de acceso limitado para clientes (oculta desgloses) */}
-                 {isCliente && (
+                 {/* Aviso de acceso limitado para usuarios sin permiso de desgloses */}
+                 {!canPerfBreakdowns && (
                    <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6 mt-4">
                      <div className="flex items-start gap-3">
                        <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
@@ -1901,11 +1858,17 @@ export default function DiagnosticoView() {
                        </div>
                        <div className="text-sm">
                          <div className="font-semibold mb-1">Acceso limitado – Desgloses de rendimiento</div>
-                         <p>Los desgloses detallados de métricas (FCP, LCP, TBT, SI, TTFB, CLS), capturas y listas completas de hallazgos se reservan para roles internos. Contacte al equipo para ampliar permisos.</p>
+                         <p>Los desgloses detallados de métricas, capturas y hallazgos se reservan para roles con el permiso performance.view_breakdowns.</p>
                        </div>
                      </div>
                       </div>
                     )}
+
+                {canPerfBreakdowns && !canPerfActionPlan && (
+                  <div className="rounded-lg border p-3 bg-blue-50 border-blue-200 text-blue-800 mb-6 -mt-2">
+                    <div className="text-xs"><strong>Nota:</strong> Puedes ver desgloses pero no el plan de acción completo. Solicita el permiso performance.view_action_plan para habilitar recomendaciones priorizadas.</div>
+                  </div>
+                )}
 
                 <SectionDivider
                   label="Plan de acción"
@@ -1917,24 +1880,26 @@ export default function DiagnosticoView() {
                   }
                 />
 
-                {/* Aviso de acceso limitado para clientes (oculta desgloses) */}
-                {isCliente && (
-                  <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6 mt-4">
+                {/* Aviso acceso limitado plan */}
+                {!canPerfActionPlan && (
+                  <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6">
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
                         <Ban size={16} />
                       </div>
                       <div className="text-sm">
                         <div className="font-semibold mb-1">Acceso limitado – Plan de acción</div>
-                        <p>EL plan de acción detallado de riesgos y mejoras recomendadas (Riesgos y recomendaciones para mejorar el rendimiento del aplicativo), capturas y listas completas de hallazgos se reservan para roles internos. Contacte al equipo para ampliar permisos.</p>
+                        <p className="m-0">Necesitas el permiso <code className="font-mono text-xs bg-white/60 px-1 py-0.5 rounded border">performance.view_action_plan</code> para ver las recomendaciones detalladas. Solicítalo a un administrador.</p>
                       </div>
                     </div>
                   </div>
                 )}
-                <ActionPlanPanel
-                  opportunities={planItems}
-                  performance={performance}
-                />
+                {canPerfActionPlan && (
+                  <ActionPlanPanel
+                    opportunities={planItems}
+                    performance={performance}
+                  />
+                )}
 
                 <SectionDivider
                   label="Compartir / Exportar"
@@ -2003,7 +1968,7 @@ export default function DiagnosticoView() {
                       <div className="flex flex-col items-center gap-3">
                         <div className="flex flex-wrap justify-center gap-1 text-xs">
                           <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                            performance < 50 
+                            (performance ?? 0) < 50 
                               ? 'bg-red-50 border-red-200 text-red-700 font-medium' 
                               : 'bg-slate-50 border-slate-200 text-slate-600'
                           }`}>
@@ -2011,7 +1976,7 @@ export default function DiagnosticoView() {
                             <span>Malo (0-49)</span>
                           </div>
                           <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                            performance >= 50 && performance < 90 
+                            (performance ?? 0) >= 50 && (performance ?? 0) < 90 
                               ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium' 
                               : 'bg-slate-50 border-slate-200 text-slate-600'
                           }`}>
@@ -2019,7 +1984,7 @@ export default function DiagnosticoView() {
                             <span>Medio (50-89)</span>
                           </div>
                           <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                            performance >= 90 
+                            (performance ?? 0) >= 90 
                               ? 'bg-green-50 border-green-200 text-green-700 font-medium' 
                               : 'bg-slate-50 border-slate-200 text-slate-600'
                           }`}>

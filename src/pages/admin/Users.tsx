@@ -11,7 +11,7 @@ const ROLES: Array<{ value: string; label: string; color: string }> = [
   { value: 'cliente', label: 'Cliente', color: 'bg-green-100 text-green-700' }
 ]
 
-interface UserRow { _id: string; name: string; email: string; role: string; isActive?: boolean }
+interface UserRow { _id: string; name: string; email: string; role: string; isActive?: boolean; userOverrides?: { allow?: string[]; deny?: string[] } }
 
 // Minimal placeholder functional view, ready to wire to backend later
 export default function AdminUsersPage() {
@@ -181,6 +181,7 @@ export default function AdminUsersPage() {
                           {!editing && (
                             <div className="flex flex-wrap gap-1">
                               <Button size="sm" variant="outline" onClick={()=>beginEdit(u)}>Editar</Button>
+                              <Button size="sm" variant="outline" onClick={()=>navigate(`/admin/users/${u._id}/overrides`)}>Permisos</Button>
                               {u.isActive !== false && <Button size="sm" variant='destructive' className="!bg-red-600 hover:!bg-red-500 !text-white" onClick={()=>toggleActive(u)}>Eliminar</Button>}
                             </div>
                           )}

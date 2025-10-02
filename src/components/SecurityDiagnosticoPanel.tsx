@@ -466,9 +466,22 @@ export default function SecurityDiagnosticoPanel({
   
   // Auth (role-based UI)
   const { user } = useAuth();
-  const isCliente = user?.role === 'cliente';
+  const perms = user?.permissions || [];
+  const can = (p: string) => (user?.role === 'admin') || perms.includes(p);
+  const canSeeHistory = can('security.view_history');
+  const canSecurityHeaders = can('security.view_headers');
+  const canSecurityCookies = can('security.view_cookies');
+  const canSecurityFindings = can('security.view_findings');
+  const canSecurityActionPlan = can('security.view_action_plan');
+  const anySecurityBreakdowns = canSecurityHeaders || canSecurityCookies || canSecurityFindings;
+
+  // Toggles (copian flujo de performance)
+  const [showHeadersSection, setShowHeadersSection] = useState(canSecurityHeaders);
+  const [showCookiesSection, setShowCookiesSection] = useState(canSecurityCookies);
+  const [showFindingsSection, setShowFindingsSection] = useState(canSecurityFindings);
 
   const fetchHistory = async (theUrl: string) => {
+    if (!canSeeHistory) return; // evitar 403 y llamadas innecesarias
     try {
       const ts = Date.now();
       const r = await fetch(`/api/security/history?url=${encodeURIComponent(theUrl)}&_=${ts}`, {
@@ -491,7 +504,7 @@ export default function SecurityDiagnosticoPanel({
 
   useEffect(() => {
     if (url) void fetchHistory(url);
-  }, [url]);
+  }, [url, canSeeHistory]);
 
   // Si recibimos un resultado inicial (persistido), mostrarlo y evitar auto-run
   useEffect(() => {
@@ -570,14 +583,7 @@ export default function SecurityDiagnosticoPanel({
       <CardHeader className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-200">
         <CardTitle className="flex items-center gap-3 text-slate-800">
           🛡️ Diagnóstico de Seguridad
-          <div className="ml-auto">
-            {securityLoading && (
-              <div className="flex items-center gap-2 text-sm text-blue-600">
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
-                Analizando...
-              </div>
-            )}
-          </div>
+          {/* Eliminados toggles manuales: se mostrará automáticamente cada sección según permiso */}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6">
@@ -733,7 +739,7 @@ export default function SecurityDiagnosticoPanel({
                   </h3>
                 </div>
                 
-                {isCliente ? (
+                {user?.role === 'cliente' ? (
                   <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800">
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
@@ -855,11 +861,11 @@ export default function SecurityDiagnosticoPanel({
             {/* Reemplazado: solo mostrar el botón/enlace al histórico completo con el mismo estilo que Diagnóstico */}
             {showInlineHistoryLink && url && (
               <div className="mt-2">
-                {isCliente ? (
+                {(!canSeeHistory && user?.role === 'cliente') ? (
                   <button
                     type="button"
                     className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1"
-                    title="Acceso restringido para clientes"
+                    title="Histórico restringido"
                     aria-disabled
                   >
                     <Ban size={16} /> Histórico no disponible
@@ -873,7 +879,7 @@ export default function SecurityDiagnosticoPanel({
             )}
 
             {/* Encabezados */}
-            {securityResult?.headers && typeof securityResult.headers === 'object' && !isCliente && (
+            {securityResult?.headers && typeof securityResult.headers === 'object' && canSecurityHeaders && (
               <>
                 <SectionDivider
                   label="Encabezados"
@@ -1017,7 +1023,7 @@ export default function SecurityDiagnosticoPanel({
             )}
 
             {/* Cookies */}
-            {Array.isArray(securityResult?.cookies) && !isCliente && (
+            {Array.isArray(securityResult?.cookies) && canSecurityCookies && showCookiesSection && (
               <>
                 <SectionDivider
                   label="Cookies"
@@ -1064,22 +1070,8 @@ export default function SecurityDiagnosticoPanel({
                 </div>
               </>
             )}
-            {isCliente && (
-              <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
-                    <Ban size={16}/>
-                  </div>
-                  <div className="text-sm">
-                    <div className="font-semibold mb-1">Acceso limitado – Cookies</div>
-                    <p>La lista completa de cookies y atributos se oculta para el rol cliente.</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Aviso encabezados para cliente */}
-            {isCliente && (
+            {user?.role === 'cliente' && !canSecurityHeaders && (
               <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6">
                 <div className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center"><Ban size={16} /></div>
@@ -1092,7 +1084,7 @@ export default function SecurityDiagnosticoPanel({
             )}
 
             {/* Hallazgos y mejoras */}
-            {!isCliente && (
+            {canSecurityFindings && showFindingsSection && (
               <>
                 {/* Hallazgos */}
                 {Array.isArray(securityResult?.findings) && securityResult.findings.length > 0 && (
@@ -1145,7 +1137,7 @@ export default function SecurityDiagnosticoPanel({
                   const d = deriveSecurityPlan(securityResult);
                   return (
                     <>
-                      {(d.errors.length > 0 || d.improvements.length > 0 || d.plan.length > 0) && (
+                      {(d.errors.length > 0 || d.improvements.length > 0 || d.plan.length > 0) && canSecurityActionPlan && (
                         <SectionDivider
                           label="Plan de acción"
                           info={
@@ -1157,7 +1149,7 @@ export default function SecurityDiagnosticoPanel({
                         />
                       )}
 
-                      {d.errors.length > 0 && (
+                      {d.errors.length > 0 && canSecurityActionPlan && (
                         <div>
                           <h3 className="text-lg font-semibold mb-2 text-red-700">Errores detectados</h3>
                           <ul className="list-disc pl-5 space-y-1 text-sm">
@@ -1168,7 +1160,7 @@ export default function SecurityDiagnosticoPanel({
                         </div>
                       )}
 
-                      {d.improvements.length > 0 && (
+                      {d.improvements.length > 0 && canSecurityActionPlan && (
                         <div>
                           <h3 className="text-lg font-semibold mb-2 text-amber-700">Mejoras recomendadas</h3>
                           <ul className="list-disc pl-5 space-y-1 text-sm">
@@ -1179,7 +1171,7 @@ export default function SecurityDiagnosticoPanel({
                         </div>
                       )}
 
-                      {d.plan.length > 0 && (
+                      {d.plan.length > 0 && canSecurityActionPlan && (
                         <div>
                           <h3 className="text-lg font-semibold mb-2">Plan de acción</h3>
                           <ol className="list-decimal pl-5 space-y-1 text-sm">
@@ -1196,27 +1188,44 @@ export default function SecurityDiagnosticoPanel({
             )}
 
             {/* Avisos limitados para cliente (Hallazgos y Plan de acción) */}
-            {isCliente && (
+            { /* Actualizado: ahora sólo se muestran si falta el permiso correspondiente */ }
+            {(!canSecurityFindings || !canSecurityActionPlan) && (
               <>
-                <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center"><Ban size={16} /></div>
-                    <div className="text-sm">
-                      <div className="font-semibold mb-1">Acceso limitado – Hallazgos</div>
-                      <p>Los hallazgos detallados (fallos, avisos y severidades) se reservan para roles internos. Solicite ampliación de permisos para ver este contenido.</p>
+                {!canSecurityFindings && (
+                  <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center"><Ban size={16} /></div>
+                      <div className="text-sm">
+                        <div className="font-semibold mb-1">Acceso limitado – Hallazgos</div>
+                        <p className="m-0">Los hallazgos detallados requieren el permiso <code className="font-mono text-xs bg-white/60 px-1 py-0.5 rounded border">security.view_findings</code>.</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-10">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center"><Ban size={16} /></div>
-                    <div className="text-sm">
-                      <div className="font-semibold mb-1">Acceso limitado – Plan de acción</div>
-                      <p>La lista priorizada de acciones recomendadas para reforzar encabezados y configuraciones está restringida para el rol cliente.</p>
+                )}
+                {!canSecurityActionPlan && (
+                  <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-10">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center"><Ban size={16} /></div>
+                      <div className="text-sm">
+                        <div className="font-semibold mb-1">Acceso limitado – Plan de acción</div>
+                        <p className="m-0">El plan de acción completo requiere el permiso <code className="font-mono text-xs bg-white/60 px-1 py-0.5 rounded border">security.view_action_plan</code>.</p>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </>
+            )}
+
+            {/* Limited access banners (seguridad) */}
+            {!anySecurityBreakdowns && (
+              <div className="rounded-md border p-4 mb-4 bg-amber-50 border-amber-200 text-amber-700 text-xs">
+                Acceso limitado – Desgloses de seguridad. Agrega permisos security.view_headers / security.view_cookies / security.view_findings.
+              </div>
+            )}
+            {anySecurityBreakdowns && !canSecurityActionPlan && (
+              <div className="rounded-md border p-4 mb-4 bg-blue-50 border-blue-200 text-blue-800 text-xs">
+                Nota: puedes ver desgloses básicos de seguridad pero no el plan de acción detallado. Requiere security.view_action_plan.
+              </div>
             )}
           </div>
         )}

@@ -1,7 +1,7 @@
 // server/routes/auth.ts
 import { Router } from 'express';
 import cookieParser from 'cookie-parser';
-import { register, login, me, logout, requestPasswordReset, resetPassword } from '../controllers/auth.controller.js';
+import { register, login, me, logout, requestPasswordReset, resetPassword, myPermissions } from '../controllers/auth.controller.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
@@ -13,6 +13,7 @@ router.post('/auth/register', register);
 router.post('/auth/login', login);
 router.get('/auth/me', requireAuth, me);
 router.post('/auth/logout', logout);
+router.get('/auth/permissions', requireAuth, myPermissions);
 
 // Recovery
 router.post('/auth/request-password-reset', requestPasswordReset);

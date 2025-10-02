@@ -8,20 +8,10 @@ import { Ban } from 'lucide-react';
 
 export type SecurityHistoryPoint = { fecha: string | number | Date; score: number | null };
 
-function useQuery(): URLSearchParams {
-  return new URLSearchParams(useLocation().search);
-}
+function useQuery(): URLSearchParams { return new URLSearchParams(useLocation().search); }
 
-function loadUiFlagShowSecurityHistory(): boolean {
-  try {
-    const raw = localStorage.getItem('app.settings');
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
-    return Boolean(parsed?.ui?.showSecurityHistoryToClients);
-  } catch { return false; }
-}
-
-async function safeParse(res: Response): Promise<any> {
+// rename to avoid duplicate symbol collision
+async function parseJsonSafe(res: Response): Promise<any> {
   const txt = await res.text();
   try { return JSON.parse(txt || "{}"); } catch { return { _raw: txt }; }
 }
@@ -240,8 +230,10 @@ export default function SecurityHistoricoView() {
   const url = query.get("url") || "";
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isCliente = user?.role === 'cliente';
-  const allowedForClient = !isCliente || loadUiFlagShowSecurityHistory();
+
+  // Permission-based only (removes implicit allowance by role). If user lacks permission => restricted view.
+  const hasHistoryPermission = (user?.permissions || []).includes('security.view_history');
+  const allowed = hasHistoryPermission;
 
   const [history, setHistory] = useState<SecurityHistoryPoint[] | null>(null);
   const [err, setErr] = useState<string>("");
@@ -249,11 +241,11 @@ export default function SecurityHistoricoView() {
   if (!url) return <Navigate to="/" replace />;
 
   useEffect(() => {
-    if (!allowedForClient) return; // respetar flag desde settings
+    if (!allowed) return;
     (async () => {
       try {
         const r = await fetch(`/api/security/history?url=${encodeURIComponent(url)}`);
-        const data = await safeParse(r);
+        const data = await parseJsonSafe(r);
         if (!r.ok) throw new Error(data?.error || `Error ${r.status}`);
         const mapped: SecurityHistoryPoint[] = Array.isArray(data)
           ? data.map((d: any) => ({ fecha: d.fecha, score: typeof d.score === "number" ? d.score : null }))
@@ -263,9 +255,9 @@ export default function SecurityHistoricoView() {
         setErr(e?.message || "Error cargando histórico de seguridad");
       }
     })();
-  }, [url, allowedForClient]);
+  }, [url, allowed]);
 
-  if (!allowedForClient) return (
+  if (!allowed) return (
     <Card className="mt-4">
       <CardHeader>
         <CardTitle>Histórico de seguridad</CardTitle>
@@ -273,7 +265,7 @@ export default function SecurityHistoricoView() {
       <CardContent>
         <div className="flex items-center gap-2 text-slate-600 mb-3">
           <Ban size={18} />
-          <span>El administrador ha restringido el histórico de seguridad para clientes.</span>
+          <span>El histórico de seguridad está restringido para este usuario.</span>
         </div>
         <Button variant="outline" onClick={() => navigate(-1)} className="back-link">Volver al diagnóstico</Button>
       </CardContent>
@@ -292,7 +284,7 @@ export default function SecurityHistoricoView() {
         </div>
       </CardHeader>
       <CardContent>
-        {/* ÚNICO botón: volver al diagnóstico (mismo estilo que Diagnóstico) */}
+        {/* ÚNICO botón: volver al diagnóstico */}
         <div style={{ marginBottom: 16 }}>
           <Button variant="outline" onClick={() => navigate(-1)} className="back-link">Volver al diagnóstico</Button>
         </div>

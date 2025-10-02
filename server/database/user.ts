@@ -17,6 +17,7 @@ export interface UserDoc extends mongoose.Document {
   verificationTokenExpires?: Date | null;
   resetPasswordToken?: string | null;
   resetPasswordExpires?: Date | null;
+  userOverrides?: { allow?: string[]; deny?: string[] };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,6 +36,10 @@ const UserSchema = new mongoose.Schema<UserDoc>({
   verificationTokenExpires: { type: Date, default: null },
   resetPasswordToken: { type: String, default: null, index: true },
   resetPasswordExpires: { type: Date, default: null },
+  userOverrides: {
+    allow: { type: [String], default: [] },
+    deny: { type: [String], default: [] },
+  } as any,
 }, { timestamps: true, collection: 'users' });
 
 const User = mongoose.model<UserDoc>('User', UserSchema);
