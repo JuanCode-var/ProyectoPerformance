@@ -1712,19 +1712,16 @@ export default function DiagnosticoView() {
 
                 {/* Botón grande de Resumen combinado */}
                 <Button
-                  variant="outline"
+                  variant={showCombinedSummary ? 'default' : 'outline'}
                   disabled={!(audit as any)?.security || !activeApi}
                   onClick={()=> setShowCombinedSummary(true)}
-                  className={`relative h-14 px-10 text-sm sm:text-base font-bold rounded-2xl border-2 flex items-center gap-3 shadow-md transition-all 
-                    ${(audit as any)?.security && activeApi ? 'bg-gradient-to-r from-indigo-500 via-blue-600 to-cyan-500 text-white hover:brightness-105 border-indigo-600' : 'opacity-60 cursor-not-allowed'}
-                  `}
+                  className={`h-12 px-6 text-sm font-semibold tracking-wide flex items-center gap-2 rounded-xl shadow-sm transition-all ${showCombinedSummary ? 'bg-gradient-to-r from-indigo-500 via-blue-600 to-cyan-500 text-white' : 'bg-white'} ${(!(audit as any)?.security || !activeApi) ? 'opacity-60 cursor-not-allowed' : ''}`}
                   title={!(audit as any)?.security || !activeApi ? 'Se requieren datos de Performance y Seguridad para el resumen' : 'Abrir resumen combinado'}
                 >
                   <span className="text-lg">📊</span>
                   <span className="leading-tight text-center">
                     Resumen
-                    <br className="hidden sm:block" />
-                    combinado
+                    <span className="hidden sm:inline"> combinado</span>
                   </span>
                 </Button>
 
