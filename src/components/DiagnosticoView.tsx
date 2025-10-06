@@ -1045,6 +1045,12 @@ export default function DiagnosticoView() {
 
   const contenedorReporteRef = useRef<HTMLDivElement | null>(null);
 
+  // NUEVO: permisos para cambiar de estrategia
+  const canPerfMobile = can('performance.view_mobile');
+  const canPerfDesktop = can('performance.view_desktop');
+  // NUEVO: permiso único para cambio de estrategia
+  const canChangeStrategy = can('performance.change_strategy');
+
   // =================== Sincronización y carga inicial ===================
   // Sincroniza estrategia en URL (histórico de strategy)
   useEffect(() => {
@@ -1661,35 +1667,56 @@ export default function DiagnosticoView() {
                       <TabsTrigger
                         value="mobile"
                         className="flex-1 sm:w-32 lg:w-40 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs sm:text-sm"
-                    disabled={perfLoading}
-                  >
-                    <span role="img" aria-label="mobile" className="mr-1 sm:mr-2">📱</span>
-                    <span className="hidden sm:inline">Móvil</span>
-                    <span className="sm:hidden">Móv</span>
-                    {perfLoading && strategy === 'mobile' && (
-                      <span className="ml-1 sm:ml-2 text-xs opacity-80 hidden sm:inline">Cargando…</span>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="desktop"
-                    className="flex-1 sm:w-32 lg:w-40 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs sm:text-sm"
-                    disabled={perfLoading}
-                  >
-                    <span role="img" aria-label="desktop" className="mr-1 sm:mr-2">🖥</span>
-                    <span className="hidden sm:inline">Ordenador</span>
-                    <span className="sm:hidden">PC</span>
-                    {perfLoading && strategy === 'desktop' && (
-                      <span className="ml-1 sm:ml-2 text-xs opacity-80 hidden sm:inline">Cargando…</span>
-                    )}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              </div>
-            )}
-            {!canPerfActionPlan && canPerfBreakdowns && (
-              <div className="text-xs text-slate-600 text-center -mb-2">Vista fija (estrategia {strategy}) – requiere performance.view_action_plan para cambiar entre móvil / ordenador.</div>
-            )}
-          </div>
+                        disabled={perfLoading || !canChangeStrategy}
+                      >
+                        <span role="img" aria-label="mobile" className="mr-1 sm:mr-2">📱</span>
+                        <span className="hidden sm:inline">Móvil</span>
+                        <span className="sm:hidden">Móv</span>
+                        {perfLoading && strategy === 'mobile' && (
+                          <span className="ml-1 sm:ml-2 text-xs opacity-80 hidden sm:inline">Cargando…</span>
+                        )}
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="desktop"
+                        className="flex-1 sm:w-32 lg:w-40 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs sm:text-sm"
+                        disabled={perfLoading || !canChangeStrategy}
+                      >
+                        <span role="img" aria-label="desktop" className="mr-1 sm:mr-2">🖥</span>
+                        <span className="hidden sm:inline">Ordenador</span>
+                        <span className="sm:hidden">PC</span>
+                        {perfLoading && strategy === 'desktop' && (
+                          <span className="ml-1 sm:ml-2 text-xs opacity-80 hidden sm:inline">Cargando…</span>
+                        )}
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+              )}
+              {/* Bloque de advertencia visual para acceso denegado a cambio de estrategia */}
+              {!canChangeStrategy && (
+                <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6 mt-2 flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                    <Ban size={20} />
+                  </div>
+                  <div className="text-sm">
+                    <div className="font-semibold mb-1">Acceso denegado – Cambio de estrategia</div>
+                    <p className="m-0">No tienes permiso para cambiar entre móvil y ordenador en este diagnóstico. Solicítalo a un administrador si lo necesitas.</p>
+                  </div>
+                </div>
+              )}
+              {/* Bloque de advertencia visual para acceso limitado de estrategia (solo si puede cambiar estrategia pero no ver plan de acción) */}
+              {canChangeStrategy && !canPerfActionPlan && canPerfBreakdowns && (
+                <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6 mt-2 flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                    <Ban size={20} />
+                  </div>
+                  <div className="text-sm">
+                    <div className="font-semibold mb-1">Acceso limitado – Cambio de estrategia</div>
+                    <p className="m-0">Necesitas el permiso <code className="font-mono text-xs bg-white/60 px-1 py-0.5 rounded border">performance.view_action_plan</code> para ver el plan de acción completo. Solicítalo a un administrador.</p>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           <h2 className="diagnostico-title">

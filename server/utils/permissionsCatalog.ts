@@ -28,6 +28,7 @@ export const PERMISSIONS_CATALOG: PermissionDef[] = [
   { key: 'performance.view_breakdowns', group: 'Performance', label: 'Ver desgloses performance', defaultRoles: ['tecnico','operario'] },
   { key: 'performance.run_diagnostic', group: 'Performance', label: 'Ejecutar diagnósticos performance', defaultRoles: ['tecnico','operario','cliente'] },
   { key: 'performance.view_action_plan', group: 'Performance', label: 'Ver plan de acción performance', defaultRoles: ['tecnico','operario'] },
+  { key: 'performance.change_strategy', group: 'Performance', label: 'Cambiar entre móvil/escritorio', defaultRoles: ['tecnico','operario'] },
 
   // Auditoría / Logs
   { key: 'audit.view', group: 'Auditoria', label: 'Ver auditoría', defaultRoles: ['tecnico'] },

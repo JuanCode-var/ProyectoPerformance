@@ -11,6 +11,7 @@ const PERM_GROUPS: Array<{ title: string; keys: string[]; description?: string }
   { title: 'Seguridad - Desgloses (detalle headers, cookies, findings, plan)', keys: ['security.view_headers','security.view_cookies','security.view_findings','security.view_action_plan'] },
   { title: 'Performance - Desgloses', keys: ['performance.view_breakdowns'] },
   { title: 'Performance - Plan de acción', keys: ['performance.view_action_plan'] },
+  { title: 'Performance - Cambio de estrategia', keys: ['performance.change_strategy'], description: 'Permite cambiar entre móvil y ordenador en los diagnósticos.' },
 ];
 
 // Accordion interactivo para grupos de permisos
@@ -58,7 +59,11 @@ export default function UserDetailOverridesPage() {
 
   const isAllowed = (perm: string) => !!user?.userOverrides?.allow?.includes(perm);
   const isDenied = (perm: string) => !!user?.userOverrides?.deny?.includes(perm);
-  const effective = (perm: string) => isAllowed(perm) ? 'allow' : isDenied(perm) ? 'deny' : 'default';
+  // Cambia la lógica de effective para el rol cliente: todo denegado salvo que esté en allow
+  const effective = (perm: string) => {
+    if (user?.role === 'cliente' && !isAllowed(perm)) return 'deny';
+    return isAllowed(perm) ? 'allow' : isDenied(perm) ? 'deny' : 'default';
+  };
   const isAdminTarget = user?.role === 'admin';
   const isOperarioOrTecnico = user?.role === 'operario' || user?.role === 'técnico';
 
@@ -132,13 +137,13 @@ export default function UserDetailOverridesPage() {
                             <span className="text-[10px] uppercase tracking-wide text-purple-600">always allow (admin)</span>
                           ) : isOperarioOrTecnico ? (
                             <span className={`text-[10px] uppercase tracking-wide ${state==='deny' ? 'text-red-600' : 'text-emerald-600'}`}>{state==='deny' ? 'DENY (OVERRIDE)' : 'ALLOW (POR DEFECTO)'}</span>
-                          ) : user?.role === 'cliente' ? (
+                          ) : user?.role === 'cliente' && state !== 'allow' ? (
                             <span className="text-[10px] uppercase tracking-wide text-blue-600">SOLO LECTURA</span>
                           ) : (
                             <span className={`text-[10px] uppercase tracking-wide ${state==='allow' ? 'text-emerald-600' : state==='deny' ? 'text-red-600' : 'text-slate-500'}`}>{state}</span>
                           )}
                         </div>
-                        {!isAdminTarget && user?.role !== 'cliente' && (
+                        {!isAdminTarget && (
                           <div className="flex gap-1">
                             <Button size="sm" variant="outline" disabled={saving || state==='allow' || isOperarioOrTecnico} onClick={()=>toggle(k,'allow')}>Permitir</Button>
                             <Button size="sm" variant="outline" disabled={saving || state==='deny'} onClick={()=>toggle(k,'deny')}>Denegar</Button>
@@ -168,13 +173,41 @@ export default function UserDetailOverridesPage() {
                             <span className="text-[10px] uppercase tracking-wide text-purple-600">always allow (admin)</span>
                           ) : isOperarioOrTecnico ? (
                             <span className={`text-[10px] uppercase tracking-wide ${state==='deny' ? 'text-red-600' : 'text-emerald-600'}`}>{state==='deny' ? 'DENY (OVERRIDE)' : 'ALLOW (POR DEFECTO)'}</span>
-                          ) : user?.role === 'cliente' ? (
+                          ) : user?.role === 'cliente' && state !== 'allow' ? (
                             <span className="text-[10px] uppercase tracking-wide text-blue-600">SOLO LECTURA</span>
                           ) : (
                             <span className={`text-[10px] uppercase tracking-wide ${state==='allow' ? 'text-emerald-600' : state==='deny' ? 'text-red-600' : 'text-slate-500'}`}>{state}</span>
                           )}
                         </div>
-                        {!isAdminTarget && user?.role !== 'cliente' && (
+                        {!isAdminTarget && (
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="outline" disabled={saving || state==='allow' || isOperarioOrTecnico} onClick={()=>toggle(k,'allow')}>Permitir</Button>
+                            <Button size="sm" variant="outline" disabled={saving || state==='deny'} onClick={()=>toggle(k,'deny')}>Denegar</Button>
+                            <Button size="sm" variant="outline" disabled={saving || state==='default'} onClick={()=>toggle(k,'clear')}>Clear</Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {/* Permiso para cambio de estrategia */}
+                  {PERM_GROUPS[3].keys.map(k => {
+                    const state = effective(k);
+                    return (
+                      <div key={k} className={`flex items-center justify-between gap-2 text-xs border rounded-lg px-3 py-2 bg-white/80 shadow-sm transition-all ${state==='allow' ? 'border-emerald-300 bg-emerald-50/60' : state==='deny' ? 'border-red-300 bg-red-50/60' : 'border-slate-200'}`}>
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-800 flex items-center gap-1">{k} {state==='allow' && <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 ml-1" title="Permitido"></span>} {state==='deny' && <span className="inline-block w-2 h-2 rounded-full bg-red-400 ml-1" title="Denegado"></span>}</span>
+                          <span className="text-[10px] text-slate-500">Permite cambiar entre móvil y ordenador en los diagnósticos.</span>
+                          {isAdminTarget ? (
+                            <span className="text-[10px] uppercase tracking-wide text-purple-600">always allow (admin)</span>
+                          ) : isOperarioOrTecnico ? (
+                            <span className={`text-[10px] uppercase tracking-wide ${state==='deny' ? 'text-red-600' : 'text-emerald-600'}`}>{state==='deny' ? 'DENY (OVERRIDE)' : 'ALLOW (POR DEFECTO)'}</span>
+                          ) : user?.role === 'cliente' && state !== 'allow' ? (
+                            <span className="text-[10px] uppercase tracking-wide text-blue-600">SOLO LECTURA</span>
+                          ) : (
+                            <span className={`text-[10px] uppercase tracking-wide ${state==='allow' ? 'text-emerald-600' : state==='deny' ? 'text-red-600' : 'text-slate-500'}`}>{state}</span>
+                          )}
+                        </div>
+                        {!isAdminTarget && (
                           <div className="flex gap-1">
                             <Button size="sm" variant="outline" disabled={saving || state==='allow' || isOperarioOrTecnico} onClick={()=>toggle(k,'allow')}>Permitir</Button>
                             <Button size="sm" variant="outline" disabled={saving || state==='deny'} onClick={()=>toggle(k,'deny')}>Denegar</Button>
