@@ -4,8 +4,8 @@ import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import pino, { type Logger } from 'pino';
 
-import redisClient from './redisClient';
-import { auditQueue } from './queue.js';
+import redisClient from '../server/workers/redisClient';
+import { auditQueue } from '../server/workers/queue.js';
 import { makeCacheKey } from './cacheKey.js';
 
 const app = express();

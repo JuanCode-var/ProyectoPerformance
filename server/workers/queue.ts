@@ -1,32 +1,18 @@
-// src/queue.ts
-import { REDIS_ENABLED } from './redisClient.js';
+// ...existing code from src/queue.ts...
+// Archivo movido desde src/ a server/workers/
 
-// Tipos: se extraen solo como tipos (no afectan runtime)
+import { REDIS_ENABLED } from './redisClient';
 export type Job = import('bull').Job;
 export type JobOptions = import('bull').JobOptions;
 export type QueueType = import('bull').Queue;
-
-// Instancia única perezosa
 let pagespeedQueue: QueueType | null = null;
-
-/**
- * Devuelve la cola de pagespeed si Redis está habilitado; en caso contrario, `null`.
- * Usa import dinámico para no cargar `bull`/`ioredis` cuando no hace falta.
- */
-export async function getPagespeedQueue(): Promise<QueueType | null> {
+export async function auditQueue(): Promise<QueueType | null> {
   if (!REDIS_ENABLED) return null;
   if (pagespeedQueue) return pagespeedQueue;
-
-  // Carga perezosa de bull (CJS) desde ESM
-  const { default: Bull } = await import('bull'); // interop CJS ←→ ESM
+  const { default: Bull } = await import('bull');
   pagespeedQueue = new Bull('pagespeed', process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
-
   return pagespeedQueue;
 }
-
-/**
- * Cierre opcional y elegante de la cola (p. ej. en SIGINT/SIGTERM).
- */
 export async function closePagespeedQueue(): Promise<void> {
   if (pagespeedQueue) {
     try {

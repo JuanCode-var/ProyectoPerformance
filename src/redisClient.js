@@ -2,7 +2,7 @@
 // El servidor ya carga las variables con `import 'dotenv/config'`.
 // Evitamos depender de `dotenv` ni de `redis` estáticos aquí para que el contenedor del API no falle
 // cuando REDIS está deshabilitado o cuando no existen esas deps fuera de /server/node_modules.
-// Habilitar Redis solo si lo pides explícitamente
+
 export const REDIS_ENABLED = process.env.REDIS_ENABLED === 'true' ||
     (!!process.env.REDIS_URL && process.env.REDIS_URL.trim() !== '');
 // Cliente Redis (se crea bajo demanda)

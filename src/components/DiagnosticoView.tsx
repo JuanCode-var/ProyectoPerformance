@@ -129,7 +129,7 @@ function getPerformanceScaleLabel(value: number | null | undefined): { text: str
   if (value == null) {
     return { text: "N/A", color: "#9ca3af", bgColor: "rgba(156,163,175,0.1)" };
   }
-  
+
   if (value >= 90) {
     return { text: "Bueno", color: "#22c55e", bgColor: "rgba(34,197,94,0.1)" };
   } else if (value >= 50) {
@@ -149,7 +149,7 @@ function softBg(metricId: MetricId, value: number | null | undefined) {
 }
 function softTint(metricId: MetricId, value: number | null | undefined) {
   if (value == null) return "rgba(148,163,184,0.10)";
-  if (["performance","accessibility","best-practices","seo"].includes(metricId)) {
+  if (["performance", "accessibility", "best-practices", "seo"].includes(metricId)) {
     if (value >= 90) return "rgba(34,197,94,0.12)";
     if (value >= 50) return "rgba(245,158,11,0.12)";
     return "rgba(239,68,68,0.12)";
@@ -204,7 +204,7 @@ function readCategoryScoresFromApi(apiData: any): {
     null;
 
   const toPct = (x?: number) => (typeof x === "number" && !Number.isNaN(x) ? Math.round(x * 100) : null);
-  
+
   return {
     performance: toPct(cats?.performance?.score),
     accessibility: toPct(cats?.accessibility?.score),
@@ -281,7 +281,7 @@ async function fetchAuditByUrlWithStrategy(url: string, strategy: "mobile" | "de
     try {
       const r = await fetch(endpoint, { headers });
       if (r.ok) return await safeParseJSON(r);
-    } catch {}
+    } catch { }
   }
   return null;
 }
@@ -290,8 +290,8 @@ async function fetchAuditByUrlWithStrategy(url: string, strategy: "mobile" | "de
 type ProcessedMetric = { key: string; raw: number | null; trend?: Trend };
 type ProcessedData = {
   metrics?:
-    | ProcessedMetric[]
-    | Record<string, { raw?: number; trend?: Trend } | number>;
+  | ProcessedMetric[]
+  | Record<string, { raw?: number; trend?: Trend } | number>;
   errors?: any[];
   improvements?: any[];
   opportunities?: any[];
@@ -317,18 +317,18 @@ type CatBreakItem = {
 const translateList = (list: any[] | undefined): CatBreakItem[] =>
   Array.isArray(list)
     ? list.map((it: any) => ({
-        id: String(it?.id ?? ""),
-        title: i18nTitle(it?.title || it?.id || ""),
-        scorePct:
-          typeof it?.scorePct === "number"
-            ? it.scorePct
-            : typeof it?.score === "number"
+      id: String(it?.id ?? ""),
+      title: i18nTitle(it?.title || it?.id || ""),
+      scorePct:
+        typeof it?.scorePct === "number"
+          ? it.scorePct
+          : typeof it?.score === "number"
             ? Math.round(it.score * 100)
             : null,
-        displayValue: it?.displayValue || "",
-        description: i18nRich(it?.description || ""),
-        savingsLabel: it?.savingsLabel || "",
-      }))
+      displayValue: it?.displayValue || "",
+      description: i18nRich(it?.description || ""),
+      savingsLabel: it?.savingsLabel || "",
+    }))
     : [];
 
 // =================== Builders (hallazgos / plan) ===================
@@ -453,8 +453,8 @@ function CategoryBreakdown({
                   {isNull
                     ? "—"
                     : it.savingsLabel
-                    ? `Ahorro: ${it.savingsLabel}`
-                    : it.displayValue || "—"}
+                      ? `Ahorro: ${it.savingsLabel}`
+                      : it.displayValue || "—"}
                 </p>
               </div>
             );
@@ -570,11 +570,11 @@ function PerfDial({
 
   // Layout fijo para etiquetas
   const layout: Record<string, [number, number, number]> = {
-    si:  [-110, -70, -90],
-    fcp: [ -40,   0, -20],
-    lcp: [  20,  60,  40],
-    cls: [ 140, 200, 170],
-    tbt: [ 210, 250, 230],
+    si: [-110, -70, -90],
+    fcp: [-40, 0, -20],
+    lcp: [20, 60, 40],
+    cls: [140, 200, 170],
+    tbt: [210, 250, 230],
   };
   const segs = segments.filter((s) => layout[s.id]);
 
@@ -681,7 +681,7 @@ const perfMetricDescriptions: Record<string, string> = {
   fcp: "Tiempo hasta la primera pintura de contenido.",
   lcp: "Tiempo hasta la pintura del elemento con contenido más grande.",
   tbt: "Tiempo total de bloqueo durante la carga.",
-  si:  "Índice de velocidad percibida durante el render.",
+  si: "Índice de velocidad percibida durante el render.",
   ttfb: "Tiempo que tarda el servidor en enviar el primer byte.",
   cls: "Estabilidad visual (desplazamientos acumulados).",
 };
@@ -766,10 +766,10 @@ function PerfBreakdownGrid({
                       v == null
                         ? 0
                         : isTime
-                        ? Number(v.toFixed(1))
-                        : isCLS
-                        ? Number((v ?? 0).toFixed(2))
-                        : Number(v)
+                          ? Number(v.toFixed(1))
+                          : isCLS
+                            ? Number((v ?? 0).toFixed(2))
+                            : Number(v)
                     }
                     max={isTime ? undefined : isCLS ? undefined : 100}
                     color={v == null ? "#9ca3af" : gaugeColor(m.id, v)}
@@ -782,10 +782,10 @@ function PerfBreakdownGrid({
                   {v == null
                     ? "—"
                     : isTime
-                    ? `${v.toFixed(1)}s`
-                    : isCLS
-                    ? `${v.toFixed(2)}`
-                    : `${v}`}
+                      ? `${v.toFixed(1)}s`
+                      : isCLS
+                        ? `${v.toFixed(2)}`
+                        : `${v}`}
                 </p>
                 {openInfo && (
                   <div style={{ padding: '8px 12px' }} className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-md mt-2">
@@ -1032,7 +1032,7 @@ export default function DiagnosticoView() {
   const [err, setErr] = useState<string>("");
   const [activeApi, setActiveApi] = useState<string>("");
   const [processed, setProcessed] = useState<ProcessedData | null>(null);
-  
+
   // Indicador de carga para métricas de performance (cuando cambia la estrategia)
   const [perfLoading, setPerfLoading] = useState(false);
 
@@ -1123,7 +1123,7 @@ export default function DiagnosticoView() {
               setAuditData(forced);
             }
           }
-        } catch {}
+        } catch { }
 
         if ((payload.url || (auditData as any)?.url)) {
           const urlForProcessed = (payload.url || (auditData as any)?.url) as string;
@@ -1137,7 +1137,7 @@ export default function DiagnosticoView() {
               const d = await safeParseJSON(r);
               if (mounted) setProcessed(d);
             }
-          } catch {}
+          } catch { }
         }
       } catch (e: any) {
         if (mounted) setErr(e?.message || String(e));
@@ -1195,7 +1195,7 @@ export default function DiagnosticoView() {
         if (mounted && Array.isArray(data)) {
           setSecurityHistory(data.map((d: any) => ({ fecha: d.fecha, score: typeof d.score === 'number' ? d.score : null })));
         }
-      } catch {}
+      } catch { }
     };
     run();
     return () => { mounted = false; };
@@ -1327,7 +1327,7 @@ export default function DiagnosticoView() {
       audits?.["cumulative-layout-shift"] || audits?.["cumulative-layout-shift-element"] || audits?.["cls"];
     const nv = clsAudit?.numericValue;
     if (typeof nv === "number" && nv >= 0) clsVal = Math.round(nv * 100) / 100;
-  } catch {}
+  } catch { }
 
   const trendByKey: Record<string, Trend | undefined> = {
     performance: pTrend("performance"),
@@ -1375,17 +1375,17 @@ export default function DiagnosticoView() {
 
   // ===== Items para el desglose de performance (FCP, LCP, TBT, SI, TTFB, CLS)
   const perfBreakItems: Array<{ id: MetricId; label: string; value: number | null }> = [
-    { id: "fcp",  label: "FCP",  value: fcpSec },
-    { id: "lcp",  label: "LCP",  value: lcpSec },
-    { id: "tbt",  label: "TBT",  value: tbtSec },
-    { id: "si",   label: "SI",   value: siSec },
+    { id: "fcp", label: "FCP", value: fcpSec },
+    { id: "lcp", label: "LCP", value: lcpSec },
+    { id: "tbt", label: "TBT", value: tbtSec },
+    { id: "si", label: "SI", value: siSec },
     { id: "ttfb", label: "TTFB", value: ttfbSec },
-    { id: "cls",  label: "CLS",  value: clsVal },
+    { id: "cls", label: "CLS", value: clsVal },
   ];
 
   // ===== Desgloses por categoría (Accesibilidad / Prácticas / SEO)
   const accBreak = getCategoryBreakdown("accessibility", apiData);
-  const bpBreak  = getCategoryBreakdown("best-practices", apiData);
+  const bpBreak = getCategoryBreakdown("best-practices", apiData);
   const seoBreak = getCategoryBreakdown("seo", apiData);
 
   // ===== Plan de acción (combina errores/mejoras y oportunidades)
@@ -1451,12 +1451,12 @@ export default function DiagnosticoView() {
       item.id === "performance"
         ? { onClick: () => setShowPerfDetails((v) => !v), style: { cursor: "pointer" } }
         : item.id === "accessibility"
-        ? { onClick: () => setShowAccDetails((v) => !v), style: { cursor: "pointer" } }
-        : item.id === "best-practices"
-        ? { onClick: () => setShowBPDetails((v) => !v), style: { cursor: "pointer" } }
-        : item.id === "seo"
-        ? { onClick: () => setShowSeoDetails((v) => !v), style: { cursor: "pointer" } }
-        : {};
+          ? { onClick: () => setShowAccDetails((v) => !v), style: { cursor: "pointer" } }
+          : item.id === "best-practices"
+            ? { onClick: () => setShowBPDetails((v) => !v), style: { cursor: "pointer" } }
+            : item.id === "seo"
+              ? { onClick: () => setShowSeoDetails((v) => !v), style: { cursor: "pointer" } }
+              : {};
     const infoOpen = !!cardInfoOpen[item.id];
     return (
       <div key={item.id} className="item" style={{ background: "#ffffff" }} {...(clickProps as any)}>
@@ -1512,32 +1512,29 @@ export default function DiagnosticoView() {
             <div className="flex flex-col items-center gap-3 mb-2">
               {/* Escala completa siempre visible */}
               <div className="flex flex-wrap justify-center gap-1 text-xs">
-                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                  (performance ?? 0) < 50 
-                    ? 'bg-red-50 border-red-200 text-red-700 font-medium' 
-                    : 'bg-slate-50 border-slate-200 text-slate-600'
-                }`}>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${(performance ?? 0) < 50
+                  ? 'bg-red-50 border-red-200 text-red-700 font-medium'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+                  }`}>
                   <div className="w-2 h-2 rounded-full bg-red-500"></div>
                   <span>Malo (0-49)</span>
                 </div>
-                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                  (performance ?? 0) >= 50 && (performance ?? 0) < 90 
-                    ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium' 
-                    : 'bg-slate-50 border-slate-200 text-slate-600'
-                }`}>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${(performance ?? 0) >= 50 && (performance ?? 0) < 90
+                  ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+                  }`}>
                   <div className="w-2 h-2 rounded-full bg-orange-500"></div>
                   <span>Medio (50-89)</span>
                 </div>
-                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                  (performance ?? 0) >= 90 
-                    ? 'bg-green-50 border-green-200 text-green-700 font-medium' 
-                    : 'bg-slate-50 border-slate-200 text-slate-600'
-                }`}>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${(performance ?? 0) >= 90
+                  ? 'bg-green-50 border-green-200 text-green-700 font-medium'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+                  }`}>
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
                   <span>Bueno (90-100)</span>
                 </div>
               </div>
-              
+
               {/* Texto explicativo pequeño */}
               <p className="text-xs text-center text-slate-500 max-w-[240px] leading-tight">
                 El estado actual se resalta según el puntaje obtenido
@@ -1556,32 +1553,29 @@ export default function DiagnosticoView() {
             <div className="flex flex-col items-center gap-3 mb-2">
               {/* Escala completa siempre visible */}
               <div className="flex flex-wrap justify-center gap-1 text-xs">
-                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                  item.value != null && item.value < 50 
-                    ? 'bg-red-50 border-red-200 text-red-700 font-medium' 
-                    : 'bg-slate-50 border-slate-200 text-slate-600'
-                }`}>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${item.value != null && item.value < 50
+                  ? 'bg-red-50 border-red-200 text-red-700 font-medium'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+                  }`}>
                   <div className="w-2 h-2 rounded-full bg-red-500"></div>
                   <span>Malo (0-49)</span>
                 </div>
-                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                  item.value != null && item.value >= 50 && item.value < 90 
-                    ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium' 
-                    : 'bg-slate-50 border-slate-200 text-slate-600'
-                }`}>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${item.value != null && item.value >= 50 && item.value < 90
+                  ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+                  }`}>
                   <div className="w-2 h-2 rounded-full bg-orange-500"></div>
                   <span>Medio (50-89)</span>
                 </div>
-                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                  item.value != null && item.value >= 90 
-                    ? 'bg-green-50 border-green-200 text-green-700 font-medium' 
-                    : 'bg-slate-50 border-slate-200 text-slate-600'
-                }`}>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${item.value != null && item.value >= 90
+                  ? 'bg-green-50 border-green-200 text-green-700 font-medium'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+                  }`}>
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
                   <span>Bueno (90-100)</span>
                 </div>
               </div>
-              
+
               {/* Texto explicativo pequeño */}
               <p className="text-xs text-center text-slate-500 max-w-[240px] leading-tight">
                 El estado actual se resalta según el puntaje obtenido
@@ -1591,8 +1585,8 @@ export default function DiagnosticoView() {
               {item.value == null
                 ? "N/A"
                 : isPct
-                ? `${item.value}`
-                : `${(item.value as number).toFixed(1)}s`} {" "}
+                  ? `${item.value}`
+                  : `${(item.value as number).toFixed(1)}s`} {" "}
               — {item.desc}
             </p>
           </>
@@ -1648,7 +1642,7 @@ export default function DiagnosticoView() {
                 <button
                   type="button"
                   className="back-link cursor-not-allowed opacity-60 inline-flex items-center gap-1"
-                                   title="Histórico no disponible para este rol"
+                  title="Histórico no disponible para este rol"
                   aria-disabled
                 >
                   <Ban size={16} /> Histórico no disponible
@@ -1662,7 +1656,7 @@ export default function DiagnosticoView() {
             <div className="flex flex-col gap-4">
               {canPerfActionPlan && (
                 <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-3 mb-4 px-2">
-                  <Tabs value={strategy} onValueChange={(v)=>{ setPerfLoading(true); setStrategy((v as 'mobile'|'desktop')); }}>
+                  <Tabs value={strategy} onValueChange={(v) => { setPerfLoading(true); setStrategy((v as 'mobile' | 'desktop')); }}>
                     <TabsList className="bg-[#e9eefb] rounded-xl p-1 w-full sm:w-auto">
                       <TabsTrigger
                         value="mobile"
@@ -1731,7 +1725,7 @@ export default function DiagnosticoView() {
                 <Button
                   variant={activeDiag === 'performance' ? 'default' : 'outline'}
                   className={`h-12 px-6 text-sm font-semibold tracking-wide flex items-center gap-2 rounded-xl shadow-sm transition-all ${activeDiag === 'performance' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-white'} `}
-                  onClick={()=> setActiveDiag('performance')}
+                  onClick={() => setActiveDiag('performance')}
                   aria-pressed={activeDiag === 'performance'}
                 >
                   ⚡ <span className="hidden sm:inline">Performance</span><span className="sm:hidden">Perf</span>
@@ -1741,7 +1735,7 @@ export default function DiagnosticoView() {
                 <Button
                   variant={showCombinedSummary ? 'default' : 'outline'}
                   disabled={!(audit as any)?.security || !activeApi}
-                  onClick={()=> setShowCombinedSummary(true)}
+                  onClick={() => setShowCombinedSummary(true)}
                   className={`h-12 px-6 text-sm font-semibold tracking-wide flex items-center gap-2 rounded-xl shadow-sm transition-all ${showCombinedSummary ? 'bg-gradient-to-r from-indigo-500 via-blue-600 to-cyan-500 text-white' : 'bg-white'} ${(!(audit as any)?.security || !activeApi) ? 'opacity-60 cursor-not-allowed' : ''}`}
                   title={!(audit as any)?.security || !activeApi ? 'Se requieren datos de Performance y Seguridad para el resumen' : 'Abrir resumen combinado'}
                 >
@@ -1756,7 +1750,7 @@ export default function DiagnosticoView() {
                 <Button
                   variant={activeDiag === 'security' ? 'default' : 'outline'}
                   className={`h-12 px-6 text-sm font-semibold tracking-wide flex items-center gap-2 rounded-xl shadow-sm transition-all ${activeDiag === 'security' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-white'} `}
-                  onClick={()=> setActiveDiag('security')}
+                  onClick={() => setActiveDiag('security')}
                   aria-pressed={activeDiag === 'security'}
                 >
                   🛡️ <span className="hidden sm:inline">Seguridad</span><span className="sm:hidden">Sec</span>
@@ -1768,9 +1762,9 @@ export default function DiagnosticoView() {
           {/* Security content */}
           {activeDiag === 'security' && url && (
             <SecurityDiagnosticoPanel
-               url={url as string}
-               initialResult={(audit as any)?.security}
-               autoRunOnMount={!((audit as any)?.security)}
+              url={url as string}
+              initialResult={(audit as any)?.security}
+              autoRunOnMount={!((audit as any)?.security)}
             />
           )}
 
@@ -1873,20 +1867,20 @@ export default function DiagnosticoView() {
                   />
                 )}
 
-                 {/* Aviso de acceso limitado para usuarios sin permiso de desgloses */}
-                 {!canPerfBreakdowns && (
-                   <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6 mt-4">
-                     <div className="flex items-start gap-3">
-                       <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
-                         <Ban size={16} />
-                       </div>
-                       <div className="text-sm">
-                         <div className="font-semibold mb-1">Acceso limitado – Desgloses de rendimiento</div>
-                         <p>Los desgloses detallados de métricas, capturas y hallazgos se reservan para roles con el permiso performance.view_breakdowns.</p>
-                       </div>
-                     </div>
+                {/* Aviso de acceso limitado para usuarios sin permiso de desgloses */}
+                {!canPerfBreakdowns && (
+                  <div className="rounded-lg border p-4 bg-amber-50 border-amber-200 text-amber-800 mb-6 mt-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                        <Ban size={16} />
                       </div>
-                    )}
+                      <div className="text-sm">
+                        <div className="font-semibold mb-1">Acceso limitado – Desgloses de rendimiento</div>
+                        <p>Los desgloses detallados de métricas, capturas y hallazgos se reservan para roles con el permiso performance.view_breakdowns.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {canPerfBreakdowns && !canPerfActionPlan && (
                   <div className="rounded-lg border p-3 bg-blue-50 border-blue-200 text-blue-800 mb-6 -mt-2">
@@ -1946,7 +1940,7 @@ export default function DiagnosticoView() {
               </div>
             </div>
           )}
-          
+
         </div>
       </CardContent>
       {/* Modal de resumen combinado */}
@@ -1987,31 +1981,28 @@ export default function DiagnosticoView() {
                   {activeApi && performance != null ? (
                     <div className="flex flex-col items-center gap-6">
                       <CategoryDial metricId="performance" value={performance} size={140} strokeWidth={14} />
-                      
+
                       {/* Escala visual completa de performance - versión modal */}
                       <div className="flex flex-col items-center gap-3">
                         <div className="flex flex-wrap justify-center gap-1 text-xs">
-                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                            (performance ?? 0) < 50 
-                              ? 'bg-red-50 border-red-200 text-red-700 font-medium' 
-                              : 'bg-slate-50 border-slate-200 text-slate-600'
-                          }`}>
+                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${(performance ?? 0) < 50
+                            ? 'bg-red-50 border-red-200 text-red-700 font-medium'
+                            : 'bg-slate-50 border-slate-200 text-slate-600'
+                            }`}>
                             <div className="w-2 h-2 rounded-full bg-red-500"></div>
                             <span>Malo (0-49)</span>
                           </div>
-                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                            (performance ?? 0) >= 50 && (performance ?? 0) < 90 
-                              ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium' 
-                              : 'bg-slate-50 border-slate-200 text-slate-600'
-                          }`}>
+                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${(performance ?? 0) >= 50 && (performance ?? 0) < 90
+                            ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium'
+                            : 'bg-slate-50 border-slate-200 text-slate-600'
+                            }`}>
                             <div className="w-2 h-2 rounded-full bg-orange-500"></div>
                             <span>Medio (50-89)</span>
                           </div>
-                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${
-                            (performance ?? 0) >= 90 
-                              ? 'bg-green-50 border-green-200 text-green-700 font-medium' 
-                              : 'bg-slate-50 border-slate-200 text-slate-600'
-                          }`}>
+                          <div className={`flex items-center gap-1 px-2 py-1 rounded-full border transition-all ${(performance ?? 0) >= 90
+                            ? 'bg-green-50 border-green-200 text-green-700 font-medium'
+                            : 'bg-slate-50 border-slate-200 text-slate-600'
+                            }`}>
                             <div className="w-2 h-2 rounded-full bg-green-500"></div>
                             <span>Bueno (90-100)</span>
                           </div>

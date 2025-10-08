@@ -6,24 +6,23 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { connectDB } from './database/mongo.js';      // 👈 mantén .js (NodeNext)
-import formRoutes from './routes/formRoutes.js';      // 👈 mantén .js (NodeNext)
-import securityRoutes from './routes/securityRoutes.js'; // 👈 mantén .js (NodeNext)
+// --- Importaciones de rutas y controladores ---
+import { connectDB } from './database/mongo.js';
+import formRoutes from './routes/formRoutes.js';
+import securityRoutes from './routes/securityRoutes.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import { logRequest, recordVisit } from './controllers/admin.controller.js';
 
-// Evitar que TS incluya archivos fuera de rootDir durante build
-// (cargamos dinámicamente en runtime ESM)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// --- Workers y servicios ---
+// Redis
 const redisMod: any = await (Function('return import("../src/redisClient.js")')());
 const { default: redisClient, connectRedisIfEnabled, REDIS_ENABLED } = redisMod;
-
-// 👇 Solo cierre elegante de la cola (carga dinámica)
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// Pagespeed Queue
 const queueMod: any = await (Function('return import("../src/queue.js")')());
 const { closePagespeedQueue } = queueMod;
 
+// --- Controladores de diagnóstico ---
 import {
   getDiagnosticsRaw,
   getDiagnosticsProcessed,
@@ -32,17 +31,19 @@ import {
   getAuditByUrl,
 } from './../server/controllers/FormController.js';
 
+// --- Utilidades de path ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
+// --- Inicialización de Express ---
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 
-// Middlewares
+// --- Middlewares globales ---
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
-app.use(cookieParser());
+app.use((cookieParser as any).default ? (cookieParser as any).default() : cookieParser()); // 👈 Compatible con ESM, CommonJS y Node 24+
 
 app.use((req, _res, next) => {
   req.on('aborted', () => {
@@ -51,7 +52,7 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Simple request log + telemetry for QA
+// --- Logging y Telemetría ---
 app.use((req, _res, next) => {
   try { logRequest(req.method, req.url); } catch {}
   if (!req.user) {
@@ -80,7 +81,7 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Rutas
+// --- Rutas principales ---
 app.use('/api', authRoutes);
 app.use('/api', formRoutes);
 app.use('/api', securityRoutes);
@@ -93,6 +94,7 @@ app.get('/api/audit/by-url',                      getAuditByUrl as any);
 
 app.get('/health', (_req: Request, res: Response) => res.json({ ok: true }));
 
+// --- Manejo de errores global ---
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   if (err?.type === 'request.aborted' || err?.code === 'ECONNABORTED') {
     if (!res.headersSent) {
@@ -111,6 +113,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(err?.status || 500).json({ error: err?.message || 'Error interno del servidor' });
 });
 
+// --- Bootstrap y arranque del servidor ---
 async function bootstrap() {
   try {
     // Log APP_BASE_URL diagnóstico

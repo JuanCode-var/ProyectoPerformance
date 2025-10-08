@@ -32,5 +32,3 @@ export async function closePagespeedQueue() {
         }
     }
 }
-// Al final de src/queue.ts
-export { getPagespeedQueue as auditQueue };

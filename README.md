@@ -8,7 +8,9 @@ PulseChoukairPerformanceRT #
 │   │   │   └── lh-i18n-es.ts # 
 │   │   ├── index.ts # 
 │   │   └── pagespeed.service.ts # 
+│   ├── .dockerignore # 
 │   ├── .env # 
+│   ├── Dockerfile # 
 │   ├── package-lock.json # 
 │   ├── package.json # 
 │   ├── tsconfig.json # 
@@ -28,9 +30,14 @@ PulseChoukairPerformanceRT #
 │   ├── servicios-choucair.jpg # 
 │   ├── study.jpg # 
 │   ├── test-performance.jpg # 
-│   ├── tipos-pruebas.jpg #                                         
+│   ├── tipos-pruebas.jpg # 
 │   └── vite.svg # 
 ├── scripts # 
+│   ├── bootstrap-servidor.sh # 
+│   ├── build-and-push-all-podman.sh # 
+│   ├── build-and-push-security.sh # 
+│   ├── build-and-push-web.sh # 
+│   ├── deploy-from-hub.sh # 
 │   ├── detener-podman.sh # 
 │   ├── levantar-podman.sh # 
 │   └── start-local.sh # 
@@ -45,29 +52,45 @@ PulseChoukairPerformanceRT #
 │   │   ├── index.ts # 
 │   │   └── routes.ts # 
 │   ├── .env # 
+│   ├── Dockerfile # 
 │   ├── package-lock.json # 
 │   ├── package.json # 
 │   ├── README.md # 
 │   └── tsconfig.json # 
 ├── server # 
 │   ├── controllers # 
+│   │   ├── admin.controller.ts # 
 │   │   ├── auditHistory.controller.ts # 
+│   │   ├── auth.controller.ts # 
 │   │   ├── diagnostic.controller.ts # 
 │   │   └── FormController.ts # 
 │   ├── database # 
+│   │   ├── adminLog.ts # 
+│   │   ├── adminVisit.ts # 
 │   │   ├── esquemaBD.ts # 
 │   │   ├── mongo.ts # 
 │   │   ├── mongoDrivers.ts # 
-│   │   └── securitySchema.ts # 
+│   │   ├── roleAudit.ts # 
+│   │   ├── rolePermissions.ts # 
+│   │   ├── securitySchema.ts # 
+│   │   ├── telemetryEvent.ts # 
+│   │   └── user.ts # 
+│   ├── middleware # 
+│   │   └── auth.ts # 
 │   ├── routes # 
+│   │   ├── admin.ts # 
+│   │   ├── auth.ts # 
 │   │   ├── diagnostic.routes.ts # 
 │   │   ├── formRoutes.ts # 
 │   │   ├── securityRoutes.ts # 
 │   │   └── send-diagnostic.ts # 
 │   ├── utils # 
 │   │   ├── lh.ts # 
-│   │   └── lighthouseColors.ts # 
+│   │   ├── lighthouseColors.ts # 
+│   │   ├── permissionsCatalog.ts # 
+│   │   └── telemetry.ts # 
 │   ├── .env # 
+│   ├── Dockerfile # 
 │   ├── index.ts # 
 │   ├── package-lock.json # 
 │   ├── package.json # 
@@ -80,16 +103,20 @@ PulseChoukairPerformanceRT #
 │   │   │   ├── circulo-rojo.png # 
 │   │   │   └── circulo-verde.jpg # 
 │   │   └── react.svg # 
+│   ├── auth # 
+│   │   └── AuthContext.tsx # 
 │   ├── components # 
 │   │   ├── ActionPlanPanel.tsx # 
 │   │   ├── CategoryBreakdown.tsx # 
 │   │   ├── CircularGauge.tsx # 
+│   │   ├── Dashboard.tsx # 
 │   │   ├── DiagnosticoView.tsx # 
 │   │   ├── EmailPdfBar.tsx # 
 │   │   ├── Formulario.tsx # 
 │   │   ├── HistoricoView.tsx # 
 │   │   ├── MetricsDashboard.tsx # 
 │   │   ├── Navbar.tsx # 
+│   │   ├── ScrollToTop.tsx # 
 │   │   ├── SecurityDiagnosticoPanel.tsx # 
 │   │   ├── SecurityHistoricoView.tsx # 
 │   │   └── SecurityScoreWidget.tsx # 
@@ -107,15 +134,36 @@ PulseChoukairPerformanceRT #
 │   │       └── ui # 
 │   │           └── RunAuditCard.tsx # 
 │   ├── hooks # 
-│   │   └── useAudits.ts # 
+│   │   ├── useAudits.ts # 
+│   │   └── useRolePermissions.ts # 
 │   ├── pages # 
+│   │   ├── admin # 
+│   │   │   ├── logs # 
+│   │   │   │   └── useLogSummary.ts # 
+│   │   │   ├── telemetry # 
+│   │   │   │   └── useTelemetrySummary.ts # 
+│   │   │   ├── index.tsx # 
+│   │   │   ├── Logs.tsx # 
+│   │   │   ├── PermissionsManager.tsx # 
+│   │   │   ├── Telemetry.tsx # 
+│   │   │   ├── Traceability.tsx # 
+│   │   │   ├── UserDetailOverrides.tsx # 
+│   │   │   └── Users.tsx # 
+│   │   ├── auth # 
+│   │   │   ├── ForgotPassword.tsx # 
+│   │   │   ├── Login.tsx # 
+│   │   │   ├── Register.tsx # 
+│   │   │   ├── ResetPassword.tsx # 
+│   │   │   └── VerifyEmail.tsx # 
 │   │   ├── diagnostics # 
 │   │   │   └── index.tsx # 
 │   │   ├── history # 
 │   │   │   └── index.tsx # 
 │   │   ├── run-audit # 
 │   │   │   └── index.tsx # 
-│   │   └── security-history # 
+│   │   ├── security-history # 
+│   │   │   └── index.tsx # 
+│   │   └── settings # 
 │   │       └── index.tsx # 
 │   ├── processes # 
 │   │   └── audit-run-flow # 
@@ -141,8 +189,11 @@ PulseChoukairPerformanceRT #
 │   │   │   ├── select.tsx # 
 │   │   │   ├── table.tsx # 
 │   │   │   └── tabs.tsx # 
-│   │   └── validation # 
-│   │       └── index.ts # 
+│   │   ├── validation # 
+│   │   │   └── index.ts # 
+│   │   ├── permissions.ts # 
+│   │   ├── settings.ts # 
+│   │   └── telemetry.ts # 
 │   ├── styles # 
 │   │   ├── action-plan-panel.tw.css # 
 │   │   ├── diagnostico.tw.css # 
@@ -155,20 +206,26 @@ PulseChoukairPerformanceRT #
 │   ├── App.css # 
 │   ├── App.tsx # 
 │   ├── cacheKey.ts # 
+│   ├── Dockerfile.web # 
 │   ├── env.d.ts # 
 │   ├── index.css # 
 │   ├── index.ts # 
 │   ├── main.tsx # 
+│   ├── nginx.conf # 
 │   ├── pagespeed.worker.ts # 
+│   ├── queue.js # 
 │   ├── queue.ts # 
+│   ├── redisClient.js # 
 │   ├── redisClient.ts # 
 │   ├── setupSafeFetch.ts # 
 │   └── tsconfig.json # 
+├── .env.example # 
 ├── .eslintignore # 
 ├── .gitignore # 
 ├── audit_raw.json # 
-├── audit_raw.pretty.json # 
 ├── components.json # 
+├── compose.deploy.yml # 
+├── compose.yml # 
 ├── DEPENDENCIAS.md # 
 ├── eslint.config.js # 
 ├── history.json # 
@@ -179,6 +236,7 @@ PulseChoukairPerformanceRT #
 ├── processed.json # 
 ├── README.md # 
 ├── tailwind.config.cjs # 
+├── tailwindcss-23524.log # 
 ├── tsconfig.json # 
 ├── tsconfig.worker.json # 
 └── vite.config.ts # 
