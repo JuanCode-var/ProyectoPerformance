@@ -1,6 +1,5 @@
 // src/hooks/useAudits.ts
 import { useState, useEffect } from 'react';
-// Si tu service está en TS, no pongas extensión:
 import { fetchAudit } from '../services/audit.service';
 
 type AuditPayload = {

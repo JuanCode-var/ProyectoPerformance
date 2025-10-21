@@ -12,8 +12,12 @@ const ROLES: Array<{ value: string; label: string; color: string }> = [
 ]
 
 interface UserRow { _id: string; name: string; email: string; role: string; isActive?: boolean; userOverrides?: { allow?: string[]; deny?: string[] } }
+interface CurrentUser { id?: string; name?: string }
 
-// Minimal placeholder functional view, ready to wire to backend later
+const LOCAL_DEBUG_KEY = 'roleAudit:debug'
+const RETENTION_DAYS = 30
+const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000
+
 export default function AdminUsersPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -24,10 +28,14 @@ export default function AdminUsersPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<{ name: string; role: string; isActive: boolean }>({ name: '', role: 'cliente', isActive: true })
   const [saving, setSaving] = useState(false)
-  const [resettingId, setResettingId] = useState<string | null>(null)
   const [showDeactivateId, setShowDeactivateId] = useState<string | null>(null)
+  const [showDeactivateUser, setShowDeactivateUser] = useState<UserRow | null>(null)
   const [deactReason, setDeactReason] = useState<string>('inactividad')
   const [refreshTick, setRefreshTick] = useState(0)
+  const [showReactivateLoadingId, setShowReactivateLoadingId] = useState<string | null>(null)
+
+  // current admin info (used to fill changedByName in audit payloads)
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
 
   const loadUsers = useCallback(async () => {
     setLoading(true); setError('')
@@ -42,7 +50,20 @@ export default function AdminUsersPage() {
     } finally { setLoading(false) }
   }, [])
 
+  // load current admin to use their name in audit payloads
+  const loadCurrentUser = useCallback(async () => {
+    try {
+      const r = await fetch('/api/me', { credentials: 'include' })
+      if (!r.ok) return
+      const j = await r.json().catch(() => null)
+      if (j) setCurrentUser({ id: j.id || j._id || j.userId || undefined, name: j.name || j.displayName || j.email || undefined })
+    } catch (e) {
+      // ignore
+    }
+  }, [])
+
   useEffect(() => { loadUsers() }, [loadUsers, refreshTick])
+  useEffect(() => { loadCurrentUser() }, [loadCurrentUser])
 
   const beginEdit = (u: UserRow) => {
     setEditingId(u._id)
@@ -50,36 +71,197 @@ export default function AdminUsersPage() {
   }
   const cancelEdit = () => { setEditingId(null) }
 
+  // Helper: prune debug array older than RETENTION_DAYS and keep cap
+  const persistDebugArray = (arr: any[]) => {
+    const cutoff = Date.now() - RETENTION_MS
+    const filtered = arr.filter(e => {
+      try {
+        const t = Date.parse(e?.at || e?.payload?.ts || '')
+        return Number.isFinite(t) ? t >= cutoff : true
+      } catch {
+        return true
+      }
+    })
+    // keep reasonable cap
+    if (filtered.length > 500) filtered.splice(500)
+    localStorage.setItem(LOCAL_DEBUG_KEY, JSON.stringify(filtered))
+  }
+
+  // Post audit helper: includes changedBy info when possible.
+  // If POST fails, persist the attempt into localStorage array.
+  const postAudit = async (payload: any) => {
+    try {
+      // attach changedBy from currentUser if available
+      if (currentUser?.name) {
+        payload.changedById = payload.changedById ?? currentUser.id ?? undefined
+        payload.changedByName = payload.changedByName ?? currentUser.name ?? undefined
+      }
+
+      // if still missing changedByName, try /api/me as fallback
+      if (!payload.changedByName) {
+        try {
+          const meResp = await fetch('/api/me', { credentials: 'include' })
+          if (meResp.ok) {
+            const meJson = await meResp.json().catch(() => null)
+            if (meJson) {
+              payload.changedById = payload.changedById ?? meJson.id ?? meJson._id ?? meJson.userId ?? undefined
+              payload.changedByName = payload.changedByName ?? meJson.name ?? meJson.displayName ?? meJson.email ?? undefined
+              setCurrentUser({ id: payload.changedById, name: payload.changedByName })
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      const debugEntry: any = { at: new Date().toISOString(), payload, response: null, error: null }
+
+      try {
+        const res = await fetch('/api/admin/role-audit', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        const text = await res.text().catch(() => '')
+        let body: any = text
+        try { body = JSON.parse(text || '') } catch {}
+        debugEntry.response = { status: res.status, body }
+
+        // persist attempt into an array in localStorage (most recent first) and prune >30d
+        const raw = localStorage.getItem(LOCAL_DEBUG_KEY)
+        const arr = raw ? (JSON.parse(raw) || []) : []
+        arr.unshift(debugEntry)
+        persistDebugArray(arr)
+
+        if (!res.ok) {
+          debugEntry.error = `role-audit failed ${res.status}`
+          persistDebugArray(arr)
+          return false
+        }
+
+        return true
+      } catch (err: any) {
+        debugEntry.error = String(err?.message || err)
+        const raw = localStorage.getItem(LOCAL_DEBUG_KEY)
+        const arr = raw ? (JSON.parse(raw) || []) : []
+        arr.unshift(debugEntry)
+        persistDebugArray(arr)
+        console.warn('Failed to post audit', err)
+        return false
+      }
+    } catch (e) {
+      console.warn('postAudit unexpected error', e)
+      return false
+    }
+  }
+
   const saveEdit = async () => {
     if (!editingId) return
     setSaving(true)
     try {
+      const prevUser = users.find(u => u._id === editingId)
+      const prevRole = prevUser?.role
+      const prevActive = Boolean(prevUser?.isActive)
+
       const body = { name: form.name.trim(), role: form.role, isActive: form.isActive }
       const r = await fetch(`/api/admin/users/${editingId}`, {
         method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
       })
-      const j = await r.json().catch(()=>({}))
-      if(!r.ok) throw new Error(j?.error || 'Error guardando')
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j?.error || 'Error guardando')
       setEditingId(null)
       setRefreshTick(t => t + 1)
-    } catch(e:any) { alert(e?.message || 'Error') } finally { setSaving(false) }
+
+      // Audit: role change
+      if (prevRole !== undefined && prevRole !== form.role) {
+        const auditPayload = {
+          targetUserId: editingId,
+          targetUserName: form.name.trim() || prevUser?.name || null,
+          previousRole: prevRole,
+          newRole: form.role,
+          note: 'role_changed:manual',
+          changedById: currentUser?.id ?? undefined,
+          changedByName: currentUser?.name ?? undefined
+        }
+        await postAudit(auditPayload)
+      }
+
+      // Audit: activation/deactivation via edit form
+      if (prevActive !== Boolean(form.isActive)) {
+        const auditPayload = {
+          targetUserId: editingId,
+          targetUserName: form.name.trim() || prevUser?.name || null,
+          previousRole: prevUser?.role ?? null,
+          newRole: form.isActive ? prevUser?.role ?? null : null,
+          note: form.isActive ? 'reactivate:manual' : 'deactivate:manual',
+          changedById: currentUser?.id ?? undefined,
+          changedByName: currentUser?.name ?? undefined
+        }
+        await postAudit(auditPayload)
+      }
+    } catch (e: any) { alert(e?.message || 'Error') } finally { setSaving(false) }
   }
 
   const toggleActive = async (u: UserRow) => {
-    // Para hard delete ahora siempre abrimos modal si está activo
-    if (u.isActive === false) return; // ya está inactivo (no debería darse tras hard delete)
+    if (u.isActive === false) {
+      return
+    }
     setShowDeactivateId(u._id)
+    setShowDeactivateUser(u)
     setDeactReason('inactividad')
   }
 
   const confirmDeactivate = async () => {
-    if(!showDeactivateId) return
+    if (!showDeactivateId || !showDeactivateUser) return
     try {
-      const r = await fetch(`/api/admin/users/${showDeactivateId}`, { method:'DELETE', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ reason: deactReason }) })
-      if(!r.ok) throw new Error('Error eliminando')
+      const user = showDeactivateUser
+      const r = await fetch(`/api/admin/users/${showDeactivateId}`, { method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: deactReason }) })
+      if (!r.ok) throw new Error('Error eliminando')
       setUsers(prev => prev.filter(p => p._id !== showDeactivateId))
+
+      const auditPayload = {
+        targetUserId: user._id,
+        targetUserName: user.name || null,
+        previousRole: user.role || null,
+        newRole: null,
+        note: `delete:${deactReason}`,
+        changedById: currentUser?.id ?? undefined,
+        changedByName: currentUser?.name ?? undefined
+      }
+      await postAudit(auditPayload)
+
       setShowDeactivateId(null)
-    } catch(e:any){ alert(e?.message || 'Error') }
+      setShowDeactivateUser(null)
+    } catch (e: any) { alert(e?.message || 'Error') }
+  }
+
+  const reactivateUser = async (u: UserRow) => {
+    setShowReactivateLoadingId(u._id)
+    try {
+      const r = await fetch(`/api/admin/users/${u._id}`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive: true })
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j?.error || 'Error reactivando')
+      setRefreshTick(t => t + 1)
+
+      const auditPayload = {
+        targetUserId: u._id,
+        targetUserName: u.name || null,
+        previousRole: u.role ?? null,
+        newRole: u.role ?? null,
+        note: `reactivate:manual`,
+        changedById: currentUser?.id ?? undefined,
+        changedByName: currentUser?.name ?? undefined
+      }
+      await postAudit(auditPayload)
+    } catch (e: any) {
+      alert(e?.message || 'Error reactivando')
+    } finally {
+      setShowReactivateLoadingId(null)
+    }
   }
 
   const goBack = () => {
@@ -95,7 +277,7 @@ export default function AdminUsersPage() {
   }
 
   const filtered = users.filter(u => {
-    if(!search.trim()) return true
+    if (!search.trim()) return true
     const q = search.toLowerCase()
     return u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q)
   })
@@ -109,7 +291,7 @@ export default function AdminUsersPage() {
             <input
               placeholder="Buscar nombre, email o rol..."
               value={search}
-              onChange={e=>setSearch(e.target.value)}
+              onChange={e => setSearch(e.target.value)}
               className="border rounded px-3 py-1.5 text-sm w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-slate-400"
             />
             <Button variant="outline" onClick={goBack}>Volver</Button>
@@ -119,9 +301,8 @@ export default function AdminUsersPage() {
           {error && <div className="text-red-600 text-sm mb-3">{error}</div>}
           {loading && <div className="text-slate-600 text-sm">Cargando…</div>}
 
-          {/* Leyenda / ayuda */}
           <div className="mb-4 p-3 rounded-lg border bg-slate-50 text-slate-700 text-xs leading-relaxed">
-            <span className="font-semibold">Acciones:</span> editar nombre/rol/estado, desactivar (soft delete) y reactivar. Cada cambio de rol se audita en Modo Trazabilidad.
+            <span className="font-semibold">Acciones:</span> editar nombre/rol/estado, desactivar (soft delete) y reactivar. Cada cambio de rol y cada activación/desactivación se registra en Trazabilidad.
           </div>
 
           {!loading && filtered.length === 0 && <div className="text-slate-600 text-sm">Sin usuarios por mostrar.</div>}
@@ -147,7 +328,7 @@ export default function AdminUsersPage() {
                           {editing ? (
                             <input
                               value={form.name}
-                              onChange={e=>setForm(f=>({...f,name:e.target.value}))}
+                              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                               className="border rounded px-2 py-1 w-full text-sm"
                               maxLength={120}
                             />
@@ -160,17 +341,17 @@ export default function AdminUsersPage() {
                           {editing ? (
                             <select
                               value={form.role}
-                              onChange={e=>setForm(f=>({...f,role:e.target.value}))}
+                              onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
                               className="border rounded px-2 py-1 text-sm"
                             >
-                              {ROLES.map(r=> <option key={r.value} value={r.value}>{r.label}</option>)}
+                              {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                             </select>
                           ) : roleBadge(u.role)}
                         </td>
                         <td className="py-2 px-3 align-top">
                           {editing ? (
                             <label className="inline-flex items-center gap-1 text-xs cursor-pointer select-none">
-                              <input type="checkbox" checked={form.isActive} onChange={e=>setForm(f=>({...f,isActive:e.target.checked}))} />
+                              <input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} />
                               <span>{form.isActive ? 'Activo' : 'Inactivo'}</span>
                             </label>
                           ) : (
@@ -180,14 +361,19 @@ export default function AdminUsersPage() {
                         <td className="py-2 px-3 align-top whitespace-nowrap">
                           {!editing && (
                             <div className="flex flex-wrap gap-1">
-                              <Button size="sm" variant="outline" onClick={()=>beginEdit(u)}>Editar</Button>
-                              <Button size="sm" variant="outline" onClick={()=>navigate(`/admin/users/${u._id}/overrides`)}>Permisos</Button>
-                              {u.isActive !== false && <Button size="sm" variant='destructive' className="!bg-red-600 hover:!bg-red-500 !text-white" onClick={()=>toggleActive(u)}>Eliminar</Button>}
+                              <Button size="sm" variant="outline" onClick={() => beginEdit(u)}>Editar</Button>
+                              <Button size="sm" variant="outline" onClick={() => navigate(`/admin/users/${u._id}/overrides`)}>Permisos</Button>
+                              {u.isActive !== false && <Button size="sm" variant='destructive' className="!bg-red-600 hover:!bg-red-500 !text-white" onClick={() => toggleActive(u)}>Eliminar</Button>}
+                              {u.isActive === false && (
+                                <Button size="sm" onClick={() => reactivateUser(u)} disabled={showReactivateLoadingId === u._id}>
+                                  {showReactivateLoadingId === u._id ? 'Reactivando...' : 'Reactivar'}
+                                </Button>
+                              )}
                             </div>
                           )}
                           {editing && (
                             <div className="flex flex-wrap gap-1">
-                              <Button size="sm" onClick={saveEdit} disabled={saving}>{saving? 'Guardando...':'Guardar'}</Button>
+                              <Button size="sm" onClick={saveEdit} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
                               <Button size="sm" variant="outline" onClick={cancelEdit}>Cancelar</Button>
                             </div>
                           )}
@@ -202,42 +388,35 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      {showDeactivateId && (
+      {showDeactivateId && showDeactivateUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-5 border">
             <h2 className="text-lg font-semibold mb-2">Confirmar eliminación</h2>
             <p className="text-sm text-slate-600 mb-4">Selecciona el motivo. El usuario será eliminado definitivamente y quedará solo el rastro en trazabilidad.</p>
             <div className="space-y-2 mb-4 text-sm">
-              {/*
-                { v:'inactividad', l:'Inactividad prolongada' },
-                { v:'baja_voluntaria', l:'Baja voluntaria / solicitada' },
-                { v:'duplicado', l:'Cuenta duplicada' },
-                { v:'fraude', l:'Sospecha de fraude / abuso' },
-                { v:'otro', l:'Otro / no especificado' }
-              */}
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="reason" value="inactividad" checked={deactReason==='inactividad'} onChange={()=>setDeactReason('inactividad')} />
+                <input type="radio" name="reason" value="inactividad" checked={deactReason === 'inactividad'} onChange={() => setDeactReason('inactividad')} />
                 <span>Inactividad prolongada</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="reason" value="baja_voluntaria" checked={deactReason==='baja_voluntaria'} onChange={()=>setDeactReason('baja_voluntaria')} />
+                <input type="radio" name="reason" value="baja_voluntaria" checked={deactReason === 'baja_voluntaria'} onChange={() => setDeactReason('baja_voluntaria')} />
                 <span>Baja voluntaria / solicitada</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="reason" value="duplicado" checked={deactReason==='duplicado'} onChange={()=>setDeactReason('duplicado')} />
+                <input type="radio" name="reason" value="duplicado" checked={deactReason === 'duplicado'} onChange={() => setDeactReason('duplicado')} />
                 <span>Cuenta duplicada</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="reason" value="fraude" checked={deactReason==='fraude'} onChange={()=>setDeactReason('fraude')} />
+                <input type="radio" name="reason" value="fraude" checked={deactReason === 'fraude'} onChange={() => setDeactReason('fraude')} />
                 <span>Sospecha de fraude / abuso</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="reason" value="otro" checked={deactReason==='otro'} onChange={()=>setDeactReason('otro')} />
+                <input type="radio" name="reason" value="otro" checked={deactReason === 'otro'} onChange={() => setDeactReason('otro')} />
                 <span>Otro / no especificado</span>
               </label>
             </div>
             <div className="flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={()=>{ setShowDeactivateId(null) }}>Cancelar</Button>
+              <Button variant="outline" onClick={() => { setShowDeactivateId(null); setShowDeactivateUser(null) }}>Cancelar</Button>
               <Button variant="destructive" className="!bg-red-600 !text-white hover:!bg-red-500" onClick={confirmDeactivate}>Eliminar definitivamente</Button>
             </div>
           </div>

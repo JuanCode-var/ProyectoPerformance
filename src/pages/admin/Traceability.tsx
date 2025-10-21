@@ -4,7 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/card'
 import { Button } from '../../shared/ui/button'
 import { Info, RefreshCw } from 'lucide-react'
 
-interface AuditRow { ts: string; targetUserId: string; targetUserName: string | null; previousRole: string | null; newRole: string | null; changedById: string; changedByName: string | null; note?: string | null }
+interface AuditRow {
+  ts: string
+  targetUserId: string
+  targetUserName: string | null
+  previousRole: string | null
+  newRole: string | null
+  changedById?: string | null
+  changedByName?: string | null
+  note?: string | null
+}
 
 export default function TraceabilityPage() {
   const navigate = useNavigate()
@@ -16,16 +25,111 @@ export default function TraceabilityPage() {
   const [filter, setFilter] = useState('')
   const [reason, setReason] = useState('')
 
+  // map userId -> userName (used to resolve changedById into a display name)
+  const [usersMap, setUsersMap] = useState<Record<string, string>>({})
+  // current admin name (fallback)
+  const [currentAdminName, setCurrentAdminName] = useState<string | null>(null)
+
+  // Load users map (id -> name)
+  const loadUsersMap = async () => {
+    try {
+      const r = await fetch('/api/admin/users', { credentials: 'include' })
+      if (!r.ok) return
+      const t = await r.text()
+      const data = (() => { try { return JSON.parse(t) } catch { return null } })()
+      if (!Array.isArray(data)) return
+      const map: Record<string, string> = {}
+      for (const u of data) {
+        if (u && (u._id || u.id)) {
+          map[String(u._id ?? u.id)] = u.name ?? u.displayName ?? u.email ?? ''
+        }
+      }
+      setUsersMap(map)
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // load current admin name
+  const loadCurrentAdmin = async () => {
+    try {
+      const r = await fetch('/api/me', { credentials: 'include' })
+      if (!r.ok) return
+      const j = await r.json().catch(() => null)
+      if (j) setCurrentAdminName(j.name || j.displayName || j.email || null)
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  const toTime = (s?: string) => {
+    try {
+      const v = new Date(String(s || '')).getTime()
+      return Number.isFinite(v) ? v : 0
+    } catch {
+      return 0
+    }
+  }
+
   const load = async (d = days) => {
     setLoading(true); setError('')
     try {
+      await Promise.all([loadUsersMap(), loadCurrentAdmin()])
+
       const r = await fetch(`/api/admin/role-audit?days=${encodeURIComponent(d)}`, { credentials: 'include' })
-      const t = await r.text(); const j = (()=>{ try { return JSON.parse(t) } catch { return null } })()
-      if(!r.ok) throw new Error(j?.error || `Error ${r.status}`)
-      setRows(j?.items || [])
-    } catch(e:any){ setError(e?.message || 'Error cargando trazabilidad') } finally { setLoading(false) }
+      const t = await r.text(); const j = (() => { try { return JSON.parse(t) } catch { return null } })()
+      if (!r.ok) throw new Error(j?.error || `Error ${r.status}`)
+      const backendRows: AuditRow[] = j?.items || []
+
+      const raw = localStorage.getItem('roleAudit:debug')
+      const localAttempts = (() => {
+        if (!raw) return []
+        try {
+          const parsed = JSON.parse(raw)
+          return Array.isArray(parsed) ? parsed : (parsed ? [parsed] : [])
+        } catch {
+          return []
+        }
+      })()
+
+      const localRows: AuditRow[] = localAttempts.map((entry: any) => {
+        const payload = entry?.payload || {}
+        const targetUserId = String(payload?.targetUserId ?? payload?.userId ?? payload?.id ?? 'unknown')
+        const ts = entry?.at ?? payload?.ts ?? new Date().toISOString()
+        const previousRole = payload?.previousRole ?? null
+        let newRole = payload?.newRole ?? null
+        const rawNote = payload?.note ?? null
+        const noteStr = typeof rawNote === 'string' ? rawNote : (rawNote == null ? null : String(rawNote))
+        const ln = (noteStr || '').toLowerCase()
+        if (!newRole) {
+          if (ln.startsWith('deactivate')) newRole = 'desactivado'
+          else if (ln.startsWith('reactivate')) newRole = 'activado'
+          else newRole = null
+        }
+        const changedById = payload?.changedById ?? null
+        // Fill changedByName: payload -> usersMap -> currentAdminName
+        const changedByName = payload?.changedByName ?? (changedById ? (usersMap[String(changedById)] ?? null) : null) ?? currentAdminName ?? null
+
+        return {
+          ts,
+          targetUserId,
+          targetUserName: payload?.targetUserName ?? null,
+          previousRole,
+          newRole,
+          changedById,
+          changedByName,
+          note: noteStr
+        } as AuditRow
+      })
+
+      const merged = [...localRows, ...backendRows]
+      merged.sort((a, b) => toTime(b.ts) - toTime(a.ts))
+
+      setRows(merged)
+    } catch (e: any) { setError(e?.message || 'Error cargando trazabilidad') } finally { setLoading(false) }
   }
-  useEffect(()=>{ load(days) },[days])
+
+  useEffect(() => { load(days) }, [days])
 
   const goBack = () => {
     if (window.history.length > 1) return navigate(-1)
@@ -34,20 +138,20 @@ export default function TraceabilityPage() {
 
   const filtered = rows.filter(r => {
     const q = filter.trim().toLowerCase(); const rs = reason.trim()
-    if(q && !(
-      (r.targetUserName||'').toLowerCase().includes(q) ||
-      (r.changedByName||'').toLowerCase().includes(q) ||
-      (r.previousRole||'').toLowerCase().includes(q) ||
-      (r.newRole||'').toLowerCase().includes(q)
+    if (q && !(
+      (r.targetUserName || '').toLowerCase().includes(q) ||
+      (r.changedByName || '').toLowerCase().includes(q) ||
+      (r.previousRole || '').toLowerCase().includes(q) ||
+      (r.newRole || '').toLowerCase().includes(q)
     )) return false
-    if(rs) {
-      if(rs === 'delete:' && !(r.note||'').startsWith('delete:')) return false
-      else if(rs === 'deactivate:' && !(r.note||'').startsWith('deactivate:')) return false
-      else if(['baja_voluntaria','inactividad','duplicado','fraude','otro'].includes(rs)) {
-        if(!(r.note||'').includes(rs)) return false
-      } else if(rs === 'role_changed') {
-        if((r.note||'') && !(r.note||'').includes('role_changed')) return false
-        if(r.previousRole === r.newRole) return false
+    if (rs) {
+      if (rs === 'delete:' && !(r.note || '').startsWith('delete:')) return false
+      else if (rs === 'deactivate:' && !(r.note || '').toLowerCase().startsWith('deactivate:')) return false
+      else if (['baja_voluntaria','inactividad','duplicado','fraude','otro'].includes(rs)) {
+        if (!(r.note || '').includes(rs)) return false
+      } else if (rs === 'role_changed') {
+        if ((r.note || '') && !(r.note || '').includes('role_changed')) return false
+        if (r.previousRole === r.newRole) return false
       }
     }
     return true
@@ -67,11 +171,11 @@ export default function TraceabilityPage() {
           </CardTitle>
           <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
             <div className="flex gap-2 w-full md:w-auto flex-wrap">
-              <select value={days} onChange={e=>setDays(Number(e.target.value))} className="border rounded px-2 py-1 text-sm">
-                {[7,15,30,60,90,180,365].map(d=> <option key={d} value={d}>{d}d</option>)}
+              <select value={days} onChange={e => setDays(Number(e.target.value))} className="border rounded px-2 py-1 text-sm">
+                {[7,15,30,60,90,180,365].map(d => <option key={d} value={d}>{d}d</option>)}
               </select>
-              <input placeholder="Buscar usuario/rol" value={filter} onChange={e=>setFilter(e.target.value)} className="border rounded px-2 py-1 text-sm w-40" />
-              <select value={reason} onChange={e=>setReason(e.target.value)} className="border rounded px-2 py-1 text-sm w-40">
+              <input placeholder="Buscar usuario/rol" value={filter} onChange={e => setFilter(e.target.value)} className="border rounded px-2 py-1 text-sm w-40" />
+              <select value={reason} onChange={e => setReason(e.target.value)} className="border rounded px-2 py-1 text-sm w-40">
                 <option value="">Motivo (todos)</option>
                 <option value="delete:">Eliminaciones</option>
                 <option value="deactivate:">Desactivaciones (legacy)</option>
@@ -84,17 +188,23 @@ export default function TraceabilityPage() {
               </select>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={()=>load(days)} aria-label="Recargar" title="Recargar"><RefreshCw size={16} className={loading? 'animate-spin':''} /></Button>
+              <Button variant="outline" onClick={() => load(days)} aria-label="Recargar" title="Recargar"><RefreshCw size={16} className={loading ? 'animate-spin' : ''} /></Button>
               <Button variant="outline" onClick={goBack}>Volver</Button>
             </div>
           </div>
         </CardHeader>
+
         <CardContent>
           {error && <div className="text-red-600 text-sm mb-3">{error}</div>}
           {loading && <div className="text-slate-600 text-sm">Cargando…</div>}
           <div className="mb-4 p-3 rounded-lg border bg-slate-50 text-slate-700 text-xs leading-relaxed">
             <span className="font-semibold">¿Qué se registra?</span> Cambios de rol y eliminaciones definitivas. Formato nota: delete:motivo | deactivate:motivo | role_changed (implícito si hay cambio de rol sin nota).
           </div>
+
+          <div className="mb-4 flex items-center gap-3">
+            <div className="text-sm text-slate-600">Mostrar también los intentos locales (activ./desact.) si existen.</div>
+          </div>
+
           {filtered.length === 0 && !loading && <div className="text-slate-600 text-sm">Sin eventos.</div>}
           {filtered.length > 0 && (
             <div className="overflow-x-auto rounded border">
@@ -111,18 +221,30 @@ export default function TraceabilityPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((r,i)=>{
+                  {filtered.map((r, i) => {
                     const d = new Date(r.ts); const fecha = d.toLocaleDateString(); const hora = d.toLocaleTimeString();
-                    const note = r.note || (r.previousRole!==r.newRole ? 'role_changed' : '—');
+                    const rawNote = r.note || (r.previousRole !== r.newRole ? 'role_changed' : '—')
+                    const ln = (rawNote || '').toLowerCase()
+                    let noteLabel = rawNote
+                    if (ln.startsWith('deactivate')) noteLabel = 'desactivado'
+                    else if (ln.startsWith('reactivate')) noteLabel = 'activado'
+                    let newRoleDisplay = r.newRole ?? null
+                    if (!newRoleDisplay) {
+                      if (ln.startsWith('deactivate')) newRoleDisplay = 'desactivado'
+                      else if (ln.startsWith('reactivate')) newRoleDisplay = 'activado'
+                      else newRoleDisplay = '—'
+                    }
+                    const actor = r.changedByName ?? (r.changedById ? (usersMap[String(r.changedById)] ?? null) : null) ?? currentAdminName ?? '—'
+
                     return (
                       <tr key={i} className="border-b last:border-0">
                         <td className="py-2 px-3 whitespace-nowrap">{fecha}</td>
                         <td className="py-2 px-3 whitespace-nowrap text-xs">{hora}</td>
                         <td className="py-2 px-3">{r.targetUserName || r.targetUserId}</td>
                         <td className="py-2 px-3">{r.previousRole || '—'}</td>
-                        <td className="py-2 px-3">{r.newRole || '—'}</td>
-                        <td className="py-2 px-3">{r.changedByName || r.changedById}</td>
-                        <td className="py-2 px-3 text-xs">{note}</td>
+                        <td className="py-2 px-3">{newRoleDisplay}</td>
+                        <td className="py-2 px-3">{actor}</td>
+                        <td className="py-2 px-3 text-xs">{noteLabel}</td>
                       </tr>
                     )
                   })}

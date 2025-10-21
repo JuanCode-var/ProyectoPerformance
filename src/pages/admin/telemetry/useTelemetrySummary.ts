@@ -7,8 +7,16 @@ export interface TelemetrySummaryResponse {
     total: number;
     avgTotalMs: number | null;
     micros: Array<{ micro: string; avgMs: number; count: number; failCount: number }>;
-    microCallsTotal: number; // total diagnostic.micro_call events in range
-    byRole: Record<string, number>;
+    // microCallsTotal eliminado (ya no usamos la tarjeta "Micro-calls")
+    // Ahora byRole contiene desglose por API (performance / security)
+    byRole: Array<{
+      role: string;
+      total: number;
+      byApi?: {
+        performance?: number;
+        security?: number;
+      };
+    }>;
     byUser: Array<{ userId: string; count: number; name?: string; role?: string }>;
     byUrl: Array<{ urlHash: string; count: number; url: string | null }>;
     pdf: { sent: number; withPdf: number; avgPdfSizeKb: number | null };
